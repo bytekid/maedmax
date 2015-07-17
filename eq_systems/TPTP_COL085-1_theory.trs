@@ -1,5 +1,0 @@
-(VAR )
-(RULES
-response(a,b) -> b
-)
-

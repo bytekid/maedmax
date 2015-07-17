@@ -1,5 +1,0 @@
-(VAR x)
-(RULES
-f(f(x)) -> g(x)
-g(f(x)) -> f(g(x))
-)

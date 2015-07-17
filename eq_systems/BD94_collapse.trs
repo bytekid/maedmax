@@ -1,8 +1,0 @@
-(VAR x y z)
-(RULES
-c -> a
-g(x) -> x
-f(x, b) -> x
-f(x, g(y)) -> f(g(x), y)
-f(b, z) -> c
-)
