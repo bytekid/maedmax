@@ -1,0 +1,175 @@
+(*** MODULES *****************************************************************)
+module S = Strategy;;
+
+(*** OPENS *******************************************************************)
+open Format
+open Ckb
+open Yojson.Basic
+
+(* command line option *)
+
+let short_usage = "ckb v0.1\nUsage: ckb <options> <file>\n"
+let filenames = ref []
+
+let flags = Ckb.flags
+
+let k = ref (-1)
+let use_ac = ref false
+let only_termination = ref false
+let timeout = ref 60.0
+
+let strategy = ref []
+       
+(* main *)
+let options = Arg.align 
+  [("-ac", Arg.Unit (fun _ -> use_ac := true),
+    " use AC-completion");
+   ("-d", Arg.Set flags.d,
+    " print debugging output");
+   ("-json", Arg.Set flags.json,
+    " output result and stats in JSON format");
+   ("-K", Arg.Int (fun n -> flags.k := (fun _ -> n); k := n),
+    "<n> compute n maximal terminating TRSs");
+   ("-M", Arg.String (fun s -> 
+       (*if s = "maxcomp" then flags.max_constraint := Oriented
+       else*) if s = "cpred" then flags.strategy := S.strategy_cpred
+       else if s = "comp" then flags.strategy := S.strategy_comp
+       else if s = "dp" then flags.strategy := S.strategy_dp
+       else if s = "dg" then flags.strategy := S.strategy_dg
+       else if s = "dgk" then flags.strategy := S.strategy_dgk
+       else if s = "auto" then flags.strategy := S.strategy_auto
+       else if s = "auto2" then flags.strategy := S.strategy_auto2
+       else if s = "red" then flags.strategy := S.strategy_red
+       else if s = "no" then flags.strategy := S.strategy_not_oriented
+       else if s = "lpo" then flags.strategy := S.strategy_lpo
+       else if s = "kbo" then flags.strategy := S.strategy_kbo
+       else if s = "mpol" then flags.strategy := S.strategy_mpol
+       else if s = "maxcomp" then flags.strategy := S.strategy_maxcomp
+       else if s = "maxcomplpo" then flags.strategy := S.strategy_maxcomp_lpo
+       else if s = "temp" then flags.strategy := S.strategy_temp
+       else failwith "unsupported option for -M"),
+    " strategy (auto, lpo, kbo, mpol, dp, dg, dgk, maxcomp, red, cpred, or comp)");
+   ("-CS", Arg.Set flags.check_subsumption,
+    " perform subsumption checks");
+   ("-N", Arg.Int (fun n -> flags.n := n), 
+    " number of selected equations");
+   ("-o", Arg.Unit (fun _ -> flags.ordered_completion := true; flags.strategy := S.strategy_ordered),
+    " ordered completion");
+   ("-term", Arg.Set only_termination,
+    " perform termination check");
+   ("-time", Arg.Set_float timeout,
+    " set timeout");
+   ("-tproof", Arg.Set flags.output_tproof,
+    " output termination proof");
+   ("-TMP", Arg.Set_int flags.tmp,
+    " various purposes")
+ ]
+
+let print_trs ppf rules = 
+  fprintf ppf "(VAR %s)@.(RULES@.%a@.)@."
+    (String.concat " " (List.map Signature.get_var_name (Rules.variables rules)))
+    Rules.print rules
+
+let print_trs_eqs ppf (rules, eqs) =
+  fprintf ppf "(VAR %s)@.(RULES@.%a@.)(EQUATIONS@.%a@.)@."
+    (String.concat " " (List.map Signature.get_var_name (Rules.variables rules)))
+    Rules.print rules (Rules.print_with "=") eqs
+
+let print_es ppf eqs = fprintf ppf "(EQUATIONS@.%a@.)@." (Rules.print_with "=") eqs
+
+let trs_string rules =
+ Format.fprintf Format.str_formatter "%a" print_trs rules;
+ Format.flush_str_formatter ()
+;;
+
+let trs_eqs_string re =
+ Format.fprintf Format.str_formatter "%a" print_trs_eqs re;
+ Format.flush_str_formatter ()
+;;
+
+let call () =
+ let rec add_arg i =
+  if i < Array.length Sys.argv then Sys.argv.(i)^" "^(add_arg (i+1)) else "" 
+ in add_arg 0
+;;
+
+let print_json f (trs, eqs) =
+ let s = Strategy.to_string !strategy in
+ let o = !(flags.ordered_completion) && eqs <> [] in
+ let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
+ let t = `Assoc [
+  "result",`String "YES";
+  "time", f;
+  (*"config",`String (call());*)
+  "trs", `String (if o then trs_eqs_string (trs, eqs) else trs_string trs);
+  "statistics", Statistics.json s !k !(flags.n)
+ ] in
+ Format.printf "%s\n%!" (pretty_to_string t)
+;;
+
+let print_json_term yes f =
+ let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
+ let t = `Assoc [
+  "result",`String (if yes then "YES" else "MAYBE");
+  "time", f;
+  "config",`String (call())] in
+ Format.printf "%s\n%!" (pretty_to_string t)
+;;
+
+
+let () =
+  Arg.parse options 
+   (fun x -> filenames := !filenames @ [x]) short_usage;
+  strategy := !(flags.strategy);
+  match !filenames with
+  | [f] -> 
+      let rs,_ = Read.read_trs f in
+      let es = Rules.rpl_spcl_char rs in
+      if not ! only_termination then
+       begin try
+        let timer = Timer.start () in
+	let trs,eqs = ((*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb) flags es in
+        if !(flags.json) then (
+         Timer.stop timer;
+         let secs = Timer.length ~res:Timer.Seconds timer in
+         print_json secs (Listx.unique (Variant.reduce trs), eqs)
+        ) else ( 
+	 printf "YES@.%a@." print_trs (Listx.unique (Variant.reduce trs)); 
+         if !(flags.ordered_completion) && eqs <> [] then printf "ES:@.%a@." print_es eqs;
+         Timer.stop timer;
+         let secs = Timer.length ~res:Timer.Seconds timer in
+         printf "%s %.2f %s@." "Search time:" secs "seconds";
+         Statistics.print ()
+         )
+       with e -> printf "MAYBE@."; raise e end
+      else (
+       let timer = Timer.start () in
+       let yes = Ckb.check_termination flags es in
+       Timer.stop timer;
+       let secs = Timer.length ~res:Timer.Seconds timer in
+       if !(flags.json) then print_json_term yes secs else (
+        printf "@.%a@." print_trs es;
+        let a = if yes then "YES" else "MAYBE" in
+        printf "%s\n" a;
+        printf "%s %.2f %s@." "time:" secs "seconds")
+       )
+  | _ -> eprintf "%s%!" short_usage; exit 1
+
+(*
+let () =
+  Arg.parse options 
+   (fun x -> filenames := !filenames @ [x]) short_usage;
+  match !filenames with
+  | [f] ->  
+      let es = Rules.rpl_spcl_char (Read.read_trs f) in
+      begin try
+	let trs, _ = Cc.cc ~max:(Maxtrs.max ~order:!order) ~kk:!kk es in
+	printf "YES@.%a@." print_trs trs;
+      with 
+	| Cc.Fail s -> printf "MAYBE@."; 
+	             printf "Run failed: %s@." s; exit 1
+        | e -> printf "MAYBE@."; raise e
+      end
+  | _ -> eprintf "%s%!" short_usage; exit 1
+*)
+

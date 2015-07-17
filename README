@@ -1,0 +1,33 @@
+-------------------------------------------------------------------------------
+   MAXCOMPDP
+-------------------------------------------------------------------------------
+
+MaxcompDP extends the Maxcomp tool [0] by encodings of dependency pair (DP)
+techniques and control strategies.
+
+Besides OCaml and camlp4 it requires Yices [1], the OCamlYices [2] bindings 
+for OCaml, and the json libraray Yojson [3] for output.
+
+Using OCamlMakefile, the MaxcompDP executable can be typed by executing
+ $ make
+in this directory.
+
+
+The usage of MaxcompDP is as follows:
+
+ $ ./maxcompdp -M auto eq_systems/slothrop_cge.trs
+
+The option -M allows to specify a strategy for MaxcompDP. Options include
+auto, lpo, kbo, mpol, dp, dg, dgk, maxcomp, red, cpred, and comp.
+The options -N and -K allow to set the n and k parameters. The input file
+is supposed to be in the trs format [4].
+
+If you have come across any questions, please contact sarah.winkler@uibk.ac.at.
+
+
+
+[0] http://www.jaist.ac.jp/project/maxcomp/
+[1] http://yices.csl.sri.com/
+[2] https://github.com/polazarus/ocamlyices
+[3] http://mjambon.com/yojson.html
+[4] https://www.lri.fr/~marche/tpdb/format.html

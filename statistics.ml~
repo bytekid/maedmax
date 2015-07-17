@@ -1,0 +1,21 @@
+open Format
+
+let t_norm = ref 0.0;;
+let t_overlap = ref 0.0;;
+let t_project = ref 0.0;;
+let t_sat = ref 0.0;;
+let t_translate = ref 0.0
+
+let take_time t f x =
+ let s = Unix.gettimeofday () in
+ let res = f x in
+ t := !t +. (Unix.gettimeofday () -. s);
+ res
+
+let print () =
+ printf "normalization time %.3f@." !t_norm;
+ printf "project time       %.3f@." !t_project;
+ printf "overlap time       %.3f@." !t_overlap;
+ printf "sat time           %.3f@." !t_sat;
+ printf "translate time     %.3f@." !t_translate
+;;
