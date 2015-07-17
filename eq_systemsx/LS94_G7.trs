@@ -1,0 +1,14 @@
+(VAR x y z)
+(RULES
+ f(x,f(y,z)) ->  f(f(x,y),z)
+ f(x,i(x)) -> e
+ f(i(x), x) -> e
+ f(e, x) -> x
+ f(x,e) ->  x
+ f(a, f(a, f(a, a))) -> e
+ f(b, f(b, f(b, f(b, f(b, b))))) -> e
+ f(f(a, b), f(a, b)) -> e
+ f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(f(i(a), b), f(i(a), b)))))))))))) -> e
+ f(f(i(i(a)), f(i(b), f(i(a), b))), f(f(i(i(a)), f(i(b), f(i(a), b))), f(i(i(a)), f(i(b), f(i(a), b))))) -> e
+)
+(COMMENT Example G7 in LS94 )

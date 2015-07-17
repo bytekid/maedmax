@@ -1,0 +1,10 @@
+ (VAR x y z)
+(RULES
+  +(x,x) -> x
+  +(+(x,y),y) -> x
+  +(x,+(y,z)) -> +(+(+(x,z),y),z)
+  +(a,b) -> c
+  +(b,b) -> a
+  +(c,b) -> b
+)
+(COMMENT trifoil unknot, quandles leftassociatively)  

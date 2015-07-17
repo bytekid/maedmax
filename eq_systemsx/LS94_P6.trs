@@ -1,0 +1,16 @@
+(VAR x y z)
+(RULES
+ f(x,f(y,z)) ->  f(f(x,y),z)
+ f(x,i(x)) -> e
+ f(i(x), x) -> e
+ f(e, x) -> x
+ f(x,e) ->  x
+ f(a, f(a, a)) -> e
+ f(b, f(b, f(b, f(b, f(b, f(b, b)))))) -> e
+ f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, f(c, c))))))))))))))) -> e
+ f(f(a, b), f(a, b)) -> e
+ f(f(b, c), f(b, c)) -> e
+ f(f(c, a), f(c, a)) -> e
+ f(f(a, f(b, c)), f(a, f(b, c))) -> e
+)
+(COMMENT Example P6 in LS94, a trivial group )

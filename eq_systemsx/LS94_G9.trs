@@ -1,0 +1,30 @@
+(VAR x y z)
+(RULES
+ f(x,f(y,z)) ->  f(f(x,y),z)
+ f(x,i(x)) -> e
+ f(i(x), x) -> e
+ f(e, x) -> x
+ f(x,e) ->  x
+ f(a1, a1) -> e
+ f(a2, a2) -> e
+ f(a3, a3) -> e
+ f(a4, a4) -> e
+ f(a5, a5) -> e
+ f(a6, a6) -> e
+ f(f(a6,a4),f(a6,a4)) -> e
+ f(f(a6,a3),f(a6,a3)) -> e
+ f(f(a6,a2),f(a6,a2)) -> e
+ f(f(a6,a1),f(a6,a1)) -> e
+ f(f(a5,a3),f(a5,a3)) -> e
+ f(f(a5,a2),f(a5,a2)) -> e
+ f(f(a5,a1),f(a5,a1)) -> e
+ f(f(a4,a2),f(a4,a2)) -> e
+ f(f(a4,a1),f(a4,a1)) -> e
+ f(f(a3,a1),f(a3,a1)) -> e
+ f(f(a1, a2), f(f(a1, a2), f(a1, a2))) -> e
+ f(f(a2, a3), f(f(a2, a3), f(a2, a3))) -> e
+ f(f(a3, a4), f(f(a3, a4), f(a3, a4))) -> e
+ f(f(a4, a5), f(f(a4, a5), f(a4, a5))) -> e
+ f(f(a5, a6), f(f(a5, a6), f(f(a5, a6), f(a5, a6)))) -> e
+)
+(COMMENT Example G9 in LS94 )
