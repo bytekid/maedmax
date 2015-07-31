@@ -18,7 +18,6 @@ SOURCES = \
   subst.mli subst.ml \
   rule.mli rule.ml \
   rules.mli rules.ml \
-  tplparser.mli tplparser.ml \
   rewriting.mli rewriting.ml \
   overlap.mli overlap.ml \
   variant.mli variant.ml \
