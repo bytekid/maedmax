@@ -37,7 +37,6 @@ SOURCES = \
   yicesx.mli yicesx.ml \
   constraint.mli constraint.ml \
   cache.mli cache.ml \
-  constraints.mli constraints.ml \
   arith.mli arith.ml \
   lpo.mli lpo.ml \
   kbo.mli kbo.ml \
