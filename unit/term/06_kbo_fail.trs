@@ -1,0 +1,5 @@
+(VAR x y z )
+(RULES 
+ i(f(x,y)) -> f(i(y), i(x))
+ h(f(x,y)) -> f(h(y), h(x))
+)

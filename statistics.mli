@@ -1,14 +1,15 @@
-val t_gc : float ref
+
 val t_cache : float ref
-val t_insert : float ref
+val t_ccomp : float ref
+val t_ccpred : float ref
+val t_cred : float ref
 val t_maxk : float ref
-val t_norm : float ref
-val t_project : float ref
+val t_rewrite : float ref
 val t_orient_constr : float ref
 val t_overlap : float ref
 val t_sat : float ref
-val t_translate : float ref
-val t_upd : float ref
+val t_select : float ref
+val t_success_check : float ref
 val t_tmp1 : float ref
 val t_tmp2 : float ref
 

@@ -1,72 +1,31 @@
-CAMLP4OF := camlp4of
-OCAMLDEP := ocamldep -pp $(CAMLP4OF)
-OCAMLOPT := ocamlopt -pp $(CAMLP4OF)
-OCAMLC   := ocamlc -pp $(CAMLP4OF)
+OCB_FLAGS = -use-ocamlfind -pkg unix -pkg yojson -pkg ocamlyices -I util -I input -I logic -I rewriting -I termination
 
-USE_CAMLP4 = yes
+OCB = 		ocamlbuild $(OCB_FLAGS)
 
-SOURCES = \
-  timer.mli timer.ml \
-  json.mli json.ml \
-  statistics.mli statistics.ml \
-  listx.mli listx.ml \
-  listset.mli listset.ml \
-  formatx.mli formatx.ml \
-  \
-  signature.mli signature.ml \
-  term.mli term.ml \
-  subst.mli subst.ml \
-  rule.mli rule.ml \
-  rules.mli rules.ml \
-  rewriting.mli rewriting.ml \
-  overlap.mli overlap.ml \
-  variant.mli variant.ml \
-  \
-  dio.mli dio.ml \
-  ac_term.mli ac_term.ml \
-  ac_subst.mli ac_subst.ml \
-  ac_rewriting.mli ac_rewriting.ml \
-  ac_overlap.mli ac_overlap.ml \
-  \
-  parser.mly  \
-  tptpParser.mly \
-  lexer.mll \
-  tptpLexer.mll \
-  read.mli read.ml \
-  \
-  yicesx.mli yicesx.ml \
-  constraint.mli constraint.ml \
-  cache.mli cache.ml \
-  arith.mli arith.ml \
-  lpo.mli lpo.ml \
-  kbo.mli kbo.ml \
-  cfs.mli cfs.ml \
-  cfsn.mli cfsn.ml \
-  mPol.mli mPol.ml \
-  dp.mli dp.ml \
-  dg.mli dg.ml \
-  ac_orders.mli ac_orders.ml \
-  strategy.mli strategy.ml \
-  \
-  matrix.mli matrix.ml \
-  mi.mli mi.ml \
-  \
-  ckb.mli ckb.ml \
-  ac_ckb.mli ac_ckb.ml \
-  main.ml
+all: 		native byte # profile debug
+			cp main.byte ckb
 
-PACKS = num unix str ocamlyices yojson 
+clean:
+			$(OCB) -clean
 
-RESULT = maxcompdp
+native:  	sanity
+			$(OCB) main.native
 
-all: nc
+byte: 		sanity
+			$(OCB) main.byte
 
-install: $(RESULT)
-	install -t /usr/local/bin $(RESULT)
+profile: 	sanity
+			$(OCB) -tag profile main.native
 
-archive:
-	git archive --format=tar --prefix=maxcomp/ HEAD | gzip > cc-0.1.tar.gz
+debug: 		sanity
+			$(OCB) -tag debug main.byte
 
-profile: pbc pnc
+sanity:
+			# check that packages can be found
+			ocamlfind query yojson
+			ocamlfind query ocamlyices
 
-include OCamlMakefile
+test: 		native
+			./main.native -h
+
+.PHONY: 	all clean byte native profile debug sanity test

@@ -3,7 +3,7 @@ module S = Strategy;;
 
 (*** OPENS *******************************************************************)
 open Format
-open Ckb
+open Settings
 open Yojson.Basic
 
 (* command line option *)
@@ -11,7 +11,7 @@ open Yojson.Basic
 let short_usage = "ckb v0.1\nUsage: ckb <options> <file>\n"
 let filenames = ref []
 
-let flags = Ckb.flags
+let settings = Settings.default
 
 let k = ref (-1)
 let use_ac = ref false
@@ -24,44 +24,45 @@ let strategy = ref []
 let options = Arg.align 
   [("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");
-   ("-d", Arg.Set flags.d,
+   ("-d", Arg.Set settings.d,
     " print debugging output");
-   ("-json", Arg.Set flags.json,
+   ("-json", Arg.Set settings.json,
     " output result and stats in JSON format");
-   ("-K", Arg.Int (fun n -> flags.k := (fun _ -> n); k := n),
+   ("-K", Arg.Int (fun n -> settings.k := (fun _ -> n); k := n),
     "<n> compute n maximal terminating TRSs");
    ("-M", Arg.String (fun s -> 
-       (*if s = "maxcomp" then flags.max_constraint := Oriented
-       else*) if s = "cpred" then flags.strategy := S.strategy_cpred
-       else if s = "comp" then flags.strategy := S.strategy_comp
-       else if s = "dp" then flags.strategy := S.strategy_dp
-       else if s = "dg" then flags.strategy := S.strategy_dg
-       else if s = "dgk" then flags.strategy := S.strategy_dgk
-       else if s = "auto" then flags.strategy := S.strategy_auto
-       else if s = "auto2" then flags.strategy := S.strategy_auto2
-       else if s = "red" then flags.strategy := S.strategy_red
-       else if s = "no" then flags.strategy := S.strategy_not_oriented
-       else if s = "lpo" then flags.strategy := S.strategy_lpo
-       else if s = "kbo" then flags.strategy := S.strategy_kbo
-       else if s = "mpol" then flags.strategy := S.strategy_mpol
-       else if s = "maxcomp" then flags.strategy := S.strategy_maxcomp
-       else if s = "maxcomplpo" then flags.strategy := S.strategy_maxcomp_lpo
-       else if s = "temp" then flags.strategy := S.strategy_temp
+       (*if s = "maxcomp" then settings.max_constraint := Oriented
+       else*) if s = "cpred" then settings.strategy := S.strategy_cpred
+       else if s = "comp" then settings.strategy := S.strategy_comp
+       else if s = "dp" then settings.strategy := S.strategy_dp
+       else if s = "dg" then settings.strategy := S.strategy_dg
+       else if s = "dgk" then settings.strategy := S.strategy_dgk
+       else if s = "auto" then settings.strategy := S.strategy_auto
+       else if s = "auto2" then settings.strategy := S.strategy_auto2
+       else if s = "red" then settings.strategy := S.strategy_red
+       else if s = "no" then settings.strategy := S.strategy_not_oriented
+       else if s = "lpo" then settings.strategy := S.strategy_lpo
+       else if s = "kbo" then settings.strategy := S.strategy_kbo
+       else if s = "mpol" then settings.strategy := S.strategy_mpol
+       else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
+       else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
+       else if s = "temp" then settings.strategy := S.strategy_temp
        else failwith "unsupported option for -M"),
     " strategy (auto, lpo, kbo, mpol, dp, dg, dgk, maxcomp, red, cpred, or comp)");
-   ("-CS", Arg.Set flags.check_subsumption,
+   ("-CS", Arg.Set settings.check_subsumption,
     " perform subsumption checks");
-   ("-N", Arg.Int (fun n -> flags.n := n), 
+   ("-N", Arg.Int (fun n -> settings.n := n), 
     " number of selected equations");
-   ("-o", Arg.Unit (fun _ -> flags.ordered_completion := true; flags.strategy := S.strategy_ordered),
+   ("-o", Arg.Unit (fun _ -> settings.unfailing := true;
+                             settings.strategy := S.strategy_ordered),
     " ordered completion");
    ("-term", Arg.Set only_termination,
     " perform termination check");
    ("-time", Arg.Set_float timeout,
     " set timeout");
-   ("-tproof", Arg.Set flags.output_tproof,
+   ("-tproof", Arg.Set settings.output_tproof,
     " output termination proof");
-   ("-TMP", Arg.Set_int flags.tmp,
+   ("-TMP", Arg.Set_int settings.tmp,
     " various purposes")
  ]
 
@@ -95,14 +96,14 @@ let call () =
 
 let print_json f (trs, eqs) =
  let s = Strategy.to_string !strategy in
- let o = !(flags.ordered_completion) && eqs <> [] in
+ let o = !(settings.unfailing) && eqs <> [] in
  let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
  let t = `Assoc [
   "result",`String "YES";
   "time", f;
   (*"config",`String (call());*)
   "trs", `String (if o then trs_eqs_string (trs, eqs) else trs_string trs);
-  "statistics", Statistics.json s !k !(flags.n)
+  "statistics", Statistics.json s !k !(settings.n)
  ] in
  Format.printf "%s\n%!" (pretty_to_string t)
 ;;
@@ -120,7 +121,8 @@ let print_json_term yes f =
 let () =
   Arg.parse options 
    (fun x -> filenames := !filenames @ [x]) short_usage;
-  strategy := !(flags.strategy);
+  strategy := !(settings.strategy);
+  let json = !(settings.json) in
   match !filenames with
   | [f] -> 
       let rs,_ = Read.read_trs f in
@@ -128,14 +130,14 @@ let () =
       if not ! only_termination then
        begin try
         let timer = Timer.start () in
-	let trs,eqs = ((*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb) flags es in
-        if !(flags.json) then (
+	let trs,eqs = ((*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb) settings es in
+        if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
          print_json secs (Listx.unique (Variant.reduce trs), eqs)
         ) else ( 
 	 printf "YES@.%a@." print_trs (Listx.unique (Variant.reduce trs)); 
-         if !(flags.ordered_completion) && eqs <> [] then printf "ES:@.%a@." print_es eqs;
+         if !(settings.unfailing) && eqs<>[] then printf "ES:@.%a@." print_es eqs;
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
          printf "%s %.2f %s@." "Search time:" secs "seconds";
@@ -144,10 +146,10 @@ let () =
        with e -> printf "MAYBE@."; raise e end
       else (
        let timer = Timer.start () in
-       let yes = Ckb.check_termination flags es in
+       let yes = Termination.check (S.get_termination !strategy) es json in
        Timer.stop timer;
        let secs = Timer.length ~res:Timer.Seconds timer in
-       if !(flags.json) then print_json_term yes secs else (
+       if json then print_json_term yes secs else (
         printf "@.%a@." print_trs es;
         let a = if yes then "YES" else "MAYBE" in
         printf "%s\n" a;

@@ -1,26 +1,28 @@
-val ht_cvars : (Constraint.c, Yices.expr) Hashtbl.t
-
-val ht_trsvars : (int, Yices.expr) Hashtbl.t
+val ht_trsvars : (int, Yicesx.t) Hashtbl.t
 
 val ht_itrss : (int, Rules.t) Hashtbl.t
 
-val ht_cvars : (Constraint.c, Yices.expr) Hashtbl.t
+val find_trs_var : int -> Yicesx.t
 
-val find_trs_var : int -> Yices.expr
+val find_rule : Rule.t -> Yicesx.t
 
-val find_rule : Rule.t -> Yices.expr
+val find_eq : Rule.t -> Yicesx.t
 
-val find_eq : Rule.t -> Yices.expr
+val find_eq_weight : Rule.t -> Yicesx.t
 
-val find_eq_weight : Rule.t -> Yices.expr
+val rule_var : Yices.context -> Rule.t -> Yicesx.t
 
-val find_weak_var : int * Rule.t -> Yices.expr
+val eq_var : Yices.context -> Rule.t -> Yicesx.t
 
-val find_strict_var : int * Rule.t -> Yices.expr
+val eq_weight_var : Yices.context -> Rule.t -> Yicesx.t
 
-val get_strict_var : Yices.context -> (int * Rule.t) -> Yices.expr
+val find_weak_var : int * Rule.t -> Yicesx.t
 
-val get_weak_var : Yices.context -> (int * Rule.t) -> Yices.expr
+val find_strict_var : int * Rule.t -> Yicesx.t
+
+val get_strict_var : Yices.context -> (int * Rule.t) -> Yicesx.t
+
+val get_weak_var : Yices.context -> (int * Rule.t) -> Yicesx.t
 
 val contains : int -> int -> bool
 
@@ -38,9 +40,7 @@ val store_trs : Rules.t -> int
 
 val store_redtrs : Rules.t -> int -> unit
 
-val assert_with : Yices.context -> (Yices.context -> Term.t -> Term.t -> Yices.expr) -> Constraint.t list -> unit
-
-val get_all_strict : int -> (Rule.t * Yices.expr) list
+val get_all_strict : int -> (Rule.t * Yicesx.t) list
 
 val was_oriented : Rule.t -> bool
 

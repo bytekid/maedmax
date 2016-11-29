@@ -2,10 +2,9 @@
 module St = Statistics
 
 (*** OPENS *******************************************************************)
-open Yices
+open Prelude
 open Yicesx
 open Rewriting
-open Constraint
 
 (*** GLOBALS *****************************************************************)
 (* count number of TRSs considered so far *)
@@ -21,19 +20,16 @@ let ht_contains : (int * int, bool) Hashtbl.t = Hashtbl.create 200;;
 let ht_was_oriented : (Rule.t,bool) Hashtbl.t = Hashtbl.create 128;;
 
 (* Yices variable for each TRS *)
-let ht_trsvars : (int, Yices.expr) Hashtbl.t = Hashtbl.create 128;;
+let ht_trsvars : (int, Yicesx.t) Hashtbl.t = Hashtbl.create 128;;
 
 (* bool and int Yices variable for each equation (only for comp setting) *)
-let eq_vars : (Rule.t * (Yices.expr * Yices.expr)) list ref = ref [];;
+let eq_vars : (Rule.t * (Yicesx.t * Yicesx.t)) list ref = ref [];;
 (* Yices variable for each rule *)
-let rule_vars : (Rule.t * Yices.expr) list ref = ref [];;
+let rule_vars : (Rule.t * Yicesx.t) list ref = ref [];;
 (* variables for strategy stage and strict rules *)
-let strict_vars : (int * Rule.t, Yices.expr) Hashtbl.t = Hashtbl.create 128
+let strict_vars : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 128
 (* variables for strategy stage and weak rules *)
-let weak_vars : (int * Rule.t, Yices.expr) Hashtbl.t = Hashtbl.create 128
-
-(* Yices variable for each constraint encountered at some point *)
-let ht_cvars : (Constraint.c, Yices.expr) Hashtbl.t = Hashtbl.create 100;;
+let weak_vars : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 128
 
 (* remember whether termination constraint was already added to context *)
 let ht_rlycs : (Rule.t, bool) Hashtbl.t = Hashtbl.create 100;;
@@ -42,22 +38,21 @@ let wc = ref 0
 
 (*** FUNCTIONS ***************************************************************)
 let clear _ =
- Hashtbl.clear ht_itrss;
- Hashtbl.clear ht_iredtrss;
- Hashtbl.clear ht_trssi;
+  Hashtbl.clear ht_itrss;
+  Hashtbl.clear ht_iredtrss;
+  Hashtbl.clear ht_trssi;
   Hashtbl.clear ht_contains;
   Hashtbl.clear ht_trsvars;
- eq_vars := [];
- rule_vars := [];
- Hashtbl.clear strict_vars;
- Hashtbl.clear weak_vars;
- Hashtbl.clear ht_cvars;
- Hashtbl.clear ht_rlycs
+  eq_vars := [];
+  rule_vars := [];
+  Hashtbl.clear strict_vars;
+  Hashtbl.clear weak_vars;
+  Hashtbl.clear ht_rlycs
 ;;
 
 let trs_of_index n =
- try Hashtbl.find ht_itrss n
- with Not_found -> failwith ("trs_of_index failed")
+  try Hashtbl.find ht_itrss n
+  with Not_found -> failwith ("trs_of_index failed")
 ;;
 
 let redtrs_of_index n =
@@ -79,46 +74,56 @@ let contains n m =
 
 let contains n = St.take_time St.t_cache (contains n)
 
-let find_rule lr =
- try
- snd (List.find (fun (st,_) -> Rule.variant st lr) !rule_vars)
- with Not_found -> (Format.printf "%a" Rule.print lr; failwith "no rule var for")
+let store_rule_var ctx lr =
+  let v = mk_fresh_bool_var ctx in
+  if not (Rule.is_rule lr) then require (!! v);
+  rule_vars :=  (lr, v) :: !rule_vars;
+  v 
+;;
+
+let store_rule_vars ctx rls = List.iter (ignore <.> store_rule_var ctx) rls
+
+let store_eq_var ctx lr =
+  let v = mk_fresh_bool_var ctx in
+  let vi = mk_int_var ctx ("eqw"^(string_of_int !wc)) in
+  wc := !wc + 1;
+  eq_vars := (lr, (v, vi)) :: !eq_vars;
+  (v, vi) 
+;;
+
+let store_eq_vars ctx rls = List.iter (ignore <.> store_eq_var ctx) rls
+
+let find_rule rl =
+ try snd (List.find (fun (st,_) -> Rule.variant st rl) !rule_vars)
+ with Not_found -> failwith ("no rule variable for " ^ (Rule.to_string rl))
+;;
+
+let rule_var ctx rl =
+  try snd (List.find (fun (st,_) -> Rule.variant st rl) !rule_vars)
+  with Not_found -> store_rule_var ctx rl
 ;;
 
 let eq_variant (l,r) st = Rule.variant st (l,r) || Rule.variant st (r,l)
 
-let find_eq lr =
+let find_eq rl =
  try
- fst (snd (List.find (fun (st,_) -> eq_variant st lr) !eq_vars))
- with Not_found -> (Format.printf "%a" Rule.print lr; failwith "no eq var for")
+ fst (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
+ with Not_found -> failwith ("no equation variable for " ^ (Rule.to_string rl))
 ;;
 
-let find_eq_weight lr =
- try
- snd (snd (List.find (fun (st,_) -> eq_variant st lr) !eq_vars))
- with Not_found -> (Format.printf "%a" Rule.print lr; failwith "no eq var for")
+let find_eq_weight rl =
+ try snd (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
+ with Not_found -> failwith ("no equation weight for " ^ (Rule.to_string rl))
 ;;
 
-let rec store_rule_vars ctx rls =
- let add lr =
-   if not (List.exists (fun (st,_) -> Rule.variant st lr) !rule_vars) then
-    let v = mk_fresh_bool_var ctx in
-    if not (Rule.is_rule lr) then assert_simple ctx (ynot ctx v);
-    rule_vars :=  (lr, v) :: !rule_vars
- in List.iter add rls
+let eq_var ctx rl =
+ try fst (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
+ with Not_found -> fst (store_eq_var ctx rl)
 ;;
 
-let rec store_eq_vars ctx rls =
- let add lr =
-   if not (List.exists (fun (st,_) -> eq_variant st lr) !eq_vars) then
-    let v = mk_fresh_bool_var ctx in
-    let ty  = mk_type ctx int_type_name in
-    let n = "eqw"^(string_of_int !wc) in
-    let d = mk_var_decl ctx n ty in
-    let vi = mk_var_from_decl ctx d in
-    wc := !wc + 1;
-    eq_vars :=  (lr, (v,vi)) :: !eq_vars
- in List.iter add rls
+let eq_weight_var ctx rl =
+ try snd (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
+ with Not_found -> snd (store_eq_var ctx rl)
 ;;
 
 let find_strict_var = Hashtbl.find strict_vars
@@ -165,20 +170,19 @@ let assert_rule k f =
 
 let assert_with ctx f ce =
  let assert_constr (l,r) =
-  let c (s,t) = yimp ctx (find_rule (s,t)) (f ctx s t) in
-  assert_simple ctx (c (l,r));
-  assert_simple ctx (c (r,l))
+  let c (s,t) = (find_rule (s,t)) <=>> (f ctx s t) in
+  require (c (l,r));
+  require (c (r,l))
  in
  let consider (lr,_) = assert_rule lr assert_constr in
-(* let consider (lr,_) =assert_constr lr in *)
  List.iter consider ce
 ;;
 
 let decode m i =
  let s = Hashtbl.fold (fun (j,rl) v l -> if i=j then (rl,v)::l else l) strict_vars [] in
- let s' = [ rl | (rl,v) <- s; yeval m v ] in
+ let s' = [ rl | (rl,v) <- s; eval m v ] in
  let w = Hashtbl.fold (fun (j,rl) v l -> if i=j then (rl,v)::l else l) weak_vars [] in
- let w' = [ rl | (rl,v) <- w; yeval m v ] in
+ let w' = [ rl | (rl,v) <- w; eval m v ] in
  Format.printf "Strict %i: \n@[ %a@]\n" i Rules.print s';
  Format.printf "Weak %i: \n@[ %a@]\n" i Rules.print w'
 ;;
