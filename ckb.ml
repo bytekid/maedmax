@@ -217,6 +217,8 @@ let c_red ctx cc =
   L.iter (fun rl -> require (rlred ctx cc (N.rule rl))) cc
 ;;
 
+let c_red ctx = St.take_time St.t_cred (c_red ctx)
+
 let c_cpred ctx cc =
   Hashtbl.clear reducible;
   let rs = [ N.rule n | n <- NS.symmetric cc; Rule.is_rule (N.rule n) ] in
@@ -225,6 +227,8 @@ let c_cpred ctx cc =
                                              st <- O.nontrivial_cps rl rl' ] in
   L.iter (fun c -> ignore (assert_weighted c 2)) c2;
 ;;
+
+let c_cpred ctx = St.take_time St.t_ccpred (c_cpred ctx)
 
 let c_max_red ctx cc =
   L.iter (fun rl -> assert_weighted (rlred ctx cc (N.rule rl)) 1) cc
@@ -247,6 +251,8 @@ let c_comp ctx ns =
  require (all_eqs !(settings.es));
  L.iter considered [ n | n <- ns; not (N.is_trivial n)];
 ;;
+
+let c_comp ctx = St.take_time St.t_ccomp (c_comp ctx)
 
 (* constraints to guide search; those get all retracted *)
 let search_constraints ctx cc =
