@@ -1,0 +1,6 @@
+(VAR x y)
+(RULES 
+m(one, plus(i(x),x)) -> zero
+m(one, plus(x,i(x))) -> plus(x, i(x))
+plus(i(x),x) -> plus(y,i(y)) 
+)
