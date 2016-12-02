@@ -105,12 +105,11 @@ let reduced rr ns =
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let succeeds (rr,ee) cc =
- let is_subsumed r r' = R.is_instance r r' || R.is_instance (R.flip r) r' in
  let covered n =
   let s,t = N.rule n in
   let s',t' = Rewriting.nf rr s, Rewriting.nf rr t in
   if not !(settings.unfailing) then s' = t'
-  else s' = t' || (L.exists (is_subsumed (s',t')) ee)
+  else s' = t' || Ground.joinable (rr, ee, !(settings.ac_syms)) (s',t')
  in L.for_all covered cc
 ;;
 
@@ -132,19 +131,11 @@ let select cc n thresh =
 let select_count i = !(settings.n)
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-(* heuristic to reduce eqs used in overlap computation *)
-let use_for_overlaps (s,t) =
- let no_subterm = not (Term.is_subterm s t || Term.is_subterm t s) in
- let unorientable = not (C.was_oriented (s,t)) in
- no_subterm && unorientable
-;;
-
 let eqs_for_overlaps ee =
- let subsumed r = L.exists (Rule.is_proper_instance r <.> N.rule) ee in
- let ee' = [ e | e <- NS.symmetric ee; use_for_overlaps (N.rule e);
-                 not (subsumed (N.rule e)) ] in
- (* FIXME: check for variants? *)
- Listx.unique ee'
+  let use_for_overlaps n = let (s,t) = N.rule n in not (Term.is_subterm s t) in
+  let ee' = [ e | e <- NS.symmetric ee; use_for_overlaps e ] in
+  (* FIXME: check for variants? *)
+  Listx.unique ee'
 ;;
 
 (* get overlaps for rules rr and active nodes cc *)
@@ -281,7 +272,7 @@ let max_k ctx cc k =
   let cc_symm = NS.symmetric cc in 
   if !(settings.d) then F.printf "K = %i\n%!" k;
   let rec max_k acc ctx cc n =
-    if n = 0 then acc
+    if n = 0 then List.rev acc (* return TRSs in sequence of generation *)
     else (
       require (block_trss ctx acc cc);
       let sat_call = if use_maxsat () then max_sat else check in
@@ -298,7 +289,7 @@ let max_k ctx cc k =
        if (n = k && L.length !(settings.strategy) > 1) then raise Restart;
        acc))
    in
-   C.store_rule_vars ctx (NS.trs cc_symm);
+   C.store_rule_vars ctx (NS.terms cc_symm);
    if has_comp () then C.store_eq_vars ctx cc;
    let s = termination_strategy () in
    (* FIXME: restrict to actual rules?! *)
@@ -344,10 +335,15 @@ let init_phi aa =
   St.ces := L.length aa
 ;;
 
+let non_ground_joinable ns rr =
+  let ac_syms = !(settings.ac_syms) in
+  let ns' = NS.unq_filter (Ground.non_joinable (rr,[],ac_syms)) ns in
+  NS.unique_subsumed ns'
+;;
+
 let rec phi ctx aa =
   init_phi aa;
   let i = !St.iterations in
-  if i > 100 then failwith "too late";
   let process (j,acc) (rr,c) =
     if !(settings.d) then log_max_trs j rr c;
     let rr' = NS.reduce rr in
@@ -358,13 +354,14 @@ let rec phi ctx aa =
     if has_comp () then C.store_eq_vars ctx rr';
     let irred, red = rewrite trs_n aa in (* rewrite eqs wrt new TRS *)
     let cps = reduced trs_n (overlaps rr irred) in (* rewrite CPs *)
-    let news = Listset.diff (NS.union cps red) aa in
-    let selected, rest = select news (select_count i) 200 in
+    let nn = Listset.diff (NS.union cps red) aa in
+    let nn = if !(settings.unfailing) then non_ground_joinable nn rr else nn in
+    let sel, rest = select nn (select_count i) 200 in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then C.store_eq_vars ctx rest;
-    let acc = NS.union selected acc in
-    if succeeds (NS.trs rr,NS.trs irred) (NS.of_rules ctx !(settings.es) @ cps)
-    then raise (Success (rr, irred)) else j+1, acc
+    let rr,ee = NS.terms rr, NS.terms irred in
+    if succeeds (rr, ee) (NS.of_rules ctx !(settings.es) @ cps)
+    then raise (Success (rr, ee)) else j+1, NS.union sel acc
   in
   try
     let rrs = max_k ctx aa (!(settings.k) i) in
@@ -372,10 +369,11 @@ let rec phi ctx aa =
     let aa' = acc @ aa in
     if degenerated aa' then raise Restart;
     phi ctx aa'
-  with Success (trs,ee) -> (NS.trs trs, NS.trs ee)
+  with Success (trs,ee) -> (trs, Ground.add_ac ee !(settings.ac_syms))
 ;;
 
-let set_settings fs es = 
+let set_settings fs es =
+ settings.ac_syms := Ground.ac_symbols es;
  settings.d := !(fs.d);
  settings.n := !(fs.n);
  settings.strategy := !(fs.strategy);

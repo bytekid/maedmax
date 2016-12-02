@@ -46,6 +46,7 @@ let options = Arg.align
        else if s = "mpol" then settings.strategy := S.strategy_mpol
        else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
        else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
+       else if s = "ordered" then settings.strategy := S.strategy_ordered
        else if s = "temp" then settings.strategy := S.strategy_temp
        else failwith "unsupported option for -M"),
     " strategy (auto, lpo, kbo, mpol, dp, dg, dgk, maxcomp, red, cpred, or comp)");
@@ -54,6 +55,7 @@ let options = Arg.align
    ("-N", Arg.Int (fun n -> settings.n := n), 
     " number of selected equations");
    ("-o", Arg.Unit (fun _ -> settings.unfailing := true;
+                             settings.k := (fun _ -> 2);
                              settings.strategy := S.strategy_ordered),
     " ordered completion");
    ("-term", Arg.Set only_termination,

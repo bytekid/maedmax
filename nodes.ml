@@ -28,17 +28,19 @@ module Make(N:Node.T) = struct
 
   let flip = map N.flip
 
-  let trs = map N.rule
+  let terms = map N.rule
 
   let of_rules ctx = map (N.of_rule ctx)
 
+  let unq_filter f = List.filter (f <.> N.terms) <.> Listx.unique
+
   let reduce ns =
-    let nf = Rewriting.nf (trs ns) in
+    let nf = Rewriting.nf (terms ns) in
     let rec red acc = function
      | [] -> acc
      | n :: ns ->
        let l,r = N.rule n in
-       if Rewriting.nf (trs acc) l = l then red (n :: acc) ns
+       if Rewriting.nf (terms acc) l = l then red (n :: acc) ns
        else red acc ns
     in red [] (map (N.rule_map (fun (l,r) -> (l, nf r))) ns)
   ;;

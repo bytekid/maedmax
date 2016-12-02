@@ -23,6 +23,8 @@ let rec rewrite_aux rules = function
 	  if List.mem lr used_rules 
 	  then used_rules, u else (lr :: used_rules), u
 
+let reducts trs t = snd (rewrite_aux trs t)
+
 let rec nf rules t =
  let used, u = rewrite_aux rules t in
  match used with 

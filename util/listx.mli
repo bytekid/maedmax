@@ -63,3 +63,4 @@ val to_string : ('a -> string) -> string -> 'a list -> string
 
 val remove: 'a -> 'a list -> 'a list
 
+val pos: 'a -> 'a list -> int

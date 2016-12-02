@@ -168,3 +168,10 @@ let rec remove x = function
  | y :: ys -> y:: (remove x ys)
 ;;
 
+let pos x =
+ let rec pos i = function
+  | [] -> failwith "Not_found"
+  | y :: ys when x = y -> i
+  | _ :: ys -> pos (i+1) ys
+ in pos 0
+ ;;
