@@ -5,6 +5,7 @@ type t = { ctx : Yices.context;
 val ctx : t -> Yices.context
 val mk_context : unit -> Yices.context
 val del_context : Yices.context -> unit
+val show : t -> unit
 val mk_true : Yices.context -> t
 val mk_false : Yices.context -> t
 val mk_zero : Yices.context -> t

@@ -17,3 +17,6 @@ val decode: int -> Yices.model -> unit
 val decode_af: int -> Yices.model -> unit
 
 val clear : unit -> unit
+
+val cond_gt : int -> Yices.context -> (Term.t * Term.t) list -> Term.t ->
+              Term.t -> Yicesx.t

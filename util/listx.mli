@@ -25,6 +25,8 @@ val interleave : 'a -> 'a list -> 'a list list
 
 val permutation : 'a list -> 'a list list
 
+val partitions : 'a list -> 'a list list list
+
 val transpose : 'a list list -> 'a list list
 
 val group : ('a * 'b) list -> ('a * 'b list) list

@@ -44,3 +44,6 @@ val bootstrap_constraints : int -> Yices.context -> Rules.t -> Yicesx.t
 val decode : int -> Yices.model -> t_term -> unit
 
 val clear : unit -> unit
+
+val cond_gt : t_term -> int -> Yices.context -> (Term.t * Term.t) list -> Term.t 
+              -> Term.t -> Yicesx.t

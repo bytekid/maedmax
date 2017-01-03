@@ -26,6 +26,8 @@ let mk_context = mk_context
 
 let del_context = del_context
 
+let show x = pp_expr x.expr
+
 let mk_true ctx = mk ctx (mk_true ctx)
 
 let mk_false ctx = mk ctx (mk_false ctx)

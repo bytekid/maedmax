@@ -65,7 +65,7 @@ let strategy_dg = [(ts_dg, [Red; Comp], [CPsRed])]
 let strategy_dgk = [(ts_dgk, [Red; Comp], [CPsRed])]
 let strategy_not_oriented = [ (ts_dpn, [Red; Comp], [NotOriented]) ]
 let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed]); (ts_dp, [Comp], [MaxRed])]
-let strategy_ordered = [ts_lpo, [],[MaxRed]]
+let strategy_ordered = [ts_kbo, [],[MaxRed]]
 let strategy_temp = [ts_kbo, [],[MaxRed]]
 
 let strategy_auto = [
@@ -425,4 +425,10 @@ Format.printf "Problem:\n"; Cache.decode m 0;
 let get_termination = function
    (ts, _, _) :: _ -> ts
   | _ -> failwith "Strategy.get_termination: empty settings list"
+;;
+
+let cond_gt = function
+  | Orders(Seq(LPO :: _)) -> Lpo.cond_gt
+  | Orders(Seq(KBO :: _)) -> Kbo.cond_gt
+  | _ -> failwith "Strategy.cond_gt: not implemented"
 ;;

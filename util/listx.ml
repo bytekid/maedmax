@@ -175,3 +175,12 @@ let pos x =
   | _ :: ys -> pos (i+1) ys
  in pos 0
  ;;
+
+let rec partitions = 
+ let add_to_1 x ps = [ [ if p = p' then x::p else p' | p' <- ps] | p <- ps ] in
+ function
+  | [] -> [ [] ]
+  | x :: xs ->
+   let ps = partitions xs in
+   [ [[x]] @ p | p <- ps] @ List.flatten [ add_to_1 x p | p <- ps]
+;;

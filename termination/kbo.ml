@@ -98,4 +98,26 @@ let init_kbo (ctx,k) fs =
 
 let init c = init_kbo c
 
+
+
+let cond_gt k ctx conds s t =
+ let rec gt s t =
+   if List.mem (s,t) conds then mk_true ctx
+   else if (s = t || not (Rule.is_non_duplicating (s,t))) then mk_false ctx 
+   else 
+     let ws, wt = weight (ctx,k) s, weight (ctx,k) t in
+     let cmp = 
+       match s,t with
+         | V _,_ -> mk_false ctx
+         | F(f,ss), V _ -> mk_true ctx (* var condition already checked *)
+         | F(f,ss), F(g,ts) when f = g ->
+           (match remove_equals ss ts with
+             | si :: _, ti :: _ -> gt si ti
+             | _ -> failwith "ykbo: different lengths")
+         | F(f,ss), F(g,ts) -> (prec k f) <>> (prec k g) 
+     in ws <>> wt <|> ((ws <=> wt) <&> cmp)
+  in big_or1 (gt s t :: [ gt u t | (s',u) <- conds; s' = s ])
+;;
+
+
 let decode m k = () 

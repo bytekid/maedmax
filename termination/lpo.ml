@@ -59,7 +59,7 @@ let emb_gt s t = s <> t && emb_geq s t
 
 let prec i f = 
  try Hashtbl.find precedence (i,f) with
- Not_found -> failwith ("Lpo.prec: unknown symbol")
+ Not_found -> failwith ("Lpo.prec: unknown symbol "^(Sig.get_fun_name f))
 ;;
 
 let gt (ctx,i) s t =
@@ -179,6 +179,7 @@ let ge_af (ctx,k) s t = ylpo_af false (ctx,k) s t
 let make_fun_vars ctx k fs =
  let add f =
    let fn = Sig.get_fun_name f in
+   Format.printf "init %s %d\n" fn k;
    Hashtbl.add precedence (k,f) (mk_int_var ctx (fn^"-"^(string_of_int k)))
  in List.iter add fs
 ;;
@@ -251,6 +252,30 @@ let decode_af k m =
 let decode k m = 
  let fs = Rules.functions [ rl | rl,_ <- C.get_all_strict 0] in
  decode_prec k m fs
+;;
+
+let cond_gt i ctx conds s t =
+  let p = prec i in
+  let rec gt s t =
+    if List.mem (s,t) conds || (emb_gt s t) then mk_true ctx
+    else if emb_geq t s then mk_false ctx
+    else match s, t with
+	    | F(f,ss), F(g,ts) ->
+        let sub = big_or ctx [ ylpo_ge si t | si <- ss ] in
+        if f = g then
+          big_and1 (ylex ss ts :: [ gt s ti | ti <- ts ]) <|> sub
+        else
+          big_and1 ((p f <>> (p g)) :: [ gt s ti | ti <- ts ]) <|> sub
+      | _, F(g,ts) -> big_and ctx ([p f <>> (p g) | f,_ <- !funs; f <> g ] @
+                                   (List.map (gt s) ts)) (* special hack *)
+        | _ -> mk_false ctx (* variable case already covered *)
+  and ylpo_ge s t = if s = t then mk_true ctx else gt s t
+  and ylex l1 l2 = match l1, l2 with
+    | s :: ss, t :: ts when s = t -> ylex ss ts
+    | s :: ss, t :: ts -> gt s t
+    | [], [] -> mk_false ctx
+    | _ -> mk_true ctx
+  in gt s t
 ;;
 
 let clear () =

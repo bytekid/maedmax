@@ -104,12 +104,14 @@ let reduced rr ns =
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let succeeds (rr,ee) cc =
+let succeeds ctx (rr,ee) cc =
  let covered n =
   let s,t = N.rule n in
   let s',t' = Rewriting.nf rr s, Rewriting.nf rr t in
   if not !(settings.unfailing) then s' = t'
-  else s' = t' || Ground.joinable (rr, ee, !(settings.ac_syms)) (s',t')
+  else
+    let str = termination_strategy () in
+    s' = t' || Ground.joinable ctx str (rr, ee, !(settings.ac_syms)) (s',t')
  in L.for_all covered cc
 ;;
 
@@ -311,9 +313,10 @@ let log_iteration i aa =
  F.printf "\n%!"
 ;;
 
-let log_max_trs j rr c =
- F.printf "TRS %i - %i: cost %i\n %a\n@." !St.iterations j c 
+let log_max_trs j rr rr' c =
+ F.printf "TRS %i - %i: cost %i\n %a\n\n reduced: %a\n@." !St.iterations j c 
    Rules.print (Variant.rename_rules rr)
+   Rules.print (Variant.rename_rules rr')
 ;;
 
 
@@ -327,6 +330,7 @@ let degenerated cc =
 let init_phi aa =
   let i = !St.iterations in
   St.iterations := i + 1;
+  if i > 5 then failwith "Too late";
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "iteration %i\n%!" !St.iterations;
@@ -335,9 +339,16 @@ let init_phi aa =
   St.ces := L.length aa
 ;;
 
-let non_ground_joinable ns rr =
+let non_gjoinable ctx ns rr =
   let ac_syms = !(settings.ac_syms) in
-  let ns' = NS.unq_filter (Ground.non_joinable (rr,[],ac_syms)) ns in
+  let keep n =
+    (* to-subterm rules can always be oriented, no need for complicated join *)
+    let is_to_sub (l,r) = Term.is_subterm r l in 
+    let sys = rr,[],ac_syms in
+    let s = termination_strategy () in
+    is_to_sub n || is_to_sub (Rule.flip n) || Ground.non_joinable ctx s sys n 
+  in
+  let ns' = NS.unq_filter keep ns in
   NS.unique_subsumed ns'
 ;;
 
@@ -345,8 +356,8 @@ let rec phi ctx aa =
   init_phi aa;
   let i = !St.iterations in
   let process (j,acc) (rr,c) =
-    if !(settings.d) then log_max_trs j rr c;
     let rr' = NS.reduce rr in
+    if !(settings.d) then log_max_trs j rr rr' c;
     let trs_n = C.store_trs rr in
     (* FIXME: for rewriting, use only rules in rr' where lhs in nf? *)
     C.store_redtrs rr' trs_n;
@@ -355,12 +366,12 @@ let rec phi ctx aa =
     let irred, red = rewrite trs_n aa in (* rewrite eqs wrt new TRS *)
     let cps = reduced trs_n (overlaps rr irred) in (* rewrite CPs *)
     let nn = Listset.diff (NS.union cps red) aa in
-    let nn = if !(settings.unfailing) then non_ground_joinable nn rr else nn in
+    let nn = if !(settings.unfailing) then non_gjoinable ctx nn rr else nn in
     let sel, rest = select nn (select_count i) 200 in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then C.store_eq_vars ctx rest;
     let rr,ee = NS.terms rr, NS.terms irred in
-    if succeeds (rr, ee) (NS.of_rules ctx !(settings.es) @ cps)
+    if succeeds ctx (rr, ee) (NS.of_rules ctx !(settings.es) @ cps)
     then raise (Success (rr, ee)) else j+1, NS.union sel acc
   in
   try
