@@ -23,7 +23,16 @@ let rec rewrite_aux rules = function
 	  if List.mem lr used_rules 
 	  then used_rules, u else (lr :: used_rules), u
 
-let reducts trs t = snd (rewrite_aux trs t)
+let reducts trs t =
+  let step_at_with_rule p (l,r) =
+    let ti = Term.subterm_at p t in
+    try [ Term.replace t (substitute (Subst.pattern_match l ti) r) p ] with
+    Subst.Not_matched -> []
+  in
+  let step_at p = List.concat [ step_at_with_rule p rl | rl <- trs ] in
+  List.concat [ step_at p | p <- Term.positions t ]
+;;
+
 
 let rec nf rules t =
  let used, u = rewrite_aux rules t in

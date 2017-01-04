@@ -111,7 +111,8 @@ let succeeds ctx (rr,ee) cc =
   if not !(settings.unfailing) then s' = t'
   else
     let str = termination_strategy () in
-    s' = t' || Ground.joinable ctx str (rr, ee, !(settings.ac_syms)) (s',t')
+    let d = !(settings.d) in
+    s' = t' || Ground.joinable ctx str (rr, ee, !(settings.ac_syms)) (s',t') d
  in L.for_all covered cc
 ;;
 
@@ -346,7 +347,8 @@ let non_gjoinable ctx ns rr =
     let is_to_sub (l,r) = Term.is_subterm r l in 
     let sys = rr,[],ac_syms in
     let s = termination_strategy () in
-    is_to_sub n || is_to_sub (Rule.flip n) || Ground.non_joinable ctx s sys n 
+    let d = !(settings.d) in
+    is_to_sub n || is_to_sub (Rule.flip n) || Ground.non_joinable ctx s sys n d
   in
   let ns' = NS.unq_filter keep ns in
   NS.unique_subsumed ns'
