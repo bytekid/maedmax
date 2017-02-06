@@ -33,7 +33,16 @@ def error_data(problem):
   return result_data(problem, "ERROR")
 
 def timeout_data(problem):
-  return result_data(problem, "TIMEOUT")
+  data = result_data(problem, "TIMEOUT")
+  data['time'] = timeout
+  return data
+
+def success_data(problem, data):
+  name = problem['file']
+  name = name[0:name.index('.')]
+  data['system'] = name
+  data['config'] = problem['config']
+  return data
 
 
 def work(problem):
@@ -50,7 +59,7 @@ def work(problem):
     if "TIMEOUT" in res:
       return timeout_data(problem)
     elif "YES" in res:
-      return json.loads(res)
+      return success_data(problem, json.loads(res))
     else:
       return error_data(problem)
 
