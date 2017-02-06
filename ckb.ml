@@ -134,10 +134,12 @@ let succeeds ctx (rr,ee) cc gs =
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc = F.printf "selected: %i\n%a\n%!" (L.length cc) NS.print cc
 
+let select_count i = !(settings.n)
+
 (* selection of small new nodes *)
-let select cc n thresh = 
+let select cc thresh = 
  let aa = NS.sort_smaller_than thresh cc in
- let aa,aa' = Listx.split_at_most n aa in 
+ let aa,aa' = Listx.split_at_most (select_count !(St.iterations)) aa in 
  let pp = Listset.diff cc aa in 
  if !(settings.d) then log_select aa;
  (* remember smallest terms for divergence estimate *)
@@ -145,8 +147,6 @@ let select cc n thresh =
  sizes := m :: !sizes;
  (aa,pp)
 ;;
-
-let select_count i = !(settings.n)
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let eqs_for_overlaps ee =
@@ -286,7 +286,8 @@ let rec block_trss ctx rrs cc =
 ;;
 
 (* find k maximal TRSs *)
-let max_k ctx cc k =
+let max_k ctx cc =
+  let k = !(settings.k) !(St.iterations) in
   let cc_symm = NS.symmetric cc in 
   if !(settings.d) then F.printf "K = %i\n%!" k;
   let rec max_k acc ctx cc n =
@@ -320,7 +321,7 @@ let max_k ctx cc k =
    trss
 ;;
 
-let max_k ctx cc = St.take_time St.t_maxk (max_k ctx cc)
+let max_k ctx = St.take_time St.t_maxk (max_k ctx)
 
 (* some logging functions *)
 let log_iteration i aa =
@@ -351,12 +352,13 @@ let repeated_iteration_state es gs =
  r
 ;;
 
-let init_phi aa =
+let set_iteration_stats aa =
   let i = !St.iterations in
   St.iterations := i + 1;
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
-   F.printf "iteration %i\n%!" !St.iterations;
+   F.printf "Start iteration %i with %a equations\n%!"
+     !St.iterations Rules.print aa;
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string 
     (Statistics.json s (!(settings.k) i) (select_count i))));
   St.ces := L.length aa
@@ -377,11 +379,9 @@ let non_gjoinable ctx ns rr =
 ;;
 
 let rec phi ctx aa gs =
-  if repeated_iteration_state aa gs then raise Restart;
-  init_phi aa;
-  let i = !St.iterations in
-  if !(settings.d) then
-   F.printf "Start iteration %i with %a\n%!" !St.iterations Rules.print aa;
+  if repeated_iteration_state aa gs then
+    raise Restart;
+  set_iteration_stats aa;
   let process (j,acc) (rr,c) =
     let rr' = NS.reduce rr in
     if !(settings.d) then log_max_trs j rr rr' c;
@@ -394,15 +394,17 @@ let rec phi ctx aa gs =
     let cps = reduced trs_n (overlaps rr irred) in (* rewrite CPs *)
     let nn = Listset.diff (NS.union cps red) aa in
     let nn = if !(settings.unfailing) then non_gjoinable ctx nn rr else nn in
-    let sel, rest = select nn (select_count i) 200 in
+    let sel, rest = select nn 200 in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then C.store_eq_vars ctx rest;
     let rr,ee = NS.terms rr, NS.terms irred in
     if succeeds ctx (rr, ee) (NS.of_rules ctx !(settings.es) @ cps) gs
-    then raise (Success (rr, ee)) else j+1, NS.union sel acc
+      then raise (Success (rr, ee))
+    else
+      j+1, NS.union sel acc
   in
   try
-    let rrs = max_k ctx aa (!(settings.k) i) in
+    let rrs = max_k ctx aa in
     let _, acc = L.fold_left process (0,[]) rrs in
     let aa' = acc @ aa in
     if degenerated aa' then raise Restart;
