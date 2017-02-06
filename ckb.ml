@@ -20,6 +20,7 @@ module NS = Nodes.Make(N)
 (*** EXCEPTIONS **************************************************************)
 exception Success of (Rules.t * Rules.t)
 exception Restart
+exception Fail
 
 (*** GLOBALS *****************************************************************)
 let settings = Settings.default
@@ -30,6 +31,10 @@ let sizes = ref [] (* to check degeneration *)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
 let reducible : (int, Yicesx.t) Hashtbl.t = Hashtbl.create 512;;
 let rl_index : (Rule.t, int) Hashtbl.t = Hashtbl.create 128;;
+
+(* hash values of states *)
+let hash_initial = ref 0;;
+let hash_iteration = ref 0;;
 
 (* map equation s=t to list of (rs, s'=t') where rewriting s=t with rs yields
    s'=t' *)
@@ -338,6 +343,14 @@ let degenerated cc =
 ;;
 
 (* main control loop *)
+let repeated_iteration_state es gs =
+ let h = Hashtbl.hash (List.length es, es, gs) in
+ let r = (h = !hash_iteration) in
+ hash_iteration := h;
+ if r && !(settings.d) then F.printf "repeated iteration state";
+ r
+;;
+
 let init_phi aa =
   let i = !St.iterations in
   St.iterations := i + 1;
@@ -365,6 +378,7 @@ let non_gjoinable ctx ns rr =
 ;;
 
 let rec phi ctx aa gs =
+  if repeated_iteration_state aa gs then raise Restart;
   init_phi aa;
   let i = !St.iterations in
   if !(settings.d) then
@@ -406,8 +420,17 @@ let set_settings fs es =
  settings.es := es
 ;;
 
+let remember_state es gs =
+ let h = Hashtbl.hash (termination_strategy (), es,gs) in
+ if h = !hash_initial then raise Fail;
+ hash_initial := h
+;;
+
 (* main ckb function *)
 let rec ckb fs es gs =
+ (* store initial state to capture*)
+ remember_state es gs;
+ (* init state *)
  let ctx = mk_context () in
  let es' = L.map N.normalize es in
  try
