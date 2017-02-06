@@ -354,7 +354,6 @@ let repeated_iteration_state es gs =
 let init_phi aa =
   let i = !St.iterations in
   St.iterations := i + 1;
-  (*if i > 5 then failwith "Too late";*)
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "iteration %i\n%!" !St.iterations;
