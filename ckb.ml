@@ -424,7 +424,7 @@ let rec ckb fs es gs =
   del_context ctx;
   (trs, ee)
  with Restart -> (
-  Format.printf "restart\n%!";
+  if !(settings.d) then Format.printf "restart\n%!";
   pop_strategy ();
   Strategy.clear ();
   Cache.clear ();
