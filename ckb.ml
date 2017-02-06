@@ -364,6 +364,17 @@ let set_iteration_stats aa =
   St.ces := L.length aa
 ;;
 
+let store_trs ctx j rr c =
+  let rr_index = C.store_trs rr in
+  (* for rewriting actually reduced TRS is used; have to store *)
+  let rr_reduced = NS.reduce rr in
+  C.store_redtrs rr_reduced rr_index;
+  C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
+  if has_comp () then C.store_eq_vars ctx rr_reduced;
+  if !(settings.d) then log_max_trs j rr rr_reduced c;
+  rr_index
+;;
+
 let non_gjoinable ctx ns rr =
   let ac_syms = !(settings.ac_syms) in
   let keep n =
@@ -383,13 +394,7 @@ let rec phi ctx aa gs =
     raise Restart;
   set_iteration_stats aa;
   let process (j,acc) (rr,c) =
-    let rr' = NS.reduce rr in
-    if !(settings.d) then log_max_trs j rr rr' c;
-    let trs_n = C.store_trs rr in
-    (* FIXME: for rewriting, use only rules in rr' where lhs in nf? *)
-    C.store_redtrs rr' trs_n;
-    C.store_rule_vars ctx rr'; (* otherwise problems in norm *)
-    if has_comp () then C.store_eq_vars ctx rr';
+    let trs_n = store_trs ctx j rr c in
     let irred, red = rewrite trs_n aa in (* rewrite eqs wrt new TRS *)
     let cps = reduced trs_n (overlaps rr irred) in (* rewrite CPs *)
     let nn = Listset.diff (NS.union cps red) aa in
