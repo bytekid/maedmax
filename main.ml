@@ -127,12 +127,13 @@ let () =
   let json = !(settings.json) in
   match !filenames with
   | [f] -> 
-      let rs,_ = Read.read_trs f in
-      let es = Rules.rpl_spcl_char rs in
-      if not ! only_termination then
+      let rs, goals = Read.read f in
+      let es,gs = Rules.rpl_spcl_char rs, Rules.rpl_spcl_char goals in
+      if not !only_termination then
        begin try
         let timer = Timer.start () in
-	let trs,eqs = ((*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb) settings es in
+	      let trs,eqs =
+          ((*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb) settings es gs in
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in

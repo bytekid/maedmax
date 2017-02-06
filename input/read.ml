@@ -17,13 +17,13 @@ let syntax_error p =
   eprintf "File %S at line %d, character %d:@.Syntax error.@." 
     p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol)
 
-let read_file parse lex filename =
+let read_trs filename =
   let f ch = 
     let lexbuf = from_channel ch in
     let lex_curr_p = 
       { lexbuf.lex_curr_p with pos_fname = filename } in
     try
-      parse lex { lexbuf with lex_curr_p = lex_curr_p }
+      Parser.toplevel Lexer.token { lexbuf with lex_curr_p = lex_curr_p }
     with Parsing.Parse_error -> 
       (syntax_error lexbuf.lex_curr_p; exit 1)
   in
@@ -33,23 +33,23 @@ let read_file parse lex filename =
     (eprintf "Error:@.%s@." s; exit 1)
 
 
-let rec read_tptp parse lex filename =
-  let f ch =
+let rec read_tptp filename =
+  let read ch =
     let lexbuf = from_channel ch in
-    let lex_curr_p =
-      { lexbuf.lex_curr_p with pos_fname = filename } in
+    let lex_curr_p = { lexbuf.lex_curr_p with pos_fname = filename } in
     try
-      parse lex { lexbuf with lex_curr_p = lex_curr_p }
+      TptpParser.toplevel TptpLexer.token { lexbuf with lex_curr_p=lex_curr_p }
     with Parsing.Parse_error ->
       (syntax_error lexbuf.lex_curr_p; exit 1)
   in
   try
-    let axs, rls = open_in_do ~path:filename f in 
-    List.fold_left (fun rs a -> read_tptp parse lex a @ rs ) rls axs
+    let axs, rls, gls = open_in_do ~path:filename read in
+    let add (rs,gs) a = let rs',gs' = read_tptp a in rs'@rs, gs'@gs in
+    List.fold_left add (rls,gls) axs
   with Sys_error s ->
     (eprintf "Error:@.%s@." s; exit 1)
 
-let read_trs filename = 
+let read filename = 
   if Filename.check_suffix filename "trs"  then
-   read_file Parser.toplevel Lexer.token filename
-  else read_tptp TptpParser.toplevel TptpLexer.token filename,[]
+   fst (read_trs filename), []
+  else read_tptp filename
