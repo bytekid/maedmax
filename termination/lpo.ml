@@ -179,7 +179,6 @@ let ge_af (ctx,k) s t = ylpo_af false (ctx,k) s t
 let make_fun_vars ctx k fs =
  let add f =
    let fn = Sig.get_fun_name f in
-   Format.printf "init %s %d\n" fn k;
    Hashtbl.add precedence (k,f) (mk_int_var ctx (fn^"-"^(string_of_int k)))
  in List.iter add fs
 ;;

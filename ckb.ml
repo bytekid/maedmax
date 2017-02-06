@@ -20,6 +20,7 @@ module NS = Nodes.Make(N)
 (*** EXCEPTIONS **************************************************************)
 exception Success of (Rules.t * Rules.t)
 exception Restart
+exception Fail
 
 (*** GLOBALS *****************************************************************)
 let settings = Settings.default
@@ -30,6 +31,10 @@ let sizes = ref [] (* to check degeneration *)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
 let reducible : (int, Yicesx.t) Hashtbl.t = Hashtbl.create 512;;
 let rl_index : (Rule.t, int) Hashtbl.t = Hashtbl.create 128;;
+
+(* hash values of states *)
+let hash_initial = ref 0;;
+let hash_iteration = ref 0;;
 
 (* map equation s=t to list of (rs, s'=t') where rewriting s=t with rs yields
    s'=t' *)
@@ -74,8 +79,8 @@ let add_rewrite_trace st rls st' =
   if has_comp () then
     begin
     let reducts = try Hashtbl.find rewrite_trace st with Not_found -> [] in
-    Hashtbl.replace rewrite_trace st ((rls, st') :: reducts);
-    Format.printf "%a reduces to %a\n" Rule.print st Rule.print st'
+    Hashtbl.replace rewrite_trace st ((rls, st') :: reducts)(*;
+    Format.printf "%a reduces to %a\n" Rule.print st Rule.print st'*)
     end
 ;;
 
@@ -104,7 +109,7 @@ let reduced rr ns =
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let succeeds ctx (rr,ee) cc =
+let saturated ctx (rr,ee) cc =
  let covered n =
   let s,t = N.rule n in
   let s',t' = Rewriting.nf rr s, Rewriting.nf rr t in
@@ -114,6 +119,16 @@ let succeeds ctx (rr,ee) cc =
     let d = !(settings.d) in
     s' = t' || Ground.joinable ctx str (rr, ee, !(settings.ac_syms)) (s',t') d
  in L.for_all covered cc
+;;
+
+let succeeds ctx (rr,ee) cc gs =
+  let joinable (s,t) = Rewriting.nf rr s = (Rewriting.nf rr t) in
+  if gs <> [] then (
+    if List.exists joinable gs then (
+      if !(settings.d) then Format.printf "joined goal\n";
+      true)
+    else false)
+  else saturated ctx (rr,ee) cc
 ;;
 
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -328,10 +343,18 @@ let degenerated cc =
 ;;
 
 (* main control loop *)
+let repeated_iteration_state es gs =
+ let h = Hashtbl.hash (List.length es, es, gs) in
+ let r = (h = !hash_iteration) in
+ hash_iteration := h;
+ if r && !(settings.d) then F.printf "repeated iteration state";
+ r
+;;
+
 let init_phi aa =
   let i = !St.iterations in
   St.iterations := i + 1;
-  if i > 5 then failwith "Too late";
+  (*if i > 5 then failwith "Too late";*)
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "iteration %i\n%!" !St.iterations;
@@ -354,9 +377,12 @@ let non_gjoinable ctx ns rr =
   NS.unique_subsumed ns'
 ;;
 
-let rec phi ctx aa =
+let rec phi ctx aa gs =
+  if repeated_iteration_state aa gs then raise Restart;
   init_phi aa;
   let i = !St.iterations in
+  if !(settings.d) then
+   F.printf "Start iteration %i with %a\n%!" !St.iterations Rules.print aa;
   let process (j,acc) (rr,c) =
     let rr' = NS.reduce rr in
     if !(settings.d) then log_max_trs j rr rr' c;
@@ -373,7 +399,7 @@ let rec phi ctx aa =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then C.store_eq_vars ctx rest;
     let rr,ee = NS.terms rr, NS.terms irred in
-    if succeeds ctx (rr, ee) (NS.of_rules ctx !(settings.es) @ cps)
+    if succeeds ctx (rr, ee) (NS.of_rules ctx !(settings.es) @ cps) gs
     then raise (Success (rr, ee)) else j+1, NS.union sel acc
   in
   try
@@ -381,7 +407,7 @@ let rec phi ctx aa =
     let _, acc = L.fold_left process (0,[]) rrs in
     let aa' = acc @ aa in
     if degenerated aa' then raise Restart;
-    phi ctx aa'
+    phi ctx aa' gs
   with Success (trs,ee) -> (trs, Ground.add_ac ee !(settings.ac_syms))
 ;;
 
@@ -394,15 +420,24 @@ let set_settings fs es =
  settings.es := es
 ;;
 
+let remember_state es gs =
+ let h = Hashtbl.hash (termination_strategy (), es,gs) in
+ if h = !hash_initial then raise Fail;
+ hash_initial := h
+;;
+
 (* main ckb function *)
-let rec ckb fs es =
+let rec ckb fs es gs =
+ (* store initial state to capture*)
+ remember_state es gs;
+ (* init state *)
  let ctx = mk_context () in
  let es' = L.map N.normalize es in
  try
   set_settings fs es';
   let ctx = mk_context () in
   L.iter (fun s -> Strategy.init s 0 ctx es') (Listx.unique (t_strategies ()));
-  let (trs,ee) = phi ctx es' in
+  let (trs,ee) = phi ctx es' gs in
   let s = termination_strategy () in
   (if !(fs.output_tproof) then 
    try
@@ -412,11 +447,11 @@ let rec ckb fs es =
   del_context ctx;
   (trs, ee)
  with Restart -> (
-  Format.printf "restart\n%!";
+  if !(settings.d) then Format.printf "restart\n%!";
   pop_strategy ();
   Strategy.clear ();
   Cache.clear ();
   St.restarts := !St.restarts + 1;
   Hashtbl.reset rewrite_trace;
   del_context ctx;
-  ckb fs (L.map N.normalize es'))
+  ckb fs (L.map N.normalize es') gs)

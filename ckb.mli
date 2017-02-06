@@ -1,3 +1,4 @@
 val settings: Settings.t
 
-val ckb : Settings.t -> Rules.t -> (Rules.t * Rules.t)
+(* given settings, equations and goals, produce a (ground-)complete system *)
+val ckb : Settings.t -> Rules.t -> Rules.t -> (Rules.t * Rules.t)

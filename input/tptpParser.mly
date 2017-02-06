@@ -25,9 +25,9 @@ let syntax_error msg =
     p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol + 1) msg;
   exit 1
 
-let add_axioms a (aa,ee) =  a::aa, ee
-
-let add_equation e (aa,ee) = aa, e::ee
+let add_axioms a (axs,es,gs) =  a::axs, es, gs;;
+let add_equation e (axs,es,gs) = axs, e::es, gs;;
+let add_goal g (axs,es,gs) = axs, es, g::gs;;
 
 %}
 
@@ -35,10 +35,10 @@ let add_equation e (aa,ee) = aa, e::ee
 %token <string> VAR
 %token <string> FILE
 %token LPAREN RPAREN 
-%token EQ INEQ COMMA SEMICOLON EOF TICK DOT COMMENT
+%token EQ NEQ COMMA SEMICOLON EOF TICK DOT COMMENT
 %token CNF AXIOM HYPOTHESIS CONJECTURE NCONJECTURE INCLUDEAXIOMS
 
-%type <string list * Rules.t> toplevel
+%type <string list * Rules.t * Rules.t> toplevel
 %start toplevel
 
 %%
@@ -50,9 +50,9 @@ decl:
   | INCLUDEAXIOMS LPAREN FILE RPAREN DOT decl { add_axioms $3 $6}
   | axiom decl { add_equation $1 $2 }
   | hypothesis decl { add_equation $1 $2 }
-  | conjecture decl { $2 }
+  | conjecture decl { add_goal $1 $2 }
   | COMMENT decl { $2 }
-  | { [],[] }
+  | { [],[],[] }
   | error { syntax_error "Syntax error." }
 
 axiom:
@@ -63,6 +63,7 @@ hypothesis:
 
 conjecture:
  | CNF LPAREN IDENT COMMA conjecturetype COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
+ | CNF LPAREN IDENT COMMA conjecturetype COMMA LPAREN inequality RPAREN RPAREN DOT { $8 }
 
 conjecturetype:
  | CONJECTURE { () }
@@ -70,13 +71,17 @@ conjecturetype:
 
 equation:
   | term EQ term { ($1, $3) }
-  | error      { syntax_error "Syntax error." }
+  | error      { syntax_error "Syntax error: not an equation" }
+
+inequality:
+  | term NEQ term { ($1, $3) }
+  | error      { syntax_error "Syntax error: not an inequality" }
 
 term:
   | IDENT LPAREN terms RPAREN { func $1 $3 }
   | IDENT                     { func $1 [] }
   | VAR                       { var $1 }
-  | error { syntax_error "Syntax error." }
+  | error { syntax_error "Syntax error: not a term" }
 
 terms:
   | term COMMA terms { $1 :: $3 }

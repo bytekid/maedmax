@@ -32,20 +32,21 @@ let letter =
 let any =
   ['a'-'z' 'A'-'Z' '0'-'9' 
    '#' '+' '-' '*' '/' '.' ',' '\\' ':' ';' '=' '<' '>' '_' '@' '`' '$'
-   '(' ')' '{' '}' '[' ']' '|' '~' '?' '&' '"' '!' '\'' ' ' '\t']
+   '(' ')' '{' '}' '[' ']' '|' '~' '?' '&' '^' '"' '!' '\'' ' ' '\t']
 
 rule token = parse
   | [' ' '\r' '\t'] {  token lexbuf }
   | '\n'   { new_line lexbuf; token lexbuf }
   | ";"    { SEMICOLON }
   | "="  { EQ }
-  | "!="   { INEQ }
+  | "!="   { NEQ }
   | "("    { LPAREN }
   | ")"    { RPAREN }
   | ","    { COMMA }
   | "."    { DOT }
   | "'" (letter+ as s) "'" { FILE s }
-  | "%" any* { COMMENT }
+  | "%" (any*) { COMMENT }
+  | "%" ([^ '\n']*) { COMMENT }
   | (upper letter*) as s { VAR  s }
   | letter+ as s { ident_or_keyword s }
   | eof    { EOF }

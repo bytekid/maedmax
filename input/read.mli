@@ -1,1 +1,2 @@
-val read_trs : string -> Rules.t * string list 
+(* return (axioms, goals) *)
+val read : string -> Rules.t * Rules.t 
