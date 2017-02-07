@@ -131,6 +131,8 @@ let succeeds ctx (rr,ee) cc gs =
   else saturated ctx (rr,ee) cc
 ;;
 
+let succeeds ctx re cc = St.take_time St.t_success_check (succeeds ctx re cc)
+
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc = F.printf "selected: %i\n%a\n%!" (L.length cc) NS.print cc
 
@@ -343,7 +345,7 @@ let degenerated cc =
  (L.for_all (fun x -> x > 16) (Listx.take 6 !sizes))
 ;;
 
-(* main control loop *)
+(* towards main control loop *)
 let repeated_iteration_state es gs =
  let h = Hashtbl.hash (List.length es, es, gs) in
  let r = List.for_all ((=) h) !hash_iteration in
