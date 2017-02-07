@@ -34,7 +34,7 @@ let rl_index : (Rule.t, int) Hashtbl.t = Hashtbl.create 128;;
 
 (* hash values of states *)
 let hash_initial = ref 0;;
-let hash_iteration = ref 0;;
+let hash_iteration = ref [0];;
 
 (* map equation s=t to list of (rs, s'=t') where rewriting s=t with rs yields
    s'=t' *)
@@ -346,8 +346,10 @@ let degenerated cc =
 (* main control loop *)
 let repeated_iteration_state es gs =
  let h = Hashtbl.hash (List.length es, es, gs) in
- let r = (h = !hash_iteration) in
- hash_iteration := h;
+ let r = List.for_all ((=) h) !hash_iteration in
+ hash_iteration := h :: !hash_iteration;
+ if List.length (!hash_iteration) > 5 then
+   hash_iteration := Listx.take 3 !hash_iteration;
  if r && !(settings.d) then F.printf "repeated iteration state";
  r
 ;;
