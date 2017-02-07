@@ -19,7 +19,7 @@ module NS = Nodes.Make(N)
 
 (*** EXCEPTIONS **************************************************************)
 exception Success of (Rules.t * Rules.t)
-exception Restart
+exception Restart of N.t list
 exception Fail
 
 (*** GLOBALS *****************************************************************)
@@ -139,9 +139,9 @@ let log_select cc = F.printf "selected: %i\n%a\n%!" (L.length cc) NS.print cc
 let select_count i = !(settings.n)
 
 (* selection of small new nodes *)
-let select cc thresh = 
+let select k cc thresh = 
  let aa = NS.sort_smaller_than thresh cc in
- let aa,aa' = Listx.split_at_most (select_count !(St.iterations)) aa in 
+ let aa,aa' = Listx.split_at_most k aa in 
  let pp = Listset.diff cc aa in 
  if !(settings.d) then log_select aa;
  (* remember smallest terms for divergence estimate *)
@@ -149,6 +149,11 @@ let select cc thresh =
  sizes := m :: !sizes;
  (aa,pp)
 ;;
+
+let select_for_restart cc = fst (select 5 (Listset.diff cc !(settings.es)) 30)
+
+let select cc =
+  St.take_time St.t_select (select (select_count !(St.iterations)) cc)
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let eqs_for_overlaps ee =
@@ -307,7 +312,8 @@ let max_k ctx cc =
         max_k ((rr, c) :: acc) ctx cc (n-1))
      else (
        if !(settings.d) then F.printf "no further TRS found\n%!"; 
-       if (n = k && L.length !(settings.strategy) > 1) then raise Restart;
+       if (n = k && L.length !(settings.strategy) > 1) then
+         raise (Restart (select_for_restart cc));
        acc))
    in
    C.store_rule_vars ctx (NS.terms cc_symm);
@@ -350,8 +356,8 @@ let repeated_iteration_state es gs =
  let h = Hashtbl.hash (List.length es, es, gs) in
  let r = List.for_all ((=) h) !hash_iteration in
  hash_iteration := h :: !hash_iteration;
- if List.length (!hash_iteration) > 5 then
-   hash_iteration := Listx.take 3 !hash_iteration;
+ if List.length (!hash_iteration) > 20 then
+   hash_iteration := Listx.take 20 !hash_iteration;
  if r && !(settings.d) then F.printf "repeated iteration state";
  r
 ;;
@@ -395,7 +401,7 @@ let non_gjoinable ctx ns rr =
 
 let rec phi ctx aa gs =
   if repeated_iteration_state aa gs then
-    raise Restart;
+    raise (Restart (select_for_restart aa));
   set_iteration_stats aa;
   let process (j,acc) (rr,c) =
     let trs_n = store_trs ctx j rr c in
@@ -416,7 +422,8 @@ let rec phi ctx aa gs =
     let rrs = max_k ctx aa in
     let _, acc = L.fold_left process (0,[]) rrs in
     let aa' = acc @ aa in
-    if degenerated aa' then raise Restart;
+    if degenerated aa' then
+      raise (Restart (select_for_restart aa'));
     phi ctx aa' gs
   with Success (trs,ee) -> (trs, Ground.add_ac ee !(settings.ac_syms))
 ;;
@@ -456,7 +463,7 @@ let rec ckb fs es gs =
    with _ -> F.printf "(sorry, no proof output for termination strategy)\n%!");
   del_context ctx;
   (trs, ee)
- with Restart -> (
+ with Restart es_new -> (
   if !(settings.d) then Format.printf "restart\n%!";
   pop_strategy ();
   Strategy.clear ();
@@ -464,4 +471,4 @@ let rec ckb fs es gs =
   St.restarts := !St.restarts + 1;
   Hashtbl.reset rewrite_trace;
   del_context ctx;
-  ckb fs (L.map N.normalize es') gs)
+  ckb fs (L.map N.normalize (es_new @ es')) gs)
