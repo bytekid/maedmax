@@ -28,6 +28,7 @@ val strategy_dgk : t
 val strategy_not_oriented : t
 val strategy_temp : t
 val strategy_ordered : t
+val strategy_ordered_lpokbo : t
 
 val term_to_string : t_term -> string
 

@@ -48,6 +48,7 @@ let ts_dg = Dg (Seq [Cfsn; LPO])
 let ts_dgk = DgScc (2, Seq [Cfsn; LPO])
 let ts_lpo = Orders (Seq [LPO])
 let ts_kbo = Orders (Seq [KBO])
+let ts_lpokbo = Orders (Or [LPO; KBO])
 let ts_mpol = Orders (Seq [MPol])
 
 (* overall strategies *)
@@ -66,6 +67,7 @@ let strategy_dgk = [(ts_dgk, [Red; Comp], [CPsRed])]
 let strategy_not_oriented = [ (ts_dpn, [Red; Comp], [NotOriented]) ]
 let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed]); (ts_dp, [Comp], [MaxRed])]
 let strategy_ordered = [ts_kbo, [],[MaxRed]]
+let strategy_ordered_lpokbo = [ts_lpokbo, [],[MaxRed]]
 let strategy_temp = [ts_kbo, [],[MaxRed]]
 
 let strategy_auto = [
