@@ -17,8 +17,13 @@ open Node
 module N = Equation
 module NS = Nodes.Make(N)
 
+(*** TYPES *******************************************************************)
+type result = Completion of Rules.t
+  | GroundCompletion of (Rules.t * Rules.t)
+  | Proof
+
 (*** EXCEPTIONS **************************************************************)
-exception Success of (Rules.t * Rules.t)
+exception Success of result
 exception Restart of N.t list
 exception Fail
 
@@ -125,9 +130,13 @@ let succeeds ctx (rr,ee) cc gs =
   if gs <> [] then (
     if List.exists joinable gs then (
       if !(settings.d) then Format.printf "joined goal\n";
-      true)
-    else false)
-  else saturated ctx (rr,ee) cc
+      Some Proof)
+    else None)
+  else if not (saturated ctx (rr,ee) cc) then None
+  else
+    if !(settings.unfailing) then
+      Some (GroundCompletion (rr, Ground.add_ac ee !(settings.ac_syms)))
+    else Some (Completion rr)
 ;;
 
 let succeeds ctx re cc = St.take_time St.t_success_check (succeeds ctx re cc)
@@ -161,17 +170,19 @@ let eqs_for_overlaps ee =
   NS.variant_free ee'
 ;;
 
-let cp_cache : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256
+let cp_cache : (Rule.t * Rule.t, Rules.t) Hashtbl.t = Hashtbl.create 256
 
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
  let ns = if !(settings.unfailing) then eqs_for_overlaps aa @ rr else rr in
- let news n1 n2 =
+ let cps n1 n2 =
    try Hashtbl.find cp_cache (n1,n2)
-   with Not_found -> (Hashtbl.add cp_cache (n1,n2) false; true)
+   with Not_found -> (
+     let cps = NS.map N.normalize (N.cps n1 n2) in
+     Hashtbl.add cp_cache (n1,n2) cps;
+     cps)
  in
- let cps = NS.unique [ n | n1 <- ns; n2 <- ns; (*news n1 n2;*) n <- N.cps n1 n2 ] in
- NS.map N.normalize cps
+ NS.unique [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
 ;;
 
  (* FIXME: no caching yet *)
@@ -419,10 +430,9 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then C.store_eq_vars ctx rest;
     let rr,ee = NS.terms rr, NS.terms irred in
-    if succeeds ctx (rr, ee) (NS.of_rules ctx !(settings.es) @ cps) gs
-      then raise (Success (rr, ee))
-    else
-      j+1, NS.union sel acc
+    match succeeds ctx (rr, ee) (NS.of_rules ctx !(settings.es) @ cps) gs with
+       Some r -> raise (Success r)
+     | None -> j+1, NS.union sel acc
   in
   try
     let rrs = max_k ctx aa in
@@ -431,7 +441,7 @@ let rec phi ctx aa gs =
     if degenerated aa' then
       raise (Restart (select_for_restart aa'));
     phi ctx aa' gs
-  with Success (trs,ee) -> (trs, Ground.add_ac ee !(settings.ac_syms))
+  with Success r -> r
 ;;
 
 let set_settings fs es =
@@ -450,6 +460,17 @@ let remember_state es gs =
  hash_initial := h
 ;;
 
+let termination_output = function
+  GroundCompletion (trs,_) -> (
+    let s = termination_strategy () in
+    try
+      F.printf "TERMINATION PROOF:\n";
+      assert (Termination.check s trs !(settings.json)) 
+    with _ -> F.printf "(sorry, no proof output for termination strategy)\n%!")
+  | _ -> () 
+;;
+
+
 (* main ckb function *)
 let rec ckb fs es gs =
  (* store initial state to capture*)
@@ -461,15 +482,10 @@ let rec ckb fs es gs =
   set_settings fs es';
   let ctx = mk_context () in
   L.iter (fun s -> Strategy.init s 0 ctx es') (Listx.unique (t_strategies ()));
-  let (trs,ee) = phi ctx es' gs in
-  let s = termination_strategy () in
-  (if !(fs.output_tproof) then 
-   try
-     F.printf "TERMINATION PROOF:\n";
-     assert (Termination.check s trs !(settings.json)) 
-   with _ -> F.printf "(sorry, no proof output for termination strategy)\n%!");
+  let res = phi ctx es' gs in
+  if !(fs.output_tproof) then termination_output res;
   del_context ctx;
-  (trs, ee)
+  res
  with Restart es_new -> (
   if !(settings.d) then Format.printf "restart\n%!";
   pop_strategy ();

@@ -97,15 +97,20 @@ let call () =
  in add_arg 0
 ;;
 
-let print_json f (trs, eqs) =
+let print_json f res =
  let s = Strategy.to_string !strategy in
- let o = !(settings.unfailing) && eqs <> [] in
+ let res_str = match res with
+  | Ckb.Completion rr -> trs_string rr
+  | Ckb.GroundCompletion (rr,ee) ->
+    if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
+  | Ckb.Proof -> "..."
+ in
  let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
  let t = `Assoc [
   "result",`String "YES";
   "time", f;
   (*"config",`String (call());*)
-  "trs", `String (if o then trs_eqs_string (trs, eqs) else trs_string trs);
+  "trs", `String res_str;
   "statistics", Statistics.json s !k !(settings.n)
  ] in
  Format.printf "%s\n%!" (pretty_to_string t)
@@ -120,6 +125,23 @@ let print_json_term yes f =
  Format.printf "%s\n%!" (pretty_to_string t)
 ;;
 
+let print_res res =
+  printf "YES@.";
+  match res with
+   | Ckb.Completion trs -> printf "%a@." print_trs trs;
+   | Ckb.GroundCompletion (rr,ee) ->
+    (printf "%a@." print_trs rr;
+    if ee <> [] then printf "ES:@.%a@." print_es ee)
+   | Ckb.Proof -> printf "(proof)"
+;;
+         
+
+let clean =
+  let reduce rr = Listx.unique (Variant.reduce rr) in function
+ | Ckb.Completion trs -> Ckb.Completion (reduce trs)
+ | Ckb.GroundCompletion (rr,ee) -> Ckb.GroundCompletion (reduce rr, reduce ee)
+ | Ckb.Proof -> Ckb.Proof
+;;
 
 let () =
   Arg.parse options 
@@ -133,16 +155,15 @@ let () =
       if not !only_termination then
        begin try
         let timer = Timer.start () in
-	      let trs,eqs =
+	      let res =
           ((*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb) settings es gs in
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
-         print_json secs (Listx.unique (Variant.reduce trs), eqs)
-        ) else ( 
-	 printf "YES@.%a@." print_trs (Listx.unique (Variant.reduce trs)); 
-         if !(settings.unfailing) && eqs<>[] then printf "ES:@.%a@." print_es eqs;
-         Timer.stop timer;
+         print_json secs (clean res)
+        ) else (
+         print_res (clean res);
+	       Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
          printf "%s %.2f %s@." "Search time:" secs "seconds";
          Statistics.print ()
@@ -160,22 +181,4 @@ let () =
         printf "%s %.2f %s@." "time:" secs "seconds")
        )
   | _ -> eprintf "%s%!" short_usage; exit 1
-
-(*
-let () =
-  Arg.parse options 
-   (fun x -> filenames := !filenames @ [x]) short_usage;
-  match !filenames with
-  | [f] ->  
-      let es = Rules.rpl_spcl_char (Read.read_trs f) in
-      begin try
-	let trs, _ = Cc.cc ~max:(Maxtrs.max ~order:!order) ~kk:!kk es in
-	printf "YES@.%a@." print_trs trs;
-      with 
-	| Cc.Fail s -> printf "MAYBE@."; 
-	             printf "Run failed: %s@." s; exit 1
-        | e -> printf "MAYBE@."; raise e
-      end
-  | _ -> eprintf "%s%!" short_usage; exit 1
-*)
 
