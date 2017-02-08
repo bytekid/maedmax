@@ -53,6 +53,16 @@ module Make(N:Node.T) = struct
     sort_by (Rule.size <.> N.rule) small
   ;;
 
+  let rec variant_free = function
+     [] -> []
+   | e :: ee ->
+     if List.exists (fun e' -> Rule.variant (N.rule e) (N.rule e')) ee then
+       variant_free ee
+     else
+       e :: (variant_free ee)
+  ;;
+
+
   let print ppf =
     Format.fprintf ppf "@[<v 0> %a@]" (Formatx.print_list N.print "\n ")
 end

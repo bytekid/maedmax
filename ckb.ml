@@ -157,10 +157,9 @@ let select cc =
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let eqs_for_overlaps ee =
-  let use_for_overlaps n = let (s,t) = N.rule n in not (Term.is_subterm s t) in
+  let use_for_overlaps n = let s,t = N.rule n in not (Term.is_subterm s t) in
   let ee' = [ e | e <- NS.symmetric ee; use_for_overlaps e ] in
-  (* FIXME: check for variants? *)
-  Listx.unique ee'
+  NS.variant_free ee'
 ;;
 
 (* get overlaps for rules rr and active nodes cc *)
