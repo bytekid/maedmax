@@ -162,10 +162,17 @@ let eqs_for_overlaps ee =
   NS.variant_free ee'
 ;;
 
+let cp_cache : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256
+
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
- let cc = if !(settings.unfailing) then eqs_for_overlaps aa @ rr else rr in
- NS.map N.normalize (NS.cps cc)
+ let ns = if !(settings.unfailing) then eqs_for_overlaps aa @ rr else rr in
+ let news n1 n2 =
+   try Hashtbl.find cp_cache (n1,n2)
+   with Not_found -> (Hashtbl.add cp_cache (n1,n2) false; true)
+ in
+ let cps = NS.unique [ n | n1 <- ns; n2 <- ns; news n1 n2; n <- N.cps n1 n2 ] in
+ NS.map N.normalize cps
 ;;
 
  (* FIXME: no caching yet *)
@@ -471,4 +478,5 @@ let rec ckb fs es gs =
   St.restarts := !St.restarts + 1;
   Hashtbl.reset rewrite_trace;
   del_context ctx;
+  cp_cache.clear();
   ckb fs (L.map N.normalize (es_new @ es')) gs)
