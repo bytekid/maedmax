@@ -86,12 +86,11 @@ let add_rewrite_trace st rls st' =
 
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
    are newly generated eqs and cs' \subseteq cs is set of irreducible eqs *)
-let rewrite n cs =
- let rr = C.redtrs_of_index n in
+let rewrite rewriter cs =
  let rec rewrite (irrdcbl, news) = function
   | [] -> (irrdcbl, news)
   | n :: cc ->
-   match N.nf_with rr n with
+   match N.rewriter_nf_with rewriter n with
     | None -> rewrite (n :: irrdcbl, news) cc (* no progress here *)
     (* n' is leftover of n (only relevant with constraints *)
     | Some (n', nnew, rs) -> (* if terms got equal, nnew is empty *)
@@ -171,7 +170,7 @@ let overlaps rr aa =
    try Hashtbl.find cp_cache (n1,n2)
    with Not_found -> (Hashtbl.add cp_cache (n1,n2) false; true)
  in
- let cps = NS.unique [ n | n1 <- ns; n2 <- ns; news n1 n2; n <- N.cps n1 n2 ] in
+ let cps = NS.unique [ n | n1 <- ns; n2 <- ns; (*news n1 n2;*) n <- N.cps n1 n2 ] in
  NS.map N.normalize cps
 ;;
 
@@ -411,8 +410,9 @@ let rec phi ctx aa gs =
   set_iteration_stats aa;
   let process (j,acc) (rr,c) =
     let trs_n = store_trs ctx j rr c in
-    let irred, red = rewrite trs_n aa in (* rewrite eqs wrt new TRS *)
-    let cps = reduced trs_n (overlaps rr irred) in (* rewrite CPs *)
+    let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
+    let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
+    let cps = reduced rewriter (overlaps rr irred) in (* rewrite CPs *)
     let nn = Listset.diff (NS.union cps red) aa in
     let nn = if !(settings.unfailing) then non_gjoinable ctx nn rr else nn in
     let sel, rest = select nn 200 in
@@ -478,5 +478,5 @@ let rec ckb fs es gs =
   St.restarts := !St.restarts + 1;
   Hashtbl.reset rewrite_trace;
   del_context ctx;
-  cp_cache.clear();
+  Hashtbl.reset cp_cache;
   ckb fs (L.map N.normalize (es_new @ es')) gs)

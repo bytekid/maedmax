@@ -24,6 +24,10 @@ module type T = sig
   (* Compute normal form of term with respect to rules. Upon progress, return
     pair (old, ns) of (modified) old and new nodes. Result is not normalized  *)
   val nf_with : t list -> t -> (t list * t list * Rule.t list) option
+  (* Compute normal form of term with respect to rules. Result is not
+     normalized  *)
+  val rewriter_nf_with : Rewriter.rewriter -> t ->
+    (t list * t list * Rule.t list) option
   (* whether the TRS joins the equation *)
   val joins : Rules.t -> t -> bool
   val print : Format.formatter -> t -> unit
