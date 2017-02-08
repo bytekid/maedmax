@@ -400,7 +400,7 @@ let non_gjoinable ctx ns rr =
 ;;
 
 let rec phi ctx aa gs =
-  if repeated_iteration_state aa gs then
+  if repeated_iteration_state aa gs || !(St.iterations) > 30 then
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa;
   let process (j,acc) (rr,c) =
@@ -431,6 +431,7 @@ let rec phi ctx aa gs =
 let set_settings fs es =
  settings.ac_syms := Ground.ac_symbols es;
  settings.d := !(fs.d);
+ St.iterations := 0;
  settings.n := !(fs.n);
  settings.strategy := !(fs.strategy);
  settings.tmp := !(fs.tmp);
