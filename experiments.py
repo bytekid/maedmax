@@ -15,6 +15,7 @@ numprocs = int(sys.argv[4]) if len(sys.argv) > 4 else 2
 codename = sys.argv[5] if len(sys.argv) > 5 else "madmax"
 tool = "./madmax"
 jobs = []
+stats = {}
 
 
 def get_configs():
@@ -64,6 +65,7 @@ def work(problem):
       return error_data(problem)
 
 def accumulate(results, configs):
+  global stats
   t=datetime.fromtimestamp(time.time())
   tstamp = t.strftime('%Y-%m-%d %H:%M')
   data = {"timestamp": tstamp, "configurations": configs, "results": results}
@@ -71,6 +73,16 @@ def accumulate(results, configs):
   rname = t.strftime('%Y-%m-%d') + codename + ".json"
   rfile = open("results/"+rname, "w")
   rfile.write(res)
+  for r in results:
+    conf = r['config']
+    if r['result'] == "YES":
+      stats[conf]['successes'] = stats[conf]['successes'] + 1
+    elif r['result'] == "TIMEOUT":
+      stats[conf]['timeouts'] = stats[conf]['timeouts'] + 1
+    else:
+      stats[conf]['errors'] = stats[conf]['errors'] + 1
+
+
 
 
 if __name__ == "__main__":
@@ -78,6 +90,8 @@ if __name__ == "__main__":
   # create job list
   i = 0
   configs = get_configs()
+  for c in configs:
+    stats[c] = { "successes" : 0, "timeouts" : 0, "errors": 0}
   for subdir, dirs, problems in os.walk(problems):
     for p in problems:
       for c in configs:
@@ -93,4 +107,7 @@ if __name__ == "__main__":
   results = pool.map_async(work, jobs)
   pool.close()
   pool.join()
-  print accumulate(results.get(), configs)
+  accumulate(results.get(), configs)
+  for c in configs:
+    s = stats[c]
+    print "{}: {} successes, {} timeouts, {} errors".format(c, s['successes'], s['timeouts'], s['errors'])
