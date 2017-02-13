@@ -451,16 +451,17 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
-    let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
-    let gg = fst (select ~k:2 gcps 30) in
+    (*let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
+    let gg = fst (select ~k:2 gcps 30) in*)
     match succeeds ctx (rr, ee) (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
+     | None -> j+1, NS.add_list sel acc, (*NS.add_list gg*) gs
   in
   try
     let rrs = max_k ctx aa in
     let s = Unix.gettimeofday () in
-    let _, aa', gs' = L.fold_left process (0, aa, gs) rrs in
+    let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
+    let aa' = NS.add_all aa' aa in
     St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. s);
     if degenerated aa' then
       raise (Restart (select_for_restart aa'));
