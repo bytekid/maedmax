@@ -18,6 +18,7 @@ let t_tmp2 = ref 0.0
 
 let iterations = ref 0;;
 let ces = ref 0;;
+let goals = ref 0;;
 let restarts = ref 0
 
 let take_time t f x =
@@ -27,24 +28,26 @@ let take_time t f x =
  res
 
 let print () =
- printf "\niterations          %i@." !iterations;
- printf "equalities          %i@." !ces;
- printf "restarts            %i@." !restarts;
- printf "times@.";
- printf " ground join checks %.3f@." !t_gjoin_check;
- printf " maxk               %.3f@." !t_maxk;
- printf " sat                %.3f@." !t_sat;
- printf " overlaps           %.3f@." !t_overlap;
- printf " success checks     %.3f@." !t_success_check;
- printf " constraints CPred  %.3f@." !t_ccpred;
- printf "             Comp   %.3f@." !t_ccomp;
- printf "             red    %.3f@." !t_cred;
- printf " rewriting          %.3f@." !t_rewrite;
- printf " encode termination %.3f@." !t_orient_constr;
- printf " selection          %.3f@." !t_select;
- printf " caching            %.3f@." !t_cache;
- printf " tmp1               %.3f@." !t_tmp1;
- printf " tmp2               %.3f@." !t_tmp2
+  printf "\niterations          %i@." !iterations;
+  printf "equalities          %i@." !ces;
+  if !goals > 0 then
+    printf "goals               %i@." !goals;
+  printf "restarts            %i@." !restarts;
+  printf "times@.";
+  printf " ground join checks %.3f@." !t_gjoin_check;
+  printf " maxk               %.3f@." !t_maxk;
+   printf " sat                %.3f@." !t_sat;
+  printf " overlaps           %.3f@." !t_overlap;
+  printf " success checks     %.3f@." !t_success_check;
+  printf " constraints CPred  %.3f@." !t_ccpred;
+  printf "             Comp   %.3f@." !t_ccomp;
+  printf "             red    %.3f@." !t_cred;
+  printf " rewriting          %.3f@." !t_rewrite;
+  printf " encode termination %.3f@." !t_orient_constr;
+  printf " selection          %.3f@." !t_select;
+  printf " caching            %.3f@." !t_cache;
+  printf " tmp1               %.3f@." !t_tmp1;
+  printf " tmp2               %.3f@." !t_tmp2
 ;;
 
 let json s k n =

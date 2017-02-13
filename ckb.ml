@@ -125,9 +125,11 @@ let saturated ctx (rr,ee) cc =
 
 let succeeds ctx (rr,ee) cc gs =
   let joinable (s,t) = Rewriting.nf rr s = (Rewriting.nf rr t) in
-  if gs <> [] then (
-    if List.exists joinable gs then (
-      if !(settings.d) then Format.printf "joined goal\n";
+  if not (NS.is_empty gs) then (
+    if NS.exists joinable gs then (
+      if !(settings.d) then (
+        let g = List.find joinable (NS.to_list gs) in
+        Format.printf "joined goal %a\n" Rule.print g);
       Some Proof)
     else None)
   else if not (saturated ctx (rr,ee) cc) then None
@@ -147,7 +149,8 @@ let log_select cc ss =
 let select_count i = !(settings.n)
 
 (* selection of small new nodes *)
-let select k cc thresh = 
+let select k cc thresh =
+ let k = if k = 0 then select_count !(St.iterations) else k in
  let aa = NS.sort_smaller_than thresh cc in
  let aa,aa' = Listx.split_at_most k aa in 
  let pp = NS.diff_list cc aa in 
@@ -160,8 +163,8 @@ let select k cc thresh =
 
 let select_for_restart cc = fst (select 5 (NS.diff_list cc !(settings.es)) 30)
 
-let select cc =
-  St.take_time St.t_select (select (select_count !(St.iterations)) cc)
+let select ?(k=0) cc =
+  St.take_time St.t_select (select k cc)
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let eqs_for_overlaps ee =
@@ -172,22 +175,28 @@ let eqs_for_overlaps ee =
 
 let cp_cache : (Rule.t * Rule.t, Rules.t) Hashtbl.t = Hashtbl.create 256
 
+let cps n1 n2 =
+  try Hashtbl.find cp_cache (n1,n2)
+  with Not_found -> (
+    let cps = List.map N.normalize (N.cps n1 n2) in
+    Hashtbl.add cp_cache (n1,n2) cps;
+    cps)
+;;
+
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
  let aa_for_ols = NS.to_list (eqs_for_overlaps aa) in
  let ns = if !(settings.unfailing) then rr @ aa_for_ols else rr in
- let cps n1 n2 =
-   try Hashtbl.find cp_cache (n1,n2)
-   with Not_found -> (
-     let cps = List.map N.normalize (N.cps n1 n2) in
-     Hashtbl.add cp_cache (n1,n2) cps;
-     cps)
- in
  NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
 ;;
 
- (* FIXME: no caching yet *)
 let overlaps rr = St.take_time St.t_overlap (overlaps rr)
+
+(* goal only as outer rule *)
+let overlaps_on rr gs =
+ let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
+  NS.of_list [ n | r <- rr; g <- gs_for_ols; n <- cps r g ]
+;;
 
 (* * FIND TRSS  * * *  * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 (* logical vars for new TRSs *)
@@ -383,16 +392,20 @@ let repeated_iteration_state es gs =
  r
 ;;
 
-let set_iteration_stats aa =
+let set_iteration_stats aa gs =
   let i = !St.iterations in
   St.iterations := i + 1;
+  St.ces := NS.size aa;
+  St.goals := NS.size gs;
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
      !St.iterations (NS.size aa) NS.print aa;
+   if !St.goals > 0 then
+   F.printf "\nand %i goals:\n%a%!\n"
+     !St.goals NS.print gs;
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string 
-    (Statistics.json s (!(settings.k) i) (select_count i))));
-  St.ces := NS.size aa
+    (Statistics.json s (!(settings.k) i) (select_count i))))
 ;;
 
 let store_trs ctx j rr c =
@@ -426,8 +439,8 @@ let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
 let rec phi ctx aa gs =
   if repeated_iteration_state aa gs || !(St.iterations) > 30 then
     raise (Restart (select_for_restart aa));
-  set_iteration_stats aa;
-  let process (j,acc) (rr,c) =
+  set_iteration_stats aa gs;
+  let process (j, acc, gs) (rr,c) =
     let trs_n = store_trs ctx j rr c in
     let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
     let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
@@ -438,19 +451,20 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
+    let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
+    let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.add_list sel acc
+     | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
   in
   try
     let rrs = max_k ctx aa in
     let s = Unix.gettimeofday () in
-    let _, acc = L.fold_left process (0,NS.empty ()) rrs in
+    let _, aa', gs' = L.fold_left process (0, aa, gs) rrs in
     St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. s);
-    let aa' = NS.add_all acc aa in
     if degenerated aa' then
       raise (Restart (select_for_restart aa'));
-    phi ctx aa' gs
+    phi ctx aa' gs'
   with Success r -> r
 ;;
 
@@ -493,7 +507,7 @@ let rec ckb fs es gs =
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> Strategy.init s 0 ctx es0) (Listx.unique (t_strategies ()));
-  let res = phi ctx ns0 gs in
+  let res = phi ctx ns0 (NS.of_list gs) in
   if !(fs.output_tproof) then termination_output res;
   del_context ctx;
   res

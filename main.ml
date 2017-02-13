@@ -132,7 +132,7 @@ let print_res res =
    | Ckb.GroundCompletion (rr,ee) ->
     (printf "%a@." print_trs rr;
     if ee <> [] then printf "ES:@.%a@." print_es ee)
-   | Ckb.Proof -> printf "(proof)"
+   | Ckb.Proof -> printf "(proof)\n"
 ;;
          
 

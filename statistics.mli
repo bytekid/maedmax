@@ -15,6 +15,7 @@ val t_tmp1 : float ref
 val t_tmp2 : float ref
 
 val ces : int ref
+val goals : int ref
 val iterations : int ref
 val restarts : int ref
 
