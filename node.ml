@@ -38,6 +38,8 @@ module type T = sig
     (t list * t list * R.t list) option
   (* whether the TRS joins the equation *)
   val joins : Rules.t -> t -> bool
+  (* less-than-or-equal, to fit Ordered module type for heaps *)
+  val le: t -> t -> bool
   val print : Format.formatter -> t -> unit
 end
 
@@ -97,7 +99,11 @@ module Equation = struct
     s' = t'
   ;;
 
-  let print ppf (l, r) = Format.fprintf ppf "%a = %a" Term.print l Term.print r
+  let le rl rl' = R.size rl <= R.size rl'
+
+  let print ppf (l, r) =
+    let s = R.size (rule (l,r)) in
+    Format.fprintf ppf "%a = %a (%i)" Term.print l Term.print r s
 
 end
 
@@ -165,6 +171,8 @@ module ConstraintEquality = struct
     let _, t' = Rewriting.nf_with trs t in
     s' = t'
   ;;
+
+  let le rl rl' = R.size (rule rl) <= R.size (rule rl')
 
   let print ppf ((l,r),_) = Format.fprintf ppf "%a = %a" T.print l T.print r
 end
