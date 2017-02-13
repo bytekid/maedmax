@@ -30,6 +30,8 @@ module type T = sig
     (t list * t list * Rule.t list) option
   (* whether the TRS joins the equation *)
   val joins : Rules.t -> t -> bool
+  (* less-than-or-equal, to fit Ordered module type for heaps *)
+  val le: t -> t -> bool
   val print : Format.formatter -> t -> unit
 end
 

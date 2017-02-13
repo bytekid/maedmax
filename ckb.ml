@@ -92,24 +92,22 @@ let add_rewrite_trace st rls st' =
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
    are newly generated eqs and cs' \subseteq cs is set of irreducible eqs *)
 let rewrite rewriter cs =
- let rec rewrite (irrdcbl, news) = function
-  | [] -> (irrdcbl, news)
-  | n :: cc ->
+ let rewrite n (irrdcbl, news) =
    match N.rewriter_nf_with rewriter n with
-    | None -> rewrite (n :: irrdcbl, news) cc (* no progress here *)
+    | None -> (NS.add n irrdcbl, news) (* no progress here *)
     (* n' is leftover of n (only relevant with constraints *)
     | Some (n', nnew, rs) -> (* if terms got equal, nnew is empty *)
-        let nnew' = NS.normalize nnew in (
+        let nnew' = List.map N.normalize nnew in (
         if nnew <> [] then add_rewrite_trace n rs (L.hd nnew');
-        rewrite (n' @ irrdcbl, nnew' @ news) cc
+        (NS.add_list n' irrdcbl, NS.add_list nnew' news)
     )
- in rewrite ([],[]) cs
+ in NS.fold rewrite cs (NS.empty (), NS.empty ())
 ;;  
    
 let rewrite rr = St.take_time St.t_rewrite (rewrite rr)
 
 let reduced rr ns =
-  let (irred, news) = rewrite rr ns in NS.unique (irred @ news)
+  let (irred, news) = rewrite rr ns in NS.add_all news irred
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -122,7 +120,7 @@ let saturated ctx (rr,ee) cc =
     let str = termination_strategy () in
     let d = !(settings.d) in
     s' = t' || Ground.joinable ctx str (rr, ee, !(settings.ac_syms)) (s',t') d
- in L.for_all covered cc
+ in NS.for_all covered cc
 ;;
 
 let succeeds ctx (rr,ee) cc gs =
@@ -142,7 +140,9 @@ let succeeds ctx (rr,ee) cc gs =
 let succeeds ctx re cc = St.take_time St.t_success_check (succeeds ctx re cc)
 
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let log_select cc = F.printf "selected: %i\n%a\n%!" (L.length cc) NS.print cc
+let log_select cc ss =
+  F.printf "SELECT: given %i %a %i\n%a\n%!" (NS.size cc) NS.print cc
+    (List.length ss) Rules.print ss 
 
 let select_count i = !(settings.n)
 
@@ -150,15 +150,15 @@ let select_count i = !(settings.n)
 let select k cc thresh = 
  let aa = NS.sort_smaller_than thresh cc in
  let aa,aa' = Listx.split_at_most k aa in 
- let pp = Listset.diff cc aa in 
- if !(settings.d) then log_select aa;
+ let pp = NS.diff_list cc aa in 
+ if !(settings.d) then log_select cc aa;
  (* remember smallest terms for divergence estimate *)
  let m = L.fold_left (fun m n -> min m (R.size (N.rule n))) 20 aa in
  sizes := m :: !sizes;
  (aa,pp)
 ;;
 
-let select_for_restart cc = fst (select 5 (Listset.diff cc !(settings.es)) 30)
+let select_for_restart cc = fst (select 5 (NS.diff_list cc !(settings.es)) 30)
 
 let select cc =
   St.take_time St.t_select (select (select_count !(St.iterations)) cc)
@@ -166,7 +166,7 @@ let select cc =
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let eqs_for_overlaps ee =
   let use_for_overlaps n = let s,t = N.rule n in not (Term.is_subterm s t) in
-  let ee' = [ e | e <- NS.symmetric ee; use_for_overlaps e ] in
+  let ee' = NS.filter use_for_overlaps (NS.symmetric ee) in
   NS.variant_free ee'
 ;;
 
@@ -174,15 +174,16 @@ let cp_cache : (Rule.t * Rule.t, Rules.t) Hashtbl.t = Hashtbl.create 256
 
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
- let ns = if !(settings.unfailing) then eqs_for_overlaps aa @ rr else rr in
+ let aa_for_ols = NS.to_list (eqs_for_overlaps aa) in
+ let ns = if !(settings.unfailing) then rr @ aa_for_ols else rr in
  let cps n1 n2 =
    try Hashtbl.find cp_cache (n1,n2)
    with Not_found -> (
-     let cps = NS.map N.normalize (N.cps n1 n2) in
+     let cps = List.map N.normalize (N.cps n1 n2) in
      Hashtbl.add cp_cache (n1,n2) cps;
      cps)
  in
- NS.unique [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
+ NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
 ;;
 
  (* FIXME: no caching yet *)
@@ -218,6 +219,7 @@ let idx r =
     let i = Hashtbl.length rl_index in Hashtbl.add rl_index r i; i
 ;;
 
+(* cc is already symmetric *)
 let is_reducible ctx cc (s,t) =
   let j = idx (s,t) in
   try Hashtbl.find reducible j with Not_found -> (
@@ -225,7 +227,7 @@ let is_reducible ctx cc (s,t) =
       let red = Rewriting.reducible_with [rl] in
       Rule.is_rule rl && (red t || red s))
     in
-    let b = big_or ctx [ C.find_rule (N.rule rl) | rl <- NS.symmetric cc;
+    let b = big_or ctx [ C.find_rule (N.rule rl) | rl <- cc;
                                                    reduces_st (N.rule rl)] in
     Hashtbl.add reducible j b;
     b
@@ -235,6 +237,7 @@ let is_reducible ctx cc (s,t) =
 let is_reducible ctx cc = St.take_time St.t_tmp2 (is_reducible ctx cc)
 
 let rlred ctx cc (s,t) =
+  let ccs = L.fold_left (fun ccs n -> N.flip n :: ccs) cc cc in
   let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
@@ -242,7 +245,7 @@ let rlred ctx cc (s,t) =
     let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
     let b = is_rule rl && (red t || red s) in
     Hashtbl.add redc (j, i) b; b)
-  in big_or ctx [ C.find_rule rl | rl <- NS.symmetric cc; redcbl (N.rule rl) ]
+  in big_or ctx [ C.find_rule rl | rl <- ccs; redcbl (N.rule rl) ]
 ;;
 
 let c_red ctx cc =
@@ -253,8 +256,9 @@ let c_red ctx = St.take_time St.t_cred (c_red ctx)
 
 let c_cpred ctx cc =
   Hashtbl.clear reducible;
-  let rs = [ N.rule n | n <- NS.symmetric cc; Rule.is_rule (N.rule n) ] in
-  let rule, red = C.find_rule, is_reducible ctx cc in
+  let ccsymm = L.fold_left (fun ccs n -> N.flip n :: ccs) cc cc in
+  let rs = [ N.rule n | n <- ccsymm; Rule.is_rule (N.rule n) ] in
+  let rule, red = C.find_rule, is_reducible ctx ccsymm in
   let c2 = [ rule rl <&> (rule rl') <=>> (red st) | rl <- rs; rl' <- rs;
                                              st <- O.nontrivial_cps rl rl' ] in
   L.iter (fun c -> ignore (assert_weighted c 2)) c2;
@@ -288,16 +292,17 @@ let c_comp ctx = St.take_time St.t_ccomp (c_comp ctx)
 
 (* constraints to guide search; those get all retracted *)
 let search_constraints ctx cc =
+ let ccl = NS.to_list cc in
  let assert_c = function
-   | S.Red -> c_red ctx cc
+   | S.Red -> c_red ctx ccl
    | S.Empty -> ()
-   | S.Comp -> c_comp ctx cc
+   | S.Comp -> c_comp ctx ccl
  in L.iter assert_c (constraints ());
  let assert_mc = function
-   | S.Oriented -> c_maxcomp ctx cc
-   | S.NotOriented -> c_not_oriented ctx cc
-   | S.MaxRed -> c_max_red ctx cc
-   | S.CPsRed -> c_cpred ctx cc
+   | S.Oriented -> c_maxcomp ctx ccl
+   | S.NotOriented -> c_not_oriented ctx ccl
+   | S.MaxRed -> c_max_red ctx ccl
+   | S.CPsRed -> c_cpred ctx ccl
    | S.MaxEmpty -> ()
  in L.iter assert_mc (max_constraints ())
 ;;
@@ -311,7 +316,7 @@ let rec block_trss ctx rrs cc =
 (* find k maximal TRSs *)
 let max_k ctx cc =
   let k = !(settings.k) !(St.iterations) in
-  let cc_symm = NS.symmetric cc in 
+  let cc_symm = NS.to_list (NS.symmetric cc) in 
   if !(settings.d) then F.printf "K = %i\n%!" k;
   let rec max_k acc ctx cc n =
     if n = 0 then List.rev acc (* return TRSs in sequence of generation *)
@@ -332,8 +337,8 @@ let max_k ctx cc =
          raise (Restart (select_for_restart cc));
        acc))
    in
-   C.store_rule_vars ctx (NS.terms cc_symm);
-   if has_comp () then C.store_eq_vars ctx cc;
+   C.store_rule_vars ctx cc_symm;
+   if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) cc;
    let s = termination_strategy () in
    (* FIXME: restrict to actual rules?! *)
    St.take_time St.t_orient_constr (S.assert_constraints s 0 ctx) cc_symm;
@@ -350,7 +355,7 @@ let max_k ctx = St.take_time St.t_maxk (max_k ctx)
 (* some logging functions *)
 let log_iteration i aa =
  F.printf "Iteration %i\n%!" i;
- F.printf "CC: %i\n%a%!" (L.length aa) NS.print aa;
+ F.printf "CC: %i\n%a%!" (NS.size aa) NS.print aa;
  F.printf "\n%!"
 ;;
 
@@ -369,7 +374,7 @@ let degenerated cc =
 
 (* towards main control loop *)
 let repeated_iteration_state es gs =
- let h = Hashtbl.hash (List.length es, es, gs) in
+ let h = Hashtbl.hash (NS.size es, es, gs) in
  let r = List.for_all ((=) h) !hash_iteration in
  hash_iteration := h :: !hash_iteration;
  if List.length (!hash_iteration) > 20 then
@@ -384,16 +389,16 @@ let set_iteration_stats aa =
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "Start iteration %i with %a equations\n%!"
-     !St.iterations Rules.print aa;
+     !St.iterations NS.print aa;
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string 
     (Statistics.json s (!(settings.k) i) (select_count i))));
-  St.ces := L.length aa
+  St.ces := NS.size aa
 ;;
 
 let store_trs ctx j rr c =
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS is used; have to store *)
-  let rr_reduced = NS.reduce rr in
+  let rr_reduced = Variant.reduce rr in
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;
@@ -411,9 +416,12 @@ let non_gjoinable ctx ns rr =
     let d = !(settings.d) in
     is_to_sub n || is_to_sub (Rule.flip n) || Ground.non_joinable ctx s sys n d
   in
-  let ns' = NS.unq_filter keep ns in
-  NS.unique_subsumed ns'
+  let ns' = NS.filter keep ns in
+(*  NS.subsumption_free ns' *) (* expensive *)
+  ns'
 ;;
+
+let non_gjoinable ctx ns = St.take_time St.t_tmp2 (non_gjoinable ctx ns)
 
 let rec phi ctx aa gs =
   if repeated_iteration_state aa gs || !(St.iterations) > 30 then
@@ -424,20 +432,22 @@ let rec phi ctx aa gs =
     let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
     let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
     let cps = reduced rewriter (overlaps rr irred) in (* rewrite CPs *)
-    let nn = Listset.diff (NS.union cps red) aa in
+    let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
     let nn = if !(settings.unfailing) then non_gjoinable ctx nn rr else nn in
     let sel, rest = select nn 200 in
     (* FIXME where to move this variable registration stuff? *)
-    if has_comp () then C.store_eq_vars ctx rest;
-    let rr,ee = NS.terms rr, NS.terms irred in
-    match succeeds ctx (rr, ee) (NS.of_rules ctx !(settings.es) @ cps) gs with
+    if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
+    let rr,ee = rr, NS.to_list irred in
+    match succeeds ctx (rr, ee) (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.union sel acc
+     | None -> j+1, NS.add_list sel acc
   in
   try
     let rrs = max_k ctx aa in
-    let _, acc = L.fold_left process (0,[]) rrs in
-    let aa' = acc @ aa in
+    let s = Unix.gettimeofday () in
+    let _, acc = L.fold_left process (0,NS.empty ()) rrs in
+    St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. s);
+    let aa' = NS.add_all acc aa in
     if degenerated aa' then
       raise (Restart (select_for_restart aa'));
     phi ctx aa' gs
@@ -477,12 +487,13 @@ let rec ckb fs es gs =
  remember_state es gs;
  (* init state *)
  let ctx = mk_context () in
- let es' = L.map N.normalize es in
+ let es0 = L.map N.normalize es in
  try
-  set_settings fs es';
+  set_settings fs es0;
   let ctx = mk_context () in
-  L.iter (fun s -> Strategy.init s 0 ctx es') (Listx.unique (t_strategies ()));
-  let res = phi ctx es' gs in
+  let ns0 = NS.of_list es0 in
+  L.iter (fun s -> Strategy.init s 0 ctx es0) (Listx.unique (t_strategies ()));
+  let res = phi ctx ns0 gs in
   if !(fs.output_tproof) then termination_output res;
   del_context ctx;
   res
@@ -495,4 +506,4 @@ let rec ckb fs es gs =
   Hashtbl.reset rewrite_trace;
   del_context ctx;
   Hashtbl.reset cp_cache;
-  ckb fs (L.map N.normalize (es_new @ es')) gs)
+  ckb fs (L.map N.normalize (es_new @ es0)) gs)
