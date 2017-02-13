@@ -68,7 +68,8 @@ let strategy_not_oriented = [ (ts_dpn, [Red; Comp], [NotOriented]) ]
 let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed]); (ts_dp, [Comp], [MaxRed])]
 let strategy_ordered = [ (ts_kbo, [], [MaxRed]);
                          (ts_lpo, [], [MaxRed]);
-                         (ts_dpn, [], [MaxRed]) ]
+                         (ts_kbo, [], [MaxRed]);
+                         (ts_lpo, [], [MaxRed]); ]
 let strategy_ordered_lpo = [ts_lpo, [],[MaxRed]]
 let strategy_temp = [ts_kbo, [],[MaxRed]]
 
