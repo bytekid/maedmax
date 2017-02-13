@@ -141,8 +141,8 @@ let succeeds ctx re cc = St.take_time St.t_success_check (succeeds ctx re cc)
 
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc ss =
-  F.printf "SELECT: given %i %a %i\n%a\n%!" (NS.size cc) NS.print cc
-    (List.length ss) Rules.print ss 
+  F.printf "select %i from %i:\n%a\n%!" (List.length ss) (NS.size cc)
+     Rules.print ss
 
 let select_count i = !(settings.n)
 
@@ -360,7 +360,7 @@ let log_iteration i aa =
 ;;
 
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i: cost %i\n %a\n\n reduced: %a\n@." !St.iterations j c 
+ F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@." !St.iterations j c
    Rules.print (Variant.rename_rules rr)
    Rules.print (Variant.rename_rules rr')
 ;;
@@ -388,8 +388,8 @@ let set_iteration_stats aa =
   St.iterations := i + 1;
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
-   F.printf "Start iteration %i with %a equations\n%!"
-     !St.iterations NS.print aa;
+   F.printf "Start iteration %i with %i equations:\n %a\n%!"
+     !St.iterations (NS.size aa) NS.print aa;
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string 
     (Statistics.json s (!(settings.k) i) (select_count i))));
   St.ces := NS.size aa
