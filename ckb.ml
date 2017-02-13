@@ -158,6 +158,7 @@ let select k cc thresh =
  (* remember smallest terms for divergence estimate *)
  let m = L.fold_left (fun m n -> min m (R.size (N.rule n))) 20 aa in
  sizes := m :: !sizes;
+ F.printf "min: %i\n%!" m;
  (aa,pp)
 ;;
 
@@ -375,21 +376,22 @@ let log_max_trs j rr rr' c =
 ;;
 
 
-(* heuristic predicate checking degeneration of run, used to trigger restart *)
-let degenerated cc =
- (L.length !sizes > 10) &&
- (L.for_all (fun x -> x > 16) (Listx.take 6 !sizes))
-;;
-
 (* towards main control loop *)
-let repeated_iteration_state es gs =
+let stuck_state es gs =
+ (* no progress measure *)
  let h = Hashtbl.hash (NS.size es, es, gs) in
- let r = List.for_all ((=) h) !hash_iteration in
+ let rep = List.for_all ((=) h) !hash_iteration in
  hash_iteration := h :: !hash_iteration;
  if List.length (!hash_iteration) > 20 then
    hash_iteration := Listx.take 20 !hash_iteration;
- if r && !(settings.d) then F.printf "repeated iteration state";
- r
+ if rep && !(settings.d) then F.printf "repeated iteration state";
+ (* smallest equation produced in last 6 iteration was always > 17 *)
+ let last6 = Listx.take (min 6 (L.length !sizes)) !sizes in
+ let deg = L.length !sizes > 10 && L.for_all (fun x -> x > 17) last6 in
+ (* iteration/size bound*)
+ let last3 = Listx.take (min 3 (L.length !sizes)) !sizes in
+ let deg2 = L.length !sizes > 10 && L.for_all (fun x -> x > 17) last3 in
+ rep || deg || (deg2 && !(St.iterations) > 30)
 ;;
 
 let set_iteration_stats aa gs =
@@ -437,7 +439,7 @@ let non_gjoinable ctx ns rr =
 let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
 
 let rec phi ctx aa gs =
-  if repeated_iteration_state aa gs || !(St.iterations) > 30 then
+  if stuck_state aa gs then
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
   let process (j, acc, gs) (rr,c) =
@@ -451,11 +453,11 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
-    (*let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
-    let gg = fst (select ~k:2 gcps 30) in*)
+    let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
+    let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.add_list sel acc, (*NS.add_list gg*) gs
+     | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
   in
   try
     let rrs = max_k ctx aa in
@@ -463,8 +465,6 @@ let rec phi ctx aa gs =
     let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
     let aa' = NS.add_all aa' aa in
     St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. s);
-    if degenerated aa' then
-      raise (Restart (select_for_restart aa'));
     phi ctx aa' gs'
   with Success r -> r
 ;;
