@@ -167,7 +167,7 @@ let select k cc thresh =
  (aa,pp)
 ;;
 
-let select_for_restart cc = fst (select 5 (NS.diff_list cc !(settings.es)) 30)
+let select_for_restart cc = fst (select 2 (NS.diff_list cc !(settings.es)) 30)
 
 let select ?(k=0) cc =
   St.take_time St.t_select (select k cc)
@@ -389,12 +389,15 @@ let stuck_state es gs =
  hash_iteration := h :: !hash_iteration;
  if List.length (!hash_iteration) > 20 then
    hash_iteration := Listx.take 20 !hash_iteration;
- if rep && !(settings.d) then F.printf "repeated iteration state";
+ if rep && !(settings.d) then F.printf "Restart: repeated iteration state\n%!";
  (* smallest equation produced in last 6 iteration was always > 17 *)
  let last6 = Listx.take (min 6 (L.length !sizes)) !sizes in
  let deg = L.length !sizes > 10 && L.for_all (fun x -> x > 17) last6 in
+ if deg && !(settings.d) then F.printf "Restart: degenerated\n%!";
  (* iteration/size bound*)
- rep || deg || !(St.iterations) > max_iterations ()
+ let max = !(St.iterations) > max_iterations () in
+ if max && !(settings.d) then F.printf "Restart: maximum iterations reached\n";
+ rep || deg || max
 ;;
 
 let set_iteration_stats aa gs =
@@ -524,4 +527,5 @@ let rec ckb fs es gs =
   Hashtbl.reset rewrite_trace;
   del_context ctx;
   Hashtbl.reset cp_cache;
+  sizes := [];
   ckb fs (L.map N.normalize (es_new @ es0)) gs)
