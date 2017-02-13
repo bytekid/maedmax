@@ -5,7 +5,8 @@ open Term
 type t = Rule.t list
 
 let print ppf rules =
-  fprintf ppf "@[<v 0> %a@]" (print_list Rule.print "\n ") rules
+  let rs = List.sort Pervasives.compare rules in
+  fprintf ppf "@[<v 0> %a@]" (print_list Rule.print "\n ") rs
 
 let print_with sep ppf rules =
   fprintf ppf "@[<v 0> %a@]" (print_list (Rule.print_with sep)  "\n ") rules

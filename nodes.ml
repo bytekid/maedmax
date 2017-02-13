@@ -63,6 +63,7 @@ module Make(N:Node.T) = struct
   ;;
 
 
-  let print ppf =
-    Format.fprintf ppf "@[<v 0> %a@]" (Formatx.print_list N.print "\n ")
+  let print ppf ns =
+    let rs = List.sort Pervasives.compare ns in
+    Format.fprintf ppf "@[<v 0> %a@]" (Formatx.print_list N.print "\n ") rs
 end
