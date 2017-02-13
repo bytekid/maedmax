@@ -4,6 +4,7 @@ open Yojson.Basic
 let t_ccomp = ref 0.0
 let t_ccpred = ref 0.0
 let t_cred = ref 0.0
+let t_gjoin_check = ref 0.0
 let t_maxk = ref 0.0
 let t_orient_constr = ref 0.0
 let t_overlap = ref 0.0
@@ -30,6 +31,7 @@ let print () =
  printf "equalities          %i@." !ces;
  printf "restarts            %i@." !restarts;
  printf "times@.";
+ printf " ground join checks %.3f@." !t_gjoin_check;
  printf " maxk               %.3f@." !t_maxk;
  printf " sat                %.3f@." !t_sat;
  printf " overlaps           %.3f@." !t_overlap;
@@ -55,6 +57,7 @@ let json s k n =
  let t_ccpred = "time/ccpred", trunc !t_ccpred in
  let t_ccomp = "time/ccomp", trunc !t_ccomp in
  let t_cred = "time/cred", trunc !t_cred in
+ let t_gjoin = "time/ground join checks", trunc !t_gjoin_check in
  let t_maxk = "time/maxk", trunc !t_maxk in
  let t_rewrite = "time/rewrite", trunc !t_rewrite in
  let t_select = "time/select", trunc !t_select in
@@ -65,7 +68,7 @@ let json s k n =
  let t_cache = "time/cache", trunc !t_cache in
  let res = "restarts", `Int !restarts in
  let t = `Assoc [s; k; n; it; ea; res; t_ccpred; t_ccomp; t_cred; t_select;
-  t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_sat; t_cache] in
+  t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_sat; t_cache] in
  t
 ;;
 

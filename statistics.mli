@@ -3,6 +3,7 @@ val t_cache : float ref
 val t_ccomp : float ref
 val t_ccpred : float ref
 val t_cred : float ref
+val t_gjoin_check : float ref
 val t_maxk : float ref
 val t_rewrite : float ref
 val t_orient_constr : float ref

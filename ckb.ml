@@ -421,7 +421,7 @@ let non_gjoinable ctx ns rr =
   ns'
 ;;
 
-let non_gjoinable ctx ns = St.take_time St.t_tmp2 (non_gjoinable ctx ns)
+let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
 
 let rec phi ctx aa gs =
   if repeated_iteration_state aa gs || !(St.iterations) > 30 then
