@@ -50,19 +50,25 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
 let termination_strategy _ = 
  match !(settings.strategy) with 
   | [] -> failwith "no termination strategy found"
-  | (s,_, _) :: _ -> s
+  | (s,_, _,_) :: _ -> s
 ;;
 
 let constraints _ = 
  match !(settings.strategy) with 
   | [] -> failwith "no constraints found"
-  | (_,cs,_) :: _ -> cs
+  | (_,cs,_,_) :: _ -> cs
 ;;
 
 let max_constraints _ =
  match !(settings.strategy) with
   | [] -> failwith "no max constraints found"
-  | (_,_,ms) :: _ -> ms
+  | (_,_,ms,_) :: _ -> ms
+;;
+
+let max_iterations _ = 
+ match !(settings.strategy) with 
+  | [] -> failwith "empty strategy list"
+  | (_, _, _, i) :: _ -> i
 ;;
 
 let use_maxsat _ = max_constraints () <> []
@@ -77,7 +83,7 @@ let pop_strategy _ =
   | _ :: ss -> settings.strategy := ss
 ;;
 
-let t_strategies _ = L.map (fun (ts,_,_) -> ts) !(settings.strategy)
+let t_strategies _ = L.map (fun (ts,_,_,_) -> ts) !(settings.strategy)
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
@@ -158,7 +164,6 @@ let select k cc thresh =
  (* remember smallest terms for divergence estimate *)
  let m = L.fold_left (fun m n -> min m (R.size (N.rule n))) 20 aa in
  sizes := m :: !sizes;
- F.printf "min: %i\n%!" m;
  (aa,pp)
 ;;
 
@@ -389,9 +394,7 @@ let stuck_state es gs =
  let last6 = Listx.take (min 6 (L.length !sizes)) !sizes in
  let deg = L.length !sizes > 10 && L.for_all (fun x -> x > 17) last6 in
  (* iteration/size bound*)
- let last3 = Listx.take (min 3 (L.length !sizes)) !sizes in
- let deg2 = L.length !sizes > 10 && L.for_all (fun x -> x > 17) last3 in
- rep || deg || (deg2 && !(St.iterations) > 30)
+ rep || deg || !(St.iterations) > max_iterations ()
 ;;
 
 let set_iteration_stats aa gs =
@@ -453,11 +456,11 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
-    let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
-    let gg = fst (select ~k:2 gcps 30) in
+    (*let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
+    let gg = fst (select ~k:2 gcps 30) in*)
     match succeeds ctx (rr, ee) (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
+     | None -> j+1, NS.add_list sel acc, (*NS.add_list gg*) gs
   in
   try
     let rrs = max_k ctx aa in

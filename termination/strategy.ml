@@ -21,7 +21,7 @@ type t_term =
 
 type t_constraint = Empty | Red | Comp
 type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented
-type t_setting = t_term * (t_constraint list) * (t_max_constraint list)
+type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * int
 type t = t_setting list
 
 (*** GLOBALS *****************************************************************)
@@ -52,37 +52,38 @@ let ts_lpokbo = Orders (Or [LPO; KBO])
 let ts_mpol = Orders (Seq [MPol])
 
 (* overall strategies *)
-let strategy_maxcomp = [ts_dpn, [],[Oriented]]
-let strategy_maxcomp_lpo = [ts_lpo, [],[Oriented]]
+let max = 10000
+let strategy_maxcomp = [ts_dpn, [],[Oriented], max]
+let strategy_maxcomp_lpo = [ts_lpo, [],[Oriented], max]
 
-let strategy_red = [ts_dpn, [Red],[]]
-let strategy_lpo = [ts_lpo, [Red; Comp],[CPsRed]]
-let strategy_kbo = [ts_kbo, [Red; Comp],[CPsRed]]
-let strategy_mpol = [ts_mpol, [Red; Comp],[CPsRed]]
-let strategy_comp = [ts_dpn, [Red; Comp], []]
-let strategy_cpred = [ts_dpn, [Red], [CPsRed]]
-let strategy_dp = [(ts_dpn, [Red; Comp], [CPsRed])]
-let strategy_dg = [(ts_dg, [Red; Comp], [CPsRed])]
-let strategy_dgk = [(ts_dgk, [Red; Comp], [CPsRed])]
-let strategy_not_oriented = [ (ts_dpn, [Red; Comp], [NotOriented]) ]
-let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed]); (ts_dp, [Comp], [MaxRed])]
-let strategy_ordered = [ (ts_kbo, [], [MaxRed]);
-                         (ts_lpo, [], [MaxRed]);
-                         (ts_kbo, [], [MaxRed]);
-                         (ts_lpo, [], [MaxRed]); ]
-let strategy_ordered_lpo = [ts_lpo, [],[MaxRed]]
-let strategy_temp = [ts_kbo, [],[MaxRed]]
+let strategy_red = [ts_dpn, [Red],[], max]
+let strategy_lpo = [ts_lpo, [Red; Comp],[CPsRed], max]
+let strategy_kbo = [ts_kbo, [Red; Comp],[CPsRed], max]
+let strategy_mpol = [ts_mpol, [Red; Comp],[CPsRed], max]
+let strategy_comp = [ts_dpn, [Red; Comp], [], max]
+let strategy_cpred = [ts_dpn, [Red], [CPsRed], max]
+let strategy_dp = [ts_dpn, [Red; Comp], [CPsRed], max]
+let strategy_dg = [ts_dg, [Red; Comp], [CPsRed], max]
+let strategy_dgk = [ts_dgk, [Red; Comp], [CPsRed], max]
+let strategy_not_oriented = [ ts_dpn, [Red; Comp], [NotOriented], max]
+let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed], max); (ts_dp, [Comp], [MaxRed], max)]
+let strategy_ordered = [ (ts_kbo, [], [MaxRed], 8);
+                         (ts_lpo, [], [MaxRed], 12);
+                         (ts_kbo, [], [MaxRed], 100);
+                         (ts_lpo, [], [MaxRed], 100); ]
+let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
+let strategy_temp = [ts_kbo, [],[MaxRed], max]
 
 let strategy_auto = [
- (ts_lpo, [Red; Comp], [CPsRed]);
- (ts_dpn, [Red; Comp], [CPsRed]);
- (ts_lpo, [Comp], [MaxRed])
+ (ts_lpo, [Red; Comp], [CPsRed], max);
+ (ts_dpn, [Red; Comp], [CPsRed], max);
+ (ts_lpo, [Comp], [MaxRed], max)
 ]
 
 let strategy_auto2 = [
- (ts_lpo, [Comp], [MaxRed]);
- (ts_dpn, [Red; Comp], [CPsRed]);
- (ts_lpo, [Red], [])
+ (ts_lpo, [Comp], [MaxRed], max);
+ (ts_dpn, [Red; Comp], [CPsRed], max);
+ (ts_lpo, [Red], [], max)
 ]
 
 
@@ -119,9 +120,9 @@ let mc_to_string = function
  Oriented -> "Oriented" | NotOriented -> "NotOriented"
 ;;
 
-let setting_to_string (t, c, mc) =
+let setting_to_string (t, c, mc, i) =
  "(" ^ (term_to_string t) ^ ", " ^(Listx.to_string c_to_string ", " c) ^ ", " ^
-   (Listx.to_string mc_to_string ", " mc) ^")"
+   (Listx.to_string mc_to_string ", " mc) ^ ", " ^ (string_of_int i) ^")"
 ;;
 
 let to_string = Listx.to_string setting_to_string ", "
@@ -428,7 +429,7 @@ Format.printf "Problem:\n"; Cache.decode m 0;
 ;;
 
 let get_termination = function
-   (ts, _, _) :: _ -> ts
+   (ts, _, _, _) :: _ -> ts
   | _ -> failwith "Strategy.get_termination: empty settings list"
 ;;
 

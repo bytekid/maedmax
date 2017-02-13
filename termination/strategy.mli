@@ -8,7 +8,7 @@ type t_constraint = Empty | Red | Comp
 
 type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented
 
-type t_setting = t_term * (t_constraint list) * (t_max_constraint list)
+type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * int
 
 type t = t_setting list
 
