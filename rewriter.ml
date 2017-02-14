@@ -116,8 +116,6 @@ class rewriter (trs : Rules.t) = object (self)
      rules rs *)
   method nf t = self#nf' [] t
 
-  let nf t = Statistics.take_time Statistics.t_tmp1 (insert trie)
-
   (* Returns tuple (u, rs@rs') where u is a normal form of t that was obtained
      using rules rs'. Lookup in table, otherwise compute. *)
   method nf' rs t = 
