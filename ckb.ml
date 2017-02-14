@@ -132,9 +132,10 @@ let saturated ctx (rr,ee) cc =
 let succeeds ctx (rr,ee) cc gs =
   let joinable (s,t) = Rewriting.nf rr s = (Rewriting.nf rr t) in
   if not (NS.is_empty gs) then (
-    if NS.exists joinable gs then (
+    let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
+    if NS.exists fixed gs then (
       if !(settings.d) then (
-        let g = List.find joinable (NS.to_list gs) in
+        let g = List.find fixed (NS.to_list gs) in
         Format.printf "joined goal %a\n" Rule.print g);
       Some Proof)
     else None)
@@ -201,9 +202,10 @@ let overlaps rr aa =
 let overlaps rr = St.take_time St.t_overlap (overlaps rr)
 
 (* goal only as outer rule *)
-let overlaps_on rr gs =
+let overlaps_on rr aa gs =
+ let ns = rr @ (NS.to_list (eqs_for_overlaps aa)) in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
-  NS.of_list [ n | r <- rr; g <- gs_for_ols; n <- cps r g ]
+  NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps r g ]
 ;;
 
 (* * FIND TRSS  * * *  * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -462,18 +464,16 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
-    (*let gcps = reduced rewriter (overlaps_on rr gs) in (* rewrite goal CPs *)
-    let gg = fst (select ~k:2 gcps 30) in*)
+    let gcps = reduced rewriter (overlaps_on rr irred gs) in (* rewrite goal CPs *)
+    let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.add_list sel acc, (*NS.add_list gg*) gs
+     | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
   in
   try
     let rrs = max_k ctx aa in
-    let s = Unix.gettimeofday () in
     let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
     let aa' = NS.add_all aa' aa in
-    St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. s);
     phi ctx aa' gs'
   with Success r -> r
 ;;
