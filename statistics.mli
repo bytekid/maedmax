@@ -19,6 +19,8 @@ val goals : int ref
 val iterations : int ref
 val restarts : int ref
 
+val allocated_mb : unit -> int
+
 val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 
 val print : unit -> unit

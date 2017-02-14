@@ -27,12 +27,15 @@ let take_time t f x =
  t := !t +. (Unix.gettimeofday () -. s);
  res
 
+let allocated_mb () = int_of_float (Gc.allocated_bytes () /. 1048576.)
+
 let print () =
   printf "\niterations          %i@." !iterations;
   printf "equalities          %i@." !ces;
   if !goals > 0 then
     printf "goals               %i@." !goals;
   printf "restarts            %i@." !restarts;
+  printf "allocated MB        %d@." (allocated_mb ());
   printf "times@.";
   printf " ground join checks %.3f@." !t_gjoin_check;
   printf " maxk               %.3f@." !t_maxk;
@@ -57,6 +60,7 @@ let json s k n =
  let n = "n", `Int n in
  let it = "iterations", `Int !iterations in
  let ea = "equalities", `Int !ces in
+ let mem = "memory", `Int (allocated_mb ()) in
  let t_ccpred = "time/ccpred", trunc !t_ccpred in
  let t_ccomp = "time/ccomp", trunc !t_ccomp in
  let t_cred = "time/cred", trunc !t_cred in
@@ -70,7 +74,7 @@ let json s k n =
  let t_sat = "time/sat", trunc !t_sat in
  let t_cache = "time/cache", trunc !t_cache in
  let res = "restarts", `Int !restarts in
- let t = `Assoc [s; k; n; it; ea; res; t_ccpred; t_ccomp; t_cred; t_select;
+ let t = `Assoc [s; k; n; it; ea; res; mem; t_ccpred; t_ccomp; t_cred; t_select;
   t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_sat; t_cache] in
  t
 ;;
