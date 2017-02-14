@@ -114,9 +114,9 @@ class rewriter (trs : Rules.t) = object (self)
 
   (* Returns tuple (u, rs) of some normal form u of t that was obtained using
      rules rs *)
-  method nf =
-    let nf t = self#nf' [] t in
-    Statistics.take_time Statistics.t_tmp1 nf
+  method nf t = self#nf' [] t
+
+  let nf t = Statistics.take_time Statistics.t_tmp1 (insert trie)
 
   (* Returns tuple (u, rs@rs') where u is a normal form of t that was obtained
      using rules rs'. Lookup in table, otherwise compute. *)
@@ -154,8 +154,8 @@ class rewriter (trs : Rules.t) = object (self)
       else (* step in arguments not possible, attempt root step *)
         begin
         (*self#check (Term.F (f, us));*)
-        (*let rs = FingerprintIndex.get_matches (Term.F (f, us)) index in*)
-        let opt, u = Rewriting.rewrite_at_root (Term.F (f, us)) trs in
+        let rs = FingerprintIndex.get_matches (Term.F (f, us)) index in
+        let opt, u = Rewriting.rewrite_at_root (Term.F (f, us)) rs in
         match opt with
           | None -> u, []
           | Some rl -> u, [rl]
