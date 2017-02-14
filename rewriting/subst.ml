@@ -43,19 +43,17 @@ let unifiable term1 term2 =
 
 let rec pattern_match' subst = function 
   | [] -> subst
-  | (V x as l, t) :: list 
-    when List.mem_assoc x subst && Term.substitute subst l = t -> 
-      pattern_match' subst list 
-  | (V x, t) :: list when not (List.mem_assoc x subst) -> 
+  | (V x as l, t) :: list ->
+    if List.mem_assoc x subst then (
+      if Term.substitute subst l <> t then raise Not_matched;
+      pattern_match' subst list
+    ) else
       pattern_match' ((x, t) :: subst) list
   | (F (f, ss), F (g, ts)) :: list 
-    when (f = g) && (List.length ss = (List.length ts)) ->
-      pattern_match' subst ((List.combine ss ts) @ list)
+    when f = g -> pattern_match' subst ((List.combine ss ts) @ list)
   | _ -> raise Not_matched
 
-let pattern_match t1 t2 =
-  let m = pattern_match' [] [t1, t2] in 
-  assert (Term.substitute m t1 = t2); m
+let pattern_match t1 t2 = pattern_match' [] [t1, t2]
 
 let is_instance_of t1 t2 =
   try ignore (pattern_match t2 t1); true with Not_matched -> false
