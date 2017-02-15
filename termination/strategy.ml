@@ -72,6 +72,7 @@ let strategy_ordered = [ (ts_kbo, [], [MaxRed], 8);
                          (ts_kbo, [], [MaxRed], 100);
                          (ts_lpo, [], [MaxRed], 100); ]
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
+let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
 let strategy_temp = [ts_kbo, [],[MaxRed], max]
 
 let strategy_auto = [
