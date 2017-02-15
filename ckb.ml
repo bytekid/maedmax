@@ -31,6 +31,8 @@ exception Fail
 let settings = Settings.default
 
 let sizes = ref [] (* to check degeneration *)
+let last_time = ref 0.0
+let last_mem = ref 0
 
 (* caching for search strategies*)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
@@ -410,6 +412,12 @@ let set_iteration_stats aa gs =
   St.iterations := i + 1;
   St.ces := NS.size aa;
   St.goals := NS.size gs;
+  let mem_diff = St.memory () - !last_mem in
+  let time_diff = Unix.gettimeofday () -. !last_time in
+  last_mem := St.memory ();
+  last_time := Unix.gettimeofday ();
+  St.time_diffs := time_diff :: !(St.time_diffs);
+  St.mem_diffs := mem_diff :: !(St.mem_diffs);
   let s = S.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
@@ -479,14 +487,16 @@ let rec phi ctx aa gs =
   with Success r -> r
 ;;
 
-let set_settings fs es =
+let init_settings fs es =
  settings.ac_syms := Ground.ac_symbols es;
  settings.d := !(fs.d);
  St.iterations := 0;
  settings.n := !(fs.n);
  settings.strategy := !(fs.strategy);
  settings.tmp := !(fs.tmp);
- settings.es := es
+ settings.es := es;
+ last_time := Unix.gettimeofday ();
+ last_mem := St.memory ()
 ;;
 
 let remember_state es gs =
@@ -514,7 +524,7 @@ let rec ckb fs es gs =
  let ctx = mk_context () in
  let es0 = L.map N.normalize es in
  try
-  set_settings fs es0;
+  init_settings fs es0;
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> Strategy.init s 0 ctx es0) (Listx.unique (t_strategies ()));
@@ -532,4 +542,6 @@ let rec ckb fs es gs =
   del_context ctx;
   Hashtbl.reset cp_cache;
   sizes := [];
+  St.mem_diffs := [];
+  St.time_diffs := [];
   ckb fs (es_new @ es0) gs)

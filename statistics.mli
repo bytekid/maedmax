@@ -19,7 +19,10 @@ val goals : int ref
 val iterations : int ref
 val restarts : int ref
 
-val allocated_mb : unit -> int
+val time_diffs : float list ref
+val mem_diffs : int list ref
+
+val memory : unit -> int
 
 val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 

@@ -20,6 +20,8 @@ let iterations = ref 0;;
 let ces = ref 0;;
 let goals = ref 0;;
 let restarts = ref 0
+let time_diffs = ref []
+let mem_diffs = ref []
 
 let take_time t f x =
  let s = Unix.gettimeofday () in
@@ -27,7 +29,16 @@ let take_time t f x =
  t := !t +. (Unix.gettimeofday () -. s);
  res
 
-let allocated_mb () = int_of_float (Gc.allocated_bytes () /. 1048576.)
+let memory _ = int_of_float (Gc.allocated_bytes () /. 1048576.)
+
+let memory_diff_str _ =
+ List.fold_left (fun s d -> s ^ " " ^ (string_of_int d)) "" !mem_diffs
+;;
+
+let time_diff_str _ =
+ let str s d = s ^ " " ^ (string_of_int (int_of_float (d *. 100.))) in
+ List.fold_left str "" !time_diffs
+;;
 
 let print () =
   printf "\niterations          %i@." !iterations;
@@ -35,11 +46,13 @@ let print () =
   if !goals > 0 then
     printf "goals               %i@." !goals;
   printf "restarts            %i@." !restarts;
-  printf "allocated MB        %d@." (allocated_mb ());
+  printf "memory              %d@." (memory ());
+  printf "time diffs         %s@." (time_diff_str ());
+  printf "memory diffs       %s@." (memory_diff_str ());
   printf "times@.";
   printf " ground join checks %.3f@." !t_gjoin_check;
   printf " maxk               %.3f@." !t_maxk;
-   printf " sat                %.3f@." !t_sat;
+  printf " sat                %.3f@." !t_sat;
   printf " overlaps           %.3f@." !t_overlap;
   printf " success checks     %.3f@." !t_success_check;
   printf " constraints CPred  %.3f@." !t_ccpred;
@@ -60,7 +73,7 @@ let json s k n =
  let n = "n", `Int n in
  let it = "iterations", `Int !iterations in
  let ea = "equalities", `Int !ces in
- let mem = "memory", `Int (allocated_mb ()) in
+ let mem = "memory", `Int (memory ()) in
  let t_ccpred = "time/ccpred", trunc !t_ccpred in
  let t_ccomp = "time/ccomp", trunc !t_ccomp in
  let t_cred = "time/cred", trunc !t_cred in
