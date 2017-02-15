@@ -532,4 +532,4 @@ let rec ckb fs es gs =
   del_context ctx;
   Hashtbl.reset cp_cache;
   sizes := [];
-  ckb fs (L.map N.normalize (es_new @ es0)) gs)
+  ckb fs (es_new @ es0) gs)
