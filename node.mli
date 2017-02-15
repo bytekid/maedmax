@@ -13,6 +13,7 @@ module type T = sig
   (* Returns a combination of the two nodes if one subsumes the other,
      and None otherwise (more expensive than plain combine) *)
   val combine_subsumed : t -> t -> t option
+  val not_increasing : t -> bool
   (* Mirror its terms *)
   val flip : t -> t
   (* Apply rule function *)

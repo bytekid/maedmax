@@ -22,6 +22,7 @@ module type T = sig
      and None otherwise (more expensive than plain combine) *)
   val combine_subsumed : t -> t -> t option
   (* Mirror its terms *)
+  val not_increasing : t -> bool
   val flip : t -> t
   (* Apply rule function *)
   val rule_map : (R.t -> R.t) -> t -> t
@@ -66,6 +67,8 @@ module Equation = struct
   let is_trivial (s,t) = (s = t)
 
   let normalize = Variant.normalize_rule
+
+  let not_increasing (l,r) = not (Term.is_subterm l r)
 
   let cps r1 r2 = [ O.cp_of_overlap o | o <- O.overlaps_between r1 r2 ]
 
@@ -127,6 +130,8 @@ module ConstraintEquality = struct
   let is_trivial ((s,t), c) = Term.compare s t = 0 || Logic.is_false c
 
   let normalize (st, c) = Variant.normalize_rule st, c
+
+  let not_increasing ((l,r), _) = not (Term.is_subterm l r)
 
   let flip (rl, c) = R.flip rl, c
 

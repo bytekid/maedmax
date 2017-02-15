@@ -457,6 +457,7 @@ let rec phi ctx aa gs =
     let trs_n = store_trs ctx j rr c in
     let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
     let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
+    let irred = NS.filter N.not_increasing (NS.symmetric irred) in
     let cps = reduced rewriter (overlaps rr irred) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
     let nn = if !(settings.unfailing) then non_gjoinable ctx nn rr else nn in
