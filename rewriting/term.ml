@@ -77,6 +77,27 @@ let rename_canonical t =
   let subst = [x,V i | i,x <- Listx.index (variables t)] in
   substitute subst t
 ;;
+(*
+let rec rename' sub i = function
+ | V x -> (try V (List.assoc x sub), sub, i
+           with Not_found -> V i, (x,i)::sub, i+1)
+ | F (f, ts) ->
+   let ren (ts,s,j) ti = let (ti',s',j') = rename' s j ti in ts@[ti'], s', j' in
+   let ts', sub', i' = List.fold_left ren ([],sub,i) ts in
+   F (f, ts'), sub', i'
+;;
+
+let rename_canonical t = let (u, _, _) = rename' [] 0 t in u
+*)
+let rename_table : (t,t) Hashtbl.t = Hashtbl.create 256
+
+let rename_canonical t =
+  try Hashtbl.find rename_table t
+  with Not_found ->
+    let u = rename_canonical t in
+    Hashtbl.add rename_table t u;
+    u
+;;
 
 let direct_subterms = function
   | V _ -> []

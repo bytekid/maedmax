@@ -86,7 +86,7 @@ module FingerprintIndex = struct
     if is_empty trie then [] else retrieve (F.of_term t) trie
   ;;
 
-  let get_matches t = Statistics.take_time Statistics.t_tmp2 (get_matches t)
+  let get_matches t = Statistics.take_time Statistics.t_tmp1 (get_matches t)
 
   let get_overlaps t trie =
     let rec retrieve fs0 = function
