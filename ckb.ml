@@ -358,8 +358,9 @@ let max_k ctx cc gs =
           let rl = N.rule n in eval m (C.find_rule rl) && (not (Rule.is_dp rl))
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
-        (*let gt = S.decode_term_gt 0 m s in
-        assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);*)
+        let gt = S.decode_term_gt 0 m s in
+        if !(Settings.do_assertions) then
+          assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
         max_k ((rr, c) :: acc) ctx cc (n-1))
      else (
        if !(settings.d) then F.printf "no further TRS found\n%!"; 
