@@ -337,7 +337,7 @@ let search_constraints ctx cc gs =
 (* block list of previously obtained TRSs *)
 let rec block_trss ctx rrs cc = 
   let not_r rr = !! (big_and ctx [ C.find_rule r | r <- rr ]) in
-  big_and ctx [ not_r rr | rr,_ <- rrs; rr <> [] ]
+  big_and ctx [ not_r rr | rr,_,_ <- rrs; rr <> [] ]
 ;;
 
 (* find k maximal TRSs *)
@@ -361,7 +361,7 @@ let max_k ctx cc gs =
         let gt = S.decode_term_gt 0 m s in
         if !(Settings.do_assertions) then
           assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
-        max_k ((rr, c) :: acc) ctx cc (n-1))
+        max_k ((rr, c, gt) :: acc) ctx cc (n-1))
      else (
        if !(settings.d) then F.printf "no further TRS found\n%!"; 
        if (n = k && L.length !(settings.strategy) > 1) then
@@ -457,7 +457,7 @@ let rec phi ctx aa gs =
   if stuck_state aa gs then
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
-  let process (j, acc, gs) (rr,c) =
+  let process (j, acc, gs) (rr,c, gt) =
     let trs_n = store_trs ctx j rr c in
     let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
     let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
