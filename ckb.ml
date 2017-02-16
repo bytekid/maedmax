@@ -446,20 +446,7 @@ let store_trs ctx j rr c =
   rr_index
 ;;
 
-let non_gjoinable ctx ns rr =
-  let ac_syms = !(settings.ac_syms) in
-  let keep n =
-    (* to-subterm rules can always be oriented, no need for complicated join *)
-    let is_to_sub (l,r) = Term.is_subterm r l in 
-    let sys = rr,[],ac_syms in
-    let s = termination_strategy () in
-    let d = !(settings.d) in
-    is_to_sub n || is_to_sub (Rule.flip n) || Ground.non_joinable ctx s sys n d
-  in
-  let ns' = NS.filter keep ns in
-(*  NS.subsumption_free ns' *) (* expensive *)
-  ns'
-;;
+let non_gjoinable ctx ns rr = NS.subsumption_free ns
 
 let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
 
