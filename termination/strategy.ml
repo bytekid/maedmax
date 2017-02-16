@@ -20,7 +20,8 @@ type t_term =
  | DgScc of (int * orders) (* dependency graph with k SCCs *)
 
 type t_constraint = Empty | Red | Comp
-type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented
+type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
+                        GoalRed
 type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * int
 type t = t_setting list
 
@@ -118,7 +119,7 @@ let term_to_string =
 let c_to_string = function Empty -> "None" | Red -> "Red" | Comp -> "Comp"
 let mc_to_string = function 
  MaxEmpty -> "None" | MaxRed -> "MaxRed" | CPsRed -> "CPRed"  |
- Oriented -> "Oriented" | NotOriented -> "NotOriented"
+ Oriented -> "Oriented" | NotOriented -> "NotOriented" | GoalRed -> "GoalRed"
 ;;
 
 let setting_to_string (t, c, mc, i) =

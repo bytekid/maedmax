@@ -417,7 +417,7 @@ let non_joinable ctx ord (trs, es, acsyms) st d =
   if not j then Format.printf "Non-joinable: %a in %a\n" Rule.print st Rules.print es;
   Format.printf "END\n%!";  j *)
   let sys,p = mk_sys trs es acsyms ord, mk_problem st 2 in
-  not (r_joinable ctx sys p || (e_instance ctx sys p))
+  not (e_instance ctx sys p)
 ;;
 
 let joinable ctx ord (trs, es, acsyms) st d =

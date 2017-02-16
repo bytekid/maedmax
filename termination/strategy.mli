@@ -6,7 +6,8 @@ type t_term = Orders of orders | Dp of orders | Dg of orders | DgScc of (int * o
 
 type t_constraint = Empty | Red | Comp
 
-type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented
+type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
+                        GoalRed
 
 type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * int
 

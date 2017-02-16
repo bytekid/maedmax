@@ -291,6 +291,11 @@ let c_max_red ctx cc =
   L.iter (fun rl -> assert_weighted (rlred ctx cc (N.rule rl)) 1) cc
 ;;
 
+
+let c_max_goal_red ctx cc gs =
+  NS.iter (fun g -> assert_weighted (rlred ctx cc (N.rule g)) 1) gs
+;;
+
 let c_comp ctx ns =
  let rule_var, weight_var = C.find_rule, C.find_eq_weight in
  let all_eqs ee = big_and ctx (L.map C.find_eq ee) in
@@ -312,7 +317,7 @@ let c_comp ctx ns =
 let c_comp ctx = St.take_time St.t_ccomp (c_comp ctx)
 
 (* constraints to guide search; those get all retracted *)
-let search_constraints ctx cc =
+let search_constraints ctx cc gs =
  let ccl = NS.to_list cc in
  let assert_c = function
    | S.Red -> c_red ctx ccl
@@ -323,6 +328,7 @@ let search_constraints ctx cc =
    | S.Oriented -> c_maxcomp ctx ccl
    | S.NotOriented -> c_not_oriented ctx ccl
    | S.MaxRed -> c_max_red ctx ccl
+   | S.GoalRed -> c_max_goal_red ctx ccl gs
    | S.CPsRed -> c_cpred ctx ccl
    | S.MaxEmpty -> ()
  in L.iter assert_mc (max_constraints ())
@@ -335,7 +341,7 @@ let rec block_trss ctx rrs cc =
 ;;
 
 (* find k maximal TRSs *)
-let max_k ctx cc =
+let max_k ctx cc gs =
   let k = !(settings.k) !(St.iterations) in
   let cc_symm = NS.to_list (NS.symmetric cc) in 
   if !(settings.d) then F.printf "K = %i\n%!" k;
@@ -365,7 +371,7 @@ let max_k ctx cc =
    St.take_time St.t_orient_constr (S.assert_constraints s 0 ctx) cc_symm;
    push ctx; (* backtrack point for Yices *)
    require (S.bootstrap_constraints 0 ctx cc_symm);
-   search_constraints ctx cc;
+   search_constraints ctx cc gs;
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
@@ -465,10 +471,11 @@ let rec phi ctx aa gs =
     let trs_n = store_trs ctx j rr c in
     let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
     let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
+    let s = Unix.gettimeofday () in
     let irred = NS.filter N.not_increasing (NS.symmetric irred) in
+    St.t_tmp2 := !(St.t_tmp2) +. (Unix.gettimeofday () -. s);
     let cps = reduced rewriter (overlaps rr irred) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
-    let nn = if !(settings.unfailing) then non_gjoinable ctx nn rr else nn in
     let sel, rest = select nn 200 in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
@@ -480,7 +487,7 @@ let rec phi ctx aa gs =
      | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
   in
   try
-    let rrs = max_k ctx aa in
+    let rrs = max_k ctx aa gs in
     let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
     let aa' = NS.add_all aa' aa in
     phi ctx aa' gs'

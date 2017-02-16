@@ -68,7 +68,7 @@ module Equation = struct
 
   let normalize = Variant.normalize_rule
 
-  let normalize = Statistics.take_time Statistics.t_tmp2 normalize
+  let normalize = Statistics.take_time Statistics.t_tmp1 normalize
 
   let not_increasing (l,r) = not (Term.is_subterm l r)
 

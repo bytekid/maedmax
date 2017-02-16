@@ -86,8 +86,6 @@ module FingerprintIndex = struct
     if is_empty trie then [] else retrieve (F.of_term t) trie
   ;;
 
-  let get_matches t = Statistics.take_time Statistics.t_tmp1 (get_matches t)
-
   let get_overlaps t trie =
     let rec retrieve fs0 = function
       | Leaf rs -> assert (fs0 = []); rs
@@ -151,12 +149,11 @@ class rewriter (trs : Rules.t) = object (self)
       if urs <> [] then Term.F (f, us), urs
       else (* step in arguments not possible, attempt root step *)
         begin
-        (*self#check (Term.F (f, us));*)
         let rs = FingerprintIndex.get_matches (Term.F (f, us)) index in
         let opt, u = Rewriting.rewrite_at_root (Term.F (f, us)) rs in
         match opt with
           | None -> u, []
           | Some rl -> u, [rl]
         end
-    ;;
-end 
+    ;;    
+end
