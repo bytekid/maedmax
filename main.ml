@@ -157,7 +157,7 @@ let () =
        begin try
         let timer = Timer.start () in
 	      let res =
-          ((*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb) settings es gs in
+          (*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb settings es gs in
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in

@@ -42,7 +42,26 @@ module Make(N:Node.T) = struct
     if s1 <> s2 then s1 - s2
     else
       let minsize (l,r) = min (Term.size l) (Term.size r) in
-      minsize (N.rule n2) - (minsize (N.rule n1)) (* prefer equal size terms *)
+      minsize (N.rule n1) - (minsize (N.rule n2)) (* prefer equal size terms *)
+
+  let cmp n1 n2 = Rule.size (N.rule n1) - Rule.size (N.rule n2)
+
+  let mul_gt gt ts1 ts2 =
+    let ts1' = Listset.diff ts1 ts2 in
+    let ts2' = Listset.diff ts2 ts1 in
+    List.for_all (fun t -> List.exists (fun s -> gt s t) ts1') ts2'
+  ;;
+
+  let cmp_gt gt n1 n2 =
+    let s1, s2 = Rule.size (N.rule n1), Rule.size (N.rule n2) in
+    if s1 <> s2 then s1 - s2
+    else(
+      let (l1,r1),(l2,r2) = N.rule n1, N.rule n2 in
+      let lr,rl = mul_gt gt [l2;r2] [l1;r1], mul_gt gt [l1;r1] [l2;r2] in
+      let r = if lr then -1 else if rl then 1 else 0 in
+      Format.printf "%a > %a: %d\n%!" Rule.print (l1,r1) Rule.print (l2,r2) r;
+      r)
+  ;;
 
   let sort_smaller_than t ns = 
     let l = to_list ns in

@@ -525,7 +525,7 @@ let rec ckb fs es gs =
   init_settings fs es0;
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
-  L.iter (fun s -> Strategy.init s 0 ctx es0) (Listx.unique (t_strategies ()));
+  L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));
   let res = phi ctx ns0 (NS.of_list gs) in
   if !(fs.output_tproof) then termination_output res;
   del_context ctx;
