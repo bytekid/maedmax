@@ -460,6 +460,7 @@ let rec phi ctx aa gs =
     let trs_n = store_trs ctx j rr c in
     let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
     let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
+    let gs = NS.add_all (reduced rewriter gs) gs in
     let s = Unix.gettimeofday () in
     let irred = NS.filter N.not_increasing (NS.symmetric irred) in
     St.t_tmp2 := !(St.t_tmp2) +. (Unix.gettimeofday () -. s);
