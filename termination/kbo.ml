@@ -1,4 +1,6 @@
 (*** MODULES *****************************************************************)
+module L = List
+module T = Term
 module St = Statistics
 module C = Cache
 module Sig = Signature
@@ -120,4 +122,38 @@ let cond_gt k ctx conds s t =
 ;;
 
 
-let decode m k = () 
+let decode m k = ()
+
+let eval_table k m h =
+ let add (k',f) x p =
+   if k <> k' then p
+   else (
+     try
+       let v = eval_int_var m x in
+       Hashtbl.add p f v; p
+     with _ -> p)
+ in Hashtbl.fold add h (Hashtbl.create 16)
+;;
+
+let decode_term_gt k m =
+ let w = Hashtbl.find (eval_table k m weights) in
+ let rec weight = function
+  | T.V _ -> 1 (* w0 = 1 *)
+  | T.F (f, ts) -> List.fold_left (fun s ti -> s + (weight ti)) (w f) ts
+ in
+ let prec = Hashtbl.find (eval_table k m precedence) in
+ let rec gt s t =
+  if Term.is_subterm s t || not (Rule.is_non_duplicating (s,t)) then false
+  else if Term.is_subterm t s then true
+  else (
+   let ws, wt = weight s, weight t in
+   let cmp = match s,t with
+    | T.V _, _
+    | _, T.V _  -> false (* no subterm *)
+    | T.F(f,ss), T.F(g,ts) ->
+      let lex (gt_lex,ge) (si,ti) = gt_lex || (ge && gt si ti), ge && si=ti in
+      if f <> g then prec f > prec g
+      else fst (L.fold_left lex (false, true) (List.combine ss ts))
+   in ws > wt || (ws = wt && cmp))
+  in gt
+;;

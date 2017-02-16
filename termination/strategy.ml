@@ -430,6 +430,17 @@ Format.printf "Problem:\n"; Cache.decode m 0;
   | _ -> failwith "Strategy.decode: not implemented"
 ;;
 
+let decode_term_gt j m s = 
+ let dec_ord ?(af=false) i = function
+  | LPO -> Lpo.decode_term_gt i m
+  | KBO -> Kbo.decode_term_gt i m
+  | _ -> failwith "Strategy.decode_term_cmp: order not implemented"
+ in
+ match s with
+    Orders (Seq (o :: _)) -> dec_ord (j+1) o
+  | _ -> failwith "Strategy.decode_term_cmp: not implemented"
+;;
+
 let get_termination = function
    (ts, _, _, _) :: _ -> ts
   | _ -> failwith "Strategy.get_termination: empty settings list"

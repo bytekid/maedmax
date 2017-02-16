@@ -345,6 +345,7 @@ let max_k ctx cc gs =
   let k = !(settings.k) !(St.iterations) in
   let cc_symm = NS.to_list (NS.symmetric cc) in 
   if !(settings.d) then F.printf "K = %i\n%!" k;
+  let s = termination_strategy () in
   let rec max_k acc ctx cc n =
     if n = 0 then List.rev acc (* return TRSs in sequence of generation *)
     else (
@@ -357,6 +358,8 @@ let max_k ctx cc gs =
           let rl = N.rule n in eval m (C.find_rule rl) && (not (Rule.is_dp rl))
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
+        (*let gt = S.decode_term_gt 0 m s in
+        assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);*)
         max_k ((rr, c) :: acc) ctx cc (n-1))
      else (
        if !(settings.d) then F.printf "no further TRS found\n%!"; 
@@ -366,7 +369,6 @@ let max_k ctx cc gs =
    in
    C.store_rule_vars ctx cc_symm;
    if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) cc;
-   let s = termination_strategy () in
    (* FIXME: restrict to actual rules?! *)
    St.take_time St.t_orient_constr (S.assert_constraints s 0 ctx) cc_symm;
    push ctx; (* backtrack point for Yices *)

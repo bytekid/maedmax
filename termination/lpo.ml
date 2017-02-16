@@ -1,4 +1,5 @@
 (*** MODULES *****************************************************************)
+module L = List
 module C = Cache
 module F = Format
 module St = Statistics
@@ -46,10 +47,10 @@ let rec emb_geq s t =
   match s, t with 
   | V x, V y when x = y -> true
   | F (f, ss), (F (g, ts) as t) when f = g ->
-      List.exists (fun si -> emb_geq si t) ss || 
-      List.for_all2 (fun si ti -> emb_geq si ti) ss ts
+      L.exists (fun si -> emb_geq si t) ss || 
+      L.for_all2 (fun si ti -> emb_geq si ti) ss ts
   | F (f, ss), t -> 
-      List.exists (fun si -> emb_geq si t) ss
+      L.exists (fun si -> emb_geq si t) ss
   | _ -> false
 ;;
 
@@ -118,12 +119,12 @@ let forall (ctx,k) f ts p =
 ;;
 
 let exists2 (ctx,k) f ss ts p =
- let ps = index (List.map2 (fun a b -> a,b) ss ts) in
+ let ps = index (L.map2 (fun a b -> a,b) ss ts) in
  big_or ctx [ af_p (ctx,k) f i <&> (p si ti) | i,(si,ti) <- ps ]
 ;;
 
 let forall2 (ctx,k) f ss ts p =
- let ps = index (List.map2 (fun a b -> a,b) ss ts) in
+ let ps = index (L.map2 (fun a b -> a,b) ss ts) in
  big_and ctx [ af_p (ctx,k) f i <=>> (p si ti) | i,(si,ti) <- ps ]
 ;;
 
@@ -180,15 +181,15 @@ let make_fun_vars ctx k fs =
  let add f =
    let fn = Sig.get_fun_name f in
    Hashtbl.add precedence (k,f) (mk_int_var ctx (fn^"-"^(string_of_int k)))
- in List.iter add fs
+ in L.iter add fs
 ;;
 
 let init (ctx,k) fs =
   funs := fs;
-  let fs' = List.map fst fs in
+  let fs' = L.map fst fs in
   make_fun_vars ctx k fs';
   let bnd_0 = mk_zero ctx in
-  let bnd_n = mk_num ctx (List.length fs') in
+  let bnd_n = mk_num ctx (L.length fs') in
   let bounds f = let p = prec k f in (p <>=> bnd_0) <&> (bnd_n <>=> p) in
   big_and ctx [ bounds f | f <- fs' ]
 ;;
@@ -205,6 +206,17 @@ let init_af (ctx,k) fs =
 
 let init ctx = (if !(flags.af) then init_af else init) ctx
 
+let decode_prec_aux k m =
+ let add (k',f) x p =
+   if k <> k' then p
+   else (
+     try
+       let v = eval_int_var m x in
+       Hashtbl.add p f v; p
+     with _ -> p)
+ in Hashtbl.fold add precedence (Hashtbl.create 16)
+;;
+
 let decode_prec k m fs =
  F.printf "precedence: @\n ";
  let rec group = function
@@ -217,13 +229,10 @@ let decode_prec k m fs =
  | [(i,g)] -> F.printf " %s\n" (group g)
  | (i,g) :: gs ->  F.printf " %s >" (group g); pp gs
  in 
- let add (k',f) v fv = if k = k' then (f,v) :: fv else fv in
- let fv = Hashtbl.fold add precedence [] in
- let has_val x = try let _ = eval_int_var m x in true with _ -> false in
- let prec = [f, eval_int_var m x | (f,x) <- fv; has_val x ] in
- let fs' = [ f | f <- fs; List.mem_assoc f prec ] in
- let pg = Listx.group_by (fun x -> List.assoc x prec) fs' in
- let pg = List.sort ( fun (a,_) (b,_) -> Pervasives.compare b a) pg in
+ let prec = decode_prec_aux k m in
+ let fs' = [ f | f <- fs; Hashtbl.mem prec f] in
+ let pg = Listx.group_by (fun x -> Hashtbl.find prec x) fs' in
+ let pg = L.sort ( fun (a,_) (b,_) -> Pervasives.compare b a) pg in
  pp pg
 ;;
 
@@ -245,7 +254,7 @@ let decode_af k m =
   with Not_found -> failwith "decode_af: Not_found"
  in
  F.printf "argument filtering: @\n"; 
- List.iter dec [ (f,a) | (f,a) <- !funs; List.mem f fs]
+ L.iter dec [ (f,a) | (f,a) <- !funs; L.mem f fs]
 ;;
 
 let decode k m = 
@@ -253,10 +262,29 @@ let decode k m =
  decode_prec k m fs
 ;;
 
+let decode_term_gt k m =
+ let prec = Hashtbl.find (decode_prec_aux k m) in
+ let rec gt s t =
+  if Term.is_subterm s t then false
+  else if Term.is_subterm t s then true
+  else
+   match s,t with
+    | V _, _
+    | _, V _  -> false (* no subterm *)
+    | F(f,ss), F(g,ts) ->
+      let sub_gt = L.exists (fun si -> gt si t) ss in
+      if f <> g then
+       (prec f > prec g && L.for_all (gt s) ts) || sub_gt
+      else
+       let lex (gt_lex,ge) (si,ti) = gt_lex || (ge && gt si ti), ge && si=ti in
+       fst (L.fold_left lex (false, true) (List.combine ss ts)) || sub_gt
+  in gt
+;;
+
 let cond_gt i ctx conds s t =
   let p = prec i in
   let rec gt s t =
-    if List.mem (s,t) conds || (emb_gt s t) then mk_true ctx
+    if L.mem (s,t) conds || (emb_gt s t) then mk_true ctx
     else if emb_geq t s then mk_false ctx
     else match s, t with
 	    | F(f,ss), F(g,ts) ->
@@ -266,7 +294,7 @@ let cond_gt i ctx conds s t =
         else
           big_and1 ((p f <>> (p g)) :: [ gt s ti | ti <- ts ]) <|> sub
       | _, F(g,ts) -> big_and ctx ([p f <>> (p g) | f,_ <- !funs; f <> g ] @
-                                   (List.map (gt s) ts)) (* special hack *)
+                                   (L.map (gt s) ts)) (* special hack *)
         | _ -> mk_false ctx (* variable case already covered *)
   and ylpo_ge s t = if s = t then mk_true ctx else gt s t
   and ylex l1 l2 = match l1, l2 with
