@@ -37,11 +37,17 @@ module Make(N:Node.T) = struct
 
   let to_list ns = H.fold (fun n _ l -> n::l) ns [] 
 
+  let cmp n1 n2 =
+    let s1, s2 = Rule.size (N.rule n1), Rule.size (N.rule n2) in
+    if s1 <> s2 then s1 - s2
+    else
+      let minsize (l,r) = min (Term.size l) (Term.size r) in
+      minsize (N.rule n2) - (minsize (N.rule n1)) (* prefer equal size terms *)
+
   let sort_smaller_than t ns = 
     let l = to_list ns in
     let small = L.filter (fun n -> Rule.size (N.rule n) < t) l in
-    let sort_by f = L.sort (fun x y -> f x - f y) in
-    sort_by (Rule.size <.> N.rule) small
+    L.sort cmp small
   ;;
 
   let filter p ns =
