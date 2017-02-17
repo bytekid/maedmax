@@ -56,7 +56,15 @@ let ac_symbols es =
   let is_c f (l,r) = Variant.eq_variant (l,r) (commutativity f)  in
   let binary_root = function F(_, [_;_]) -> true | _ -> false in
   let fs = [ root l | l,_ <- es@[ r,l | l,r <- es ]; binary_root l ] in
-  [ f | f <- fs; List.exists (is_a f) es && List.exists (is_c f) es ]
+  let f = [ f | f <- fs; List.exists (is_a f) es && List.exists (is_c f) es ] in
+  Listx.unique f
+;;
+
+let ac_eqs fs =
+  let cs = [ commutativity f | f <- fs ] in
+  let ass = [ associativity f | f <- fs ] in
+  let cas = [ cassociativity f | f <- fs ] in
+  cs @ ass @ cas
 ;;
 
 (* we assume the terms to be given descending: a condition s,t means s > t *)
