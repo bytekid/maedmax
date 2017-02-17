@@ -87,6 +87,8 @@ let pop_strategy _ =
 
 let t_strategies _ = L.map (fun (ts,_,_,_) -> ts) !(settings.strategy)
 
+let ac_eqs () = List.map N.normalize (Ground.ac_eqs !(settings.ac_syms))
+
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
   if has_comp () then
@@ -119,10 +121,10 @@ let reduced rr ns =
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let saturated ctx (rr,ee) cc =
+let saturated ctx (rr,ee) rewriter cc =
  let covered n =
   let s,t = N.rule n in
-  let s',t' = Rewriting.nf rr s, Rewriting.nf rr t in
+  let s',t' = fst (rewriter#nf s), fst (rewriter#nf t) in
   if not !(settings.unfailing) then s' = t'
   else
     let str = termination_strategy () in
@@ -131,8 +133,8 @@ let saturated ctx (rr,ee) cc =
  in NS.for_all covered cc
 ;;
 
-let succeeds ctx (rr,ee) cc gs =
-  let joinable (s,t) = Rewriting.nf rr s = (Rewriting.nf rr t) in
+let succeeds ctx (rr,ee) rewriter cc gs =
+  let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   if not (NS.is_empty gs) then (
     let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
     if NS.exists fixed gs then (
@@ -141,14 +143,16 @@ let succeeds ctx (rr,ee) cc gs =
         Format.printf "joined goal %a\n" Rule.print g);
       Some Proof)
     else None)
-  else if not (saturated ctx (rr,ee) cc) then None
+  else if not (saturated ctx (rr,ee) rewriter cc) then None
   else
     if !(settings.unfailing) then
       Some (GroundCompletion (rr, Ground.add_ac ee !(settings.ac_syms)))
     else Some (Completion rr)
 ;;
 
-let succeeds ctx re cc = St.take_time St.t_success_check (succeeds ctx re cc)
+let succeeds ctx re rew cc =
+  St.take_time St.t_success_check (succeeds ctx re rew cc)
+;;
 
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc ss =
@@ -197,6 +201,8 @@ let cps n1 n2 =
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
  let aa_for_ols = NS.to_list (eqs_for_overlaps aa) in
+ if !(settings.d) then
+   Format.printf "use equations for overlaps:\n%a\n%!" NS.print (eqs_for_overlaps aa);
  let ns = if !(settings.unfailing) then rr @ aa_for_ols else rr in
  NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
 ;;
@@ -359,8 +365,9 @@ let max_k ctx cc gs =
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
         let gt = S.decode_term_gt 0 m s in
-        if !(Settings.do_assertions) then
-          assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
+        assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
+        if !(settings.d) then
+          S.decode 0 m s;
         max_k ((rr, c, gt) :: acc) ctx cc (n-1))
      else (
        if !(settings.d) then F.printf "no further TRS found\n%!"; 
@@ -459,21 +466,22 @@ let rec phi ctx aa gs =
   set_iteration_stats aa gs;
   let process (j, acc, gs) (rr,c, gt) =
     let trs_n = store_trs ctx j rr c in
-    let rewriter = new Rewriter.rewriter (C.redtrs_of_index trs_n) in
-    let irred, red = rewrite rewriter aa in (* rewrite eqs wrt new TRS *)
-    let gs = NS.add_all (reduced rewriter gs) gs in
+    let rr_red = C.redtrs_of_index trs_n in
+    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) gt in
+    let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
+    let gs = NS.add_all (reduced rew gs) gs in
     let s = Unix.gettimeofday () in
     let irred = NS.filter N.not_increasing (NS.symmetric irred) in
     St.t_tmp2 := !(St.t_tmp2) +. (Unix.gettimeofday () -. s);
-    let cps = reduced rewriter (overlaps rr irred) in (* rewrite CPs *)
+    let cps = reduced rew (overlaps rr irred) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
     let sel, rest = select nn 200 in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
-    let gcps = reduced rewriter (overlaps_on rr irred gs) in (* rewrite goal CPs *)
+    let gcps = reduced rew (overlaps_on rr irred gs) in (* rewrite goal CPs *)
     let gg = fst (select ~k:2 gcps 30) in
-    match succeeds ctx (rr, ee) (NS.add_list !(settings.es) cps) gs with
+    match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
      | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
   in
@@ -494,7 +502,12 @@ let init_settings fs es =
  settings.tmp := !(fs.tmp);
  settings.es := es;
  last_time := Unix.gettimeofday ();
- last_mem := St.memory ()
+ last_mem := St.memory ();
+ Settings.is_ordered := !(settings.unfailing);
+ if !(settings.d) then
+   F.printf "AC syms: %s \n%!"
+     (List.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
+     (Ground.ac_symbols es))
 ;;
 
 let remember_state es gs =
@@ -523,6 +536,7 @@ let rec ckb fs es gs =
  let es0 = L.map N.normalize es in
  try
   init_settings fs es0;
+  let es0 = Listset.diff es0 (ac_eqs ()) in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));

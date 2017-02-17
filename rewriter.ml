@@ -1,9 +1,11 @@
-module T = Term;;
-module L = List;;
-module H = Hashtbl;;
+module T = Term
+module L = List
+module H = Hashtbl
+module Sig = Signature
+module G = Ground
 
 module Fingerprint = struct
-  type feature = Sym of Signature.sym | A | B | N
+  type feature = Sym of Sig.sym | A | B | N
 
   type t = feature list
 
@@ -21,7 +23,7 @@ module Fingerprint = struct
   let of_term t = L.map (feature_of_term t) poss
 
   let feature_string = function
-    | Sym f -> Signature.get_fun_name f
+    | Sym f -> Sig.get_fun_name f
     | A -> "A"
     | B -> "B"
     | N -> "N"
@@ -33,7 +35,7 @@ end
 module FingerprintIndex = struct
   module F = Fingerprint
 
-  type t = Leaf of Rules.t | Node of (F.feature, t) H.t
+  type 'a t = Leaf of 'a | Node of (F.feature, 'a t) H.t
 
   let rec to_string = function
     | Leaf rs -> "[" ^ (string_of_int (List.length rs)) ^ "]"
@@ -52,10 +54,10 @@ module FingerprintIndex = struct
 
   let is_empty = function Leaf [] -> true | _ -> false
 
-  let insert trie rule =
+  let insert trie (term, value) =
     (*Format.printf "Insert %a into \n%a\n" Term.print (fst rule) print trie;*)
     let rec insert fs trie = match fs, trie with
-      | [], Leaf rs -> Leaf (rule :: rs)
+      | [], Leaf rs -> Leaf (value :: rs)
       | f :: fs', Leaf [] ->
         let h = H.create 16 in
         H.add h f (insert fs' (Leaf []));
@@ -64,7 +66,7 @@ module FingerprintIndex = struct
         try Hashtbl.replace h f (insert fs' (H.find h f)); Node h
         with Not_found -> (H.add h f (insert fs' (Leaf [])); Node h))
       | _ -> failwith ("FingerprintIndex insertion: unexpected pattern" ^ (F.to_string fs) ^ " and " ^ (to_string trie))
-    in let res = insert (F.of_term (fst rule)) trie in
+    in let res = insert (F.of_term term) trie in
     (*Format.printf "...yields\n%a\n" print res;*)
     res
   ;;
@@ -103,10 +105,25 @@ module FingerprintIndex = struct
   ;;
 end
 
+type term_cmp = Term.t -> Term.t -> bool
 
-class rewriter (trs : Rules.t) = object (self)
+class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
+  object (self)
+
   val nf_table : (Term.t, Term.t * Rules.t) H.t = H.create 256
-  val index = FingerprintIndex.create trs
+
+  val index =
+    let cs = [ G.commutativity f | f <- acs]@[ G.cassociativity f | f <- acs] in
+    let eqs = [ l, ((l,r), false)| l,r <- cs ] in
+    let rules = [ l,((l,r), true) | l,r <- trs ] in
+    let ass = [ G.associativity f | f <- acs ] in
+    let ord = !(Settings.is_ordered) in
+    let assoc =
+      (* rely on LPO/KBO being used: associativity can always be oriented *)
+      if ord then [ l, ((l,r), true) | l,r <- ass ]
+      else [ l, ((l,r), ord) | l,r <- ass ] @ [ r, ((r,l), ord) | l,r <- ass ]
+    in
+    FingerprintIndex.create (assoc @ eqs @ rules)
 
   method trs = trs
 
@@ -130,12 +147,26 @@ class rewriter (trs : Rules.t) = object (self)
     match self#pstep t with
       | _, [] -> t, []
       | u, rs' -> self#nf' rs' u 
-    ;;
+  ;;
 
   method check t =
-   let rs = L.filter (fun (l,_) -> Subst.is_instance_of t l) trs in
-   let rs' = FingerprintIndex.get_matches t index in
+   let eqs = G.ac_eqs acs in
+   let rs = L.filter (fun (l,_) -> Subst.is_instance_of t l) (trs @ eqs) in
+   let rs' = List.map fst (FingerprintIndex.get_matches t index) in
    assert (Listset.subset rs rs')
+  ;;
+
+  (* FIXME: so far only for equations with same variables on both sides *)
+  method rewrite_at_root t = function
+    | [] -> None, t
+    | ((l, r), b) :: rules -> (
+      if !(Settings.do_assertions) then
+        assert (Rule.is_rule (l,r));
+      try
+        let lsub,rsub = Rule.substitute (Subst.pattern_match l t) (l,r) in
+        if b || gt lsub rsub then Some (l,r), rsub
+        else self#rewrite_at_root t rules
+      with Subst.Not_matched -> self#rewrite_at_root t rules)
   ;;
 
   (* Tries to do a parallel step on argument. Returns tuple (s, rs) where either
@@ -149,11 +180,13 @@ class rewriter (trs : Rules.t) = object (self)
       if urs <> [] then Term.F (f, us), urs
       else (* step in arguments not possible, attempt root step *)
         begin
+        if !(Settings.do_assertions) then
+          self#check (Term.F (f, us));
         let rs = FingerprintIndex.get_matches (Term.F (f, us)) index in
-        let opt, u = Rewriting.rewrite_at_root (Term.F (f, us)) rs in
+        let opt, u = self#rewrite_at_root (Term.F (f, us)) rs in
         match opt with
           | None -> u, []
           | Some rl -> u, [rl]
         end
-    ;;    
+  ;;
 end

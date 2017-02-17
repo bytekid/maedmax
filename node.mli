@@ -22,11 +22,8 @@ module type T = sig
   val normalize : t -> t
   (* Compute critical pairs of rule n and rule n'. Result is not normalized *)
   val cps : t -> t -> t list
-  (* Compute normal form of term with respect to rules. Upon progress, return
-    pair (old, ns) of (modified) old and new nodes. Result is not normalized  *)
-  val nf_with : t list -> t -> (t list * t list * Rule.t list) option
-  (* Compute normal form of term with respect to rules. Result is not
-     normalized  *)
+  (* Compute normal form of term with respect to rules using rewriter object.
+     Result is not normalized  *)
   val rewriter_nf_with : Rewriter.rewriter -> t ->
     (t list * t list * Rule.t list) option
   (* whether the TRS joins the equation *)

@@ -98,7 +98,7 @@ let call () =
  in add_arg 0
 ;;
 
-let print_json f res =
+let print_json f res settings =
  let s = Strategy.to_string !strategy in
  let res_str = match res with
   | Ckb.Completion rr -> trs_string rr
@@ -112,6 +112,7 @@ let print_json f res =
   "time", f;
   (*"config",`String (call());*)
   "trs", `String res_str;
+  "ac symbols", `Int (List.length !(settings.ac_syms));
   "statistics", Statistics.json s !k !(settings.n)
  ] in
  Format.printf "%s\n%!" (pretty_to_string t)
@@ -161,7 +162,7 @@ let () =
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
-         print_json secs (clean res)
+         print_json secs (clean res) settings
         ) else (
          print_res (clean res);
 	       Timer.stop timer;
