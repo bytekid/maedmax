@@ -14,9 +14,13 @@ let name_fun : (string,int) Hashtbl.t = Hashtbl.create 32
 let var_name : (int,string) Hashtbl.t = Hashtbl.create 32
 let name_var : (string,int) Hashtbl.t = Hashtbl.create 32
 
-let get_var_name x = try Hashtbl.find var_name x with Not_found -> "X"
+let get_var_name x =
+  try Hashtbl.find var_name x
+  with Not_found -> "X" ^ (string_of_int x)
 
-let get_fun_name x = try Hashtbl.find fun_name x with Not_found -> "F"
+let get_fun_name x =
+  try Hashtbl.find fun_name x
+  with Not_found -> "F" ^ (string_of_int x)
 
 let fresh_fun_called name =
  let i = !fun_count in
