@@ -50,7 +50,10 @@ let adm_smt (ctx,k) =
   let f0 f = w k f <=> zero in
   let max f = big_and ctx [ p f <>> (p g) | g,_<- !funs; g <> f ] in
   let uadm = big_and ctx [ f0 f <=>> (max f) | f,a <- !funs; a = 1 ] in
-  big_and1 [ensure_nat; cadm; uadm]
+  (* total *)
+  let ps = [ f,g | f,_ <- !funs; g,_ <- !funs; f <> g ] in
+  let total_prec = big_and ctx [ !! (p f <=> (p g)) | f, g <- ps ] in
+  big_and1 [ensure_nat; cadm; uadm; total_prec]
 ;;
     
 let weight (ctx,k) t =
@@ -156,4 +159,16 @@ let decode_term_gt k m =
       else fst (L.fold_left lex (false, true) (List.combine ss ts))
    in ws > wt || (ws = wt && cmp))
   in gt
+;;
+
+let decode k m = 
+ Format.printf "KBO: \n %!";
+ let prec = Hashtbl.find (eval_table k m precedence) in
+ let name = Signature.get_fun_name in
+ let fs' = List.sort (fun (_, p) (_,q) -> p - q) [ f, prec f | f,_ <- !funs ] in
+ List.iter (fun (f,i) -> Format.printf "< %s:%d " (name f) i) fs';
+ Format.printf "\n %!";
+ let w = Hashtbl.find (eval_table k m weights) in
+ List.iter (fun (f,_) -> Format.printf "w(%s) = %d " (name f) (w f)) !funs;
+ Format.printf "\n%!"
 ;;
