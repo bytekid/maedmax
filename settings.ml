@@ -35,3 +35,4 @@ let default = {
 
 let do_assertions = ref false
 let do_debug = ref false
+let is_ordered = ref false
