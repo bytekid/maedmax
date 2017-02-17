@@ -38,6 +38,8 @@ module type T = sig
   val joins : Rules.t -> t -> bool
   (* less-than-or-equal, to fit Ordered module type for heaps *)
   val le: t -> t -> bool
+  (* AC equivalence check *)
+  val is_ac_equivalent: Signature.sym list -> t -> bool
   val print : Format.formatter -> t -> unit
 end
 
@@ -99,6 +101,7 @@ module Equation = struct
     let s = R.size (rule (l,r)) in
     Format.fprintf ppf "%a = %a (%i)" Term.print l Term.print r s
 
+  let is_ac_equivalent acs (l,r) = Term.flatten acs l = Term.flatten acs r
 end
 
 
@@ -153,6 +156,8 @@ module ConstraintEquality = struct
   ;;
 
   let le rl rl' = R.size (rule rl) <= R.size (rule rl')
+
+  let is_ac_equivalent acs ((l,r),_) = Term.flatten acs l = Term.flatten acs r
 
   let print ppf ((l,r),_) = Format.fprintf ppf "%a = %a" T.print l T.print r
 end

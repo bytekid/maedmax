@@ -30,6 +30,8 @@ module type T = sig
   val joins : Rules.t -> t -> bool
   (* less-than-or-equal, to fit Ordered module type for heaps *)
   val le: t -> t -> bool
+  (* AC equivalence check *)
+  val is_ac_equivalent: Signature.sym list -> t -> bool
   val print : Format.formatter -> t -> unit
 end
 
