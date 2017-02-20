@@ -165,6 +165,9 @@ let select_count i = !(settings.n)
 let select k cc thresh =
  let k = if k = 0 then select_count !(St.iterations) else k in
  let aa = NS.sort_smaller_than thresh cc in
+ let acs = !(settings.ac_syms) in
+ let aa = List.filter (fun n -> List.mem n (ac_eqs ()) ||
+                                not (N.is_ac_equivalent acs n)) aa in
  let aa,aa' = Listx.split_at_most k aa in 
  let pp = NS.diff_list cc aa in 
  if !(settings.d) then log_select cc aa;
