@@ -180,7 +180,8 @@ let ge_af (ctx,k) s t = ylpo_af false (ctx,k) s t
 let make_fun_vars ctx k fs =
  let add f =
    let fn = Sig.get_fun_name f in
-   Hashtbl.add precedence (k,f) (mk_int_var ctx (fn^"-"^(string_of_int k)))
+   let ki = string_of_int k in
+   Hashtbl.add precedence (k,f) (mk_int_var ctx ("lpo" ^ fn ^ "-" ^ ki))
  in L.iter add fs
 ;;
 

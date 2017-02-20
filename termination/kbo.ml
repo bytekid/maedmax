@@ -93,7 +93,7 @@ let ge (ctx,k) s t = if s = t then mk_true ctx else gt (ctx,k) s t
 
 let init_kbo (ctx,k) fs =
   let add (f,_) =
-   let s = (name f) ^ (string_of_int k) in
+   let s = "kbo" ^ (name f) ^ (string_of_int k) in
    Hashtbl.add precedence (k,f) (mk_int_var ctx (s^"p"));
    Hashtbl.add weights (k,f) (mk_int_var ctx s)
   in List.iter add fs;
