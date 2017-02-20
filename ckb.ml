@@ -467,7 +467,7 @@ let rec phi ctx aa gs =
   let process (j, acc, gs) (rr,c, gt) =
     let trs_n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index trs_n in
-    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) gt in
+    let rew = new Rewriter.rewriter rr_red (*!(settings.ac_syms*) [] gt in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in
     let s = Unix.gettimeofday () in
@@ -536,7 +536,7 @@ let rec ckb fs es gs =
  let es0 = L.map N.normalize es in
  try
   init_settings fs es0;
-  let es0 = Listset.diff es0 (ac_eqs ()) in
+  (*let es0 = Listset.diff es0 (ac_eqs ()) in*)
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));
