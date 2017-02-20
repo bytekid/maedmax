@@ -11,7 +11,7 @@ open Arith
 (* Type for reduction order *)
 type order = LPO | KBO | Matrix | Cfs | Cfsn | MPol
 (* Constructors connecting different reduction orders *)
-type orders = Or of order list | Seq of order list
+type orders = Choice of (order * order) | Seq of order list
 
 type t_term = 
    Orders of orders (* plain reduction orders *)
@@ -36,6 +36,8 @@ let t_dg : (Rule.t * int, Yicesx.t) Hashtbl.t = Hashtbl.create 128
 let t_dg2 : (Rule.t * Rule.t * int, Yicesx.t) Hashtbl.t = Hashtbl.create 128
 let t_dg_w : (Rule.t * int, Yicesx.t) Hashtbl.t = Hashtbl.create 128
 
+let choice_vars : (int, Yicesx.t) Hashtbl.t = Hashtbl.create 32
+
 let offset = 20
 
 let funs = ref []
@@ -49,7 +51,7 @@ let ts_dg = Dg (Seq [Cfsn; LPO])
 let ts_dgk = DgScc (2, Seq [Cfsn; LPO])
 let ts_lpo = Orders (Seq [LPO])
 let ts_kbo = Orders (Seq [KBO])
-let ts_lpokbo = Orders (Or [LPO; KBO])
+let ts_lpokbo = Orders (Choice (LPO, KBO))
 let ts_mpol = Orders (Seq [MPol])
 
 (* overall strategies *)
@@ -105,8 +107,8 @@ let term_to_string =
   Cfs -> "cfs" | Cfsn -> "cfsn" | MPol -> "mpol"
  in
  let osstr = function
-   Or os ->
-   List.fold_left (fun s s' -> s ^ ", " ^ s') "Or [" [ostr o | o <- os] ^ "]"
+   Choice (o1,o2) ->
+   "Choice (" ^ (ostr o1) ^ ", " ^ (ostr o2) ^ ")"
  | Seq os ->
    Listx.to_string ostr ", " os
  in function
@@ -137,7 +139,6 @@ let cache t f k =
  with Not_found -> let v = f k in Hashtbl.add t k v; v
 ;;
 
-
 (* Asserts initial constraints for stage j and all s -> t in rs, applying a
    case distinction on the strategy s *)
 let init s j ctx rs =
@@ -155,6 +156,9 @@ let init s j ctx rs =
  let c =
   match s with
   | Orders (Seq os) -> big_and ctx [init_ord fs i o | i,o <- index ~i:(j+1) os]
+  | Orders (Choice (o1, o2)) ->
+    Hashtbl.add choice_vars j (Yicesx.mk_fresh_bool_var ctx);
+    big_and ctx [init_ord fs i o | i,o <- index ~i:(j+1) [o1; o2]]
   | Dp (Seq os) -> 
    let init_os = [ init_ord ~af:true fs' i o | i,o <- index ~i:(j+2) os] in
    big_and ctx (dp_init :: init_os)

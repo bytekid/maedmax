@@ -1,6 +1,6 @@
 type order = LPO | KBO | Matrix | Cfs | Cfsn | MPol
 
-type orders = Or of order list | Seq of order list
+type orders = Choice of (order * order)  | Seq of order list
 
 type t_term = Orders of orders | Dp of orders | Dg of orders | DgScc of (int * orders)
 
