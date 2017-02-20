@@ -76,6 +76,7 @@ let strategy_ordered = [ (ts_kbo, [], [MaxRed], 8);
                          (ts_lpo, [], [MaxRed], 100); ]
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
 let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
+let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max]
 let strategy_temp = [ts_kbo, [],[MaxRed], max]
 
 let strategy_auto = [
@@ -158,7 +159,7 @@ let init s j ctx rs =
   | Orders (Seq os) -> big_and ctx [init_ord fs i o | i,o <- index ~i:(j+1) os]
   | Orders (Choice (o1, o2)) ->
     Hashtbl.add choice_vars j (Yicesx.mk_fresh_bool_var ctx);
-    big_and ctx [init_ord fs i o | i,o <- index ~i:(j+1) [o1; o2]]
+    big_and ctx [init_ord fs (j+1) o | o <- [o1; o2]]
   | Dp (Seq os) -> 
    let init_os = [ init_ord ~af:true fs' i o | i,o <- index ~i:(j+2) os] in
    big_and ctx (dp_init :: init_os)
@@ -205,6 +206,25 @@ let orders_constraints ctx j rs os =
    let cw = big_and ctx [ cw i o | i,o <- index ~i:(j+1) os ] in
    let cn = !! (s ctx (List.length os + j) lr) in
    let c = cs <&> cw <&> cn in
+   Hashtbl.add constraints (lr,j) c; c)
+ in big_and ctx [constr rl | rl <- rs ]
+;;
+
+let order_choice_constraints ctx j rs (o1, o2) =
+ let gt i (l,r) = function
+  | LPO -> Lpo.gt (ctx, i) l r
+  | KBO -> Kbo.gt (ctx, i) l r
+  | Cfs -> Cfs.gt (ctx, i) l r
+  | Cfsn -> Cfsn.gt (ctx, i) l r
+  | MPol -> MPol.gt (ctx, i) l r
+  | _ -> failwith "orient: not implemented"
+ in
+ let constr lr =
+  try Hashtbl.find constraints (lr,j) with Not_found -> (
+   let j' = j+1 in
+   let choice = try Hashtbl.find choice_vars j with _ -> failwith "no choice var" in
+   let c' = (choice <&> (gt j' lr o1)) <|> (!!choice <&> (gt j' lr o2)) in
+   let c =  (s ctx j lr) <=>> c' in
    Hashtbl.add constraints (lr,j) c; c)
  in big_and ctx [constr rl | rl <- rs ]
 ;;
@@ -383,6 +403,7 @@ let dg_scc_constraints ctx j rs (k,os) =
 let assert_constraints s j ctx rs =
  let cs = match s with
    | Orders (Seq os) -> orders_constraints ctx j rs os
+   | Orders (Choice (o1, o2)) -> order_choice_constraints ctx j rs (o1,o2)
    | Dp (Seq os) -> dp_constraints ctx j rs os
    | Dg (Seq os) -> dg_constraints ctx j rs os
    | DgScc (k,Seq os) -> dg_scc_constraints ctx j rs (k,os)
@@ -414,6 +435,10 @@ let decode j m s =
 Format.printf "Problem:\n"; Cache.decode m 0;
  match s with
     Orders (Seq os) -> List.iter dec_ord (index ~i:(j+1) os)
+  | Orders (Choice (o1,o2)) ->
+    let choice = try Hashtbl.find choice_vars j with _ -> failwith "no choice var" in
+    if eval m choice then dec_ord (j+1,o1)
+    else dec_ord (j+1,o2)
   | Dp (Seq os) ->
    (Dp.decode j m;
    Cache.decode m 1;
@@ -442,6 +467,9 @@ let decode_term_gt j m s =
  in
  match s with
     Orders (Seq (o :: _)) -> dec_ord (j+1) o
+  | Orders (Choice (o1,o2)) ->
+    if eval m (Hashtbl.find choice_vars j) then dec_ord (j+1) o1
+    else dec_ord (j+1) o2
   | _ -> failwith "Strategy.decode_term_cmp: not implemented"
 ;;
 

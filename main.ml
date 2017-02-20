@@ -44,6 +44,7 @@ let options = Arg.align
        else if s = "lpo" then settings.strategy := S.strategy_lpo
        else if s = "olpo" then settings.strategy := S.strategy_ordered_lpo
        else if s = "okbo" then settings.strategy := S.strategy_ordered_kbo
+       else if s = "olpokbo" then settings.strategy := S.strategy_ordered_lpokbo
        else if s = "kbo" then settings.strategy := S.strategy_kbo
        else if s = "mpol" then settings.strategy := S.strategy_mpol
        else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp

@@ -31,6 +31,7 @@ val strategy_temp : t
 val strategy_ordered : t
 val strategy_ordered_lpo : t
 val strategy_ordered_kbo : t
+val strategy_ordered_lpokbo : t
 
 val term_to_string : t_term -> string
 

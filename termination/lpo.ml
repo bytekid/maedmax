@@ -252,6 +252,7 @@ let decode_af k m =
 ;;
 
 let decode k m =
+ Format.printf "LPO: \n %!";
  let fs = Rules.functions [ rl | rl,_ <- C.get_all_strict 0] in
  decode_prec k m fs
 ;;
