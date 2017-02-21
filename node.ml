@@ -73,6 +73,8 @@ module Equation = struct
 
   let cps r1 r2 = [ O.cp_of_overlap o | o <- O.overlaps_between r1 r2 ]
 
+  let cps r1 = Statistics.take_time Statistics.t_tmp2 (cps r1)
+
   let combine_subsumed rl rl' =
     if is_subsumed rl rl' then Some rl'
     else if is_subsumed rl' rl then Some rl

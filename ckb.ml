@@ -468,14 +468,12 @@ let rec phi ctx aa gs =
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
   let process (j, acc, gs) (rr,c, gt) =
-    let s = Unix.gettimeofday () in
     let trs_n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index trs_n in
     let rew = new Rewriter.rewriter rr_red (*!(settings.ac_syms*) [] gt in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in
     let irred = NS.filter N.not_increasing (NS.symmetric irred) in
-    St.t_tmp2 := !(St.t_tmp2) +. (Unix.gettimeofday () -. s);
     let cps = reduced rew (overlaps rr irred) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
     let sel, rest = select nn 200 in
@@ -542,7 +540,8 @@ let rec ckb fs es gs =
  try
   init_settings fs es0;
   (*let es0 = Listset.diff es0 (ac_eqs ()) in*)
-  let es0 = [Ground.cassociativity f | f <- !(settings.ac_syms)] @ es0 in
+  let cas = [ Ground.cassociativity f | f <- !(settings.ac_syms)] in
+  let es0 = [ Variant.normalize_rule rl | rl <- cas ] @ es0 in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));
