@@ -163,7 +163,8 @@ let select_count i = !(settings.n)
 
 let keep acs n =
   let fs = Rule.functions (N.rule n) in
-  List.length fs > 1 || not (Listset.subset fs acs) || List.mem n (ac_eqs ())
+  List.length fs > 1 || not (Listset.subset fs acs) || List.mem n (ac_eqs ()) ||
+  not (N.is_ac_equivalent acs n)
 ;;
 
 
@@ -172,7 +173,8 @@ let select k cc thresh =
  let k = if k = 0 then select_count !(St.iterations) else k in
  let aa = NS.sort_smaller_than thresh cc in
  let acs = !(settings.ac_syms) in
- let aa,rem = List.partition (keep acs) aa in
+ let aa,_ = List.partition (keep acs) aa in
+ (*Format.printf "kill %a\n%!" Rules.print [ N.rule n | n <- rem];*)
  let aa,aa' = Listx.split_at_most k aa in 
  let pp = NS.diff_list cc aa in 
  if !(settings.d) then log_select cc aa;
@@ -268,8 +270,6 @@ let is_reducible ctx cc (s,t) =
     b
   )
 ;;
-
-let is_reducible ctx cc = St.take_time St.t_tmp2 (is_reducible ctx cc)
 
 let rlred ctx cc (s,t) =
   let ccs = L.fold_left (fun ccs n -> N.flip n :: ccs) cc cc in
@@ -373,7 +373,8 @@ let max_k ctx cc gs =
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
         let gt = S.decode_term_gt 0 m s in
-        assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
+        if !Settings.do_assertions then
+          assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
         if !(settings.d) then
           S.decode 0 m s;
         max_k ((rr, c, gt) :: acc) ctx cc (n-1))
@@ -395,7 +396,7 @@ let max_k ctx cc gs =
    trss
 ;;
 
-let max_k ctx = St.take_time St.t_maxk (max_k ctx)
+let max_k ctx cc = St.take_time St.t_maxk (max_k ctx cc)
 
 (* some logging functions *)
 let log_iteration i aa =
@@ -473,12 +474,12 @@ let rec phi ctx aa gs =
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
   let process (j, acc, gs) (rr,c, gt) =
+    let s = Unix.gettimeofday () in
     let trs_n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index trs_n in
     let rew = new Rewriter.rewriter rr_red (*!(settings.ac_syms*) [] gt in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in
-    let s = Unix.gettimeofday () in
     let irred = NS.filter N.not_increasing (NS.symmetric irred) in
     St.t_tmp2 := !(St.t_tmp2) +. (Unix.gettimeofday () -. s);
     let cps = reduced rew (overlaps rr irred) in (* rewrite CPs *)
@@ -495,7 +496,9 @@ let rec phi ctx aa gs =
   in
   try
     let rrs = max_k ctx aa gs in
+    let s = Unix.gettimeofday () in
     let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
+    St.t_process := !(St.t_process) +. (Unix.gettimeofday () -. s);
     let aa' = NS.add_all aa' aa in
     phi ctx aa' gs'
   with Success r -> r
@@ -545,6 +548,7 @@ let rec ckb fs es gs =
  try
   init_settings fs es0;
   (*let es0 = Listset.diff es0 (ac_eqs ()) in*)
+  let es0 = [Ground.cassociativity f | f <- !(settings.ac_syms)] @ es0 in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));

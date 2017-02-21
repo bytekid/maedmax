@@ -9,7 +9,7 @@ module Fingerprint = struct
 
   type t = feature list
 
-  let poss = [[]; [0]; [1]] (* fixed for now *)
+  let poss = [[]; [0]; [1]; (*[0;0]; [0;1]*)] (* fixed for now *)
 
   let rec feature_of_term t p =
     match p, t with

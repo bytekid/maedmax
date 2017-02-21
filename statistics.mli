@@ -8,6 +8,7 @@ val t_maxk : float ref
 val t_rewrite : float ref
 val t_orient_constr : float ref
 val t_overlap : float ref
+val t_process : float ref
 val t_sat : float ref
 val t_select : float ref
 val t_success_check : float ref
