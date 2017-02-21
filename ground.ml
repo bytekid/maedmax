@@ -10,7 +10,7 @@ type sys = {
   trs: Rules.t;
   es: Rules.t;
   acsyms: Sig.sym list;
-  order: Strategy.t_term
+  order: Settings.t_term
 }
 
 type problem = {

@@ -34,6 +34,10 @@ let is_rule = function
 let is_non_erasing (l, r) =
   Listset.subset (Term.variables l) (Term.variables r)
 
+let is_duplicating (l, r) =
+  let p x = Term.count_variable x r > Term.count_variable x l in
+  List.exists p (variables (l, r))
+
 let is_non_duplicating (l, r) =
   let p x = Term.count_variable x l >= Term.count_variable x r in
   List.for_all p (variables (l, r))

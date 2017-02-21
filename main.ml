@@ -103,7 +103,6 @@ let call () =
 ;;
 
 let print_json f res settings =
- let s = Strategy.to_string !strategy in
  let res_str = match res with
   | Ckb.Completion rr -> trs_string rr
   | Ckb.GroundCompletion (rr,ee) ->
@@ -116,8 +115,9 @@ let print_json f res settings =
   "time", f;
   (*"config",`String (call());*)
   "trs", `String res_str;
-  "ac symbols", `Int (List.length !(settings.ac_syms));
-  "statistics", Statistics.json s !k !(settings.n)
+  "statistics", Statistics.json settings 
+    (Strategy.to_string !(settings.strategy)) !k;
+  "chracteristics", Statistics.analyze !(settings.es)
  ] in
  Format.printf "%s\n%!" (pretty_to_string t)
 ;;

@@ -6,24 +6,10 @@ open Term
 open Yices
 open Yicesx
 open Arith
+open Settings
 
 (*** TYPES *****************************************************************)
-(* Type for reduction order *)
-type order = LPO | KBO | Matrix | Cfs | Cfsn | MPol
-(* Constructors connecting different reduction orders *)
-type orders = Choice of (order * order) | Seq of order list
-
-type t_term = 
-   Orders of orders (* plain reduction orders *)
- | Dp of orders (* dependency pairs followed by orders *)
- | Dg of orders (* dependency graph without SCCs *)
- | DgScc of (int * orders) (* dependency graph with k SCCs *)
-
-type t_constraint = Empty | Red | Comp
-type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
-                        GoalRed
-type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * int
-type t = t_setting list
+type t = Settings.termination_strategy
 
 (*** GLOBALS *****************************************************************)
 (* Caching termination constraints for efficiency: Associates a rule s-> t 

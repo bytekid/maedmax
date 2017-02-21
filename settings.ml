@@ -1,4 +1,21 @@
 (*** TYPES *******************************************************************)
+(* Type for reduction order *)
+type order = LPO | KBO | Matrix | Cfs | Cfsn | MPol
+(* Constructors connecting different reduction orders *)
+type orders = Choice of (order * order) | Seq of order list
+
+type t_term = 
+   Orders of orders (* plain reduction orders *)
+ | Dp of orders (* dependency pairs followed by orders *)
+ | Dg of orders (* dependency graph without SCCs *)
+ | DgScc of (int * orders) (* dependency graph with k SCCs *)
+
+type t_constraint = Empty | Red | Comp
+type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
+                        GoalRed
+type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * int
+type termination_strategy = t_setting list
+
 type t = {
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  d        : bool ref ; (* debug mode *)
@@ -7,7 +24,7 @@ type t = {
  k        : (int -> int) ref;  (* k TRSs are chosen in an iteration *)
  n        : int ref;  (* how many equations are (at most) selected *)
  unfailing : bool ref;
- strategy : Strategy.t ref;
+ strategy : termination_strategy ref;
  tmp      : int ref; (* various purpose parameter *)
  output_tproof : bool ref;
  check_subsumption : bool ref;
@@ -27,7 +44,7 @@ let default = {
  k         = ref k_default;
  n         = ref 10;
  unfailing = ref false;
- strategy  = ref Strategy.strategy_red;
+ strategy  = ref [];
  tmp       = ref 19;
  output_tproof = ref false;
  check_subsumption = ref false

@@ -20,6 +20,8 @@ val signature : t -> Signature.t
 
 val is_non_erasing : t -> bool
 
+val is_duplicating : t -> bool
+
 val is_non_duplicating : t -> bool
 
 val linear : t -> bool

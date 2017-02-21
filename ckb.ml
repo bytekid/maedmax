@@ -5,7 +5,7 @@ module L = List
 module O = Overlap
 module R = Rule
 module St = Statistics
-module S = Strategy
+module S = Settings
 module Ac = Theory.Ac
 
 (*** OPENS *******************************************************************)
@@ -368,11 +368,11 @@ let max_k ctx cc gs =
           let rl = N.rule n in eval m (C.find_rule rl) && (not (Rule.is_dp rl))
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
-        let gt = S.decode_term_gt 0 m s in
+        let gt = Strategy.decode_term_gt 0 m s in
         if !Settings.do_assertions then
           assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
         if !(settings.d) then
-          S.decode 0 m s;
+          Strategy.decode 0 m s;
         require (!! (big_and ctx [ C.find_rule r | r <- rr ]));
         max_k ((rr, c, gt) :: acc) ctx cc (n-1))
      else (
@@ -384,9 +384,9 @@ let max_k ctx cc gs =
    C.store_rule_vars ctx cc_symm;
    if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) cc;
    (* FIXME: restrict to actual rules?! *)
-   St.take_time St.t_orient_constr (S.assert_constraints s 0 ctx) cc_symm;
+   St.take_time St.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
    push ctx; (* backtrack point for Yices *)
-   require (S.bootstrap_constraints 0 ctx cc_symm);
+   require (Strategy.bootstrap_constraints 0 ctx cc_symm);
    search_constraints ctx cc gs;
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
@@ -435,15 +435,15 @@ let set_iteration_stats aa gs =
   last_time := Unix.gettimeofday ();
   St.time_diffs := time_diff :: !(St.time_diffs);
   St.mem_diffs := mem_diff :: !(St.mem_diffs);
-  let s = S.to_string !(settings.strategy) in
+  let s = Strategy.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
      !St.iterations (NS.size aa) NS.print aa;
    if !St.goals > 0 then
    F.printf "\nand %i goals:\n%a%!\n"
      !St.goals NS.print gs;
-   F.printf "%s\n%!" (Yojson.Basic.pretty_to_string 
-    (Statistics.json s (!(settings.k) i) (select_count i))))
+   let json = St.json settings s (!(settings.k) i) in
+   F.printf "%s\n%!" (Yojson.Basic.pretty_to_string json))
 ;;
 
 let store_trs ctx j rr c =
@@ -541,7 +541,8 @@ let rec ckb fs es gs =
   let es0 = [ Variant.normalize_rule rl | rl <- cas ] @ es0 in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
-  L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));
+  let ss = Listx.unique (t_strategies ()) in
+  L.iter (fun s -> Strategy.init s 0 ctx (gs @ es0)) ss;
   let res = phi ctx ns0 (NS.of_list gs) in
   if !(fs.output_tproof) then termination_output res;
   del_context ctx;

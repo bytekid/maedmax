@@ -1,6 +1,7 @@
 (*** OPENS *******************************************************************)
 open Format
 open Yojson.Basic
+open Settings
 
 (*** MODULES *****************************************************************)
 module L = List
@@ -74,11 +75,45 @@ let print () =
   printf " tmp2               %.3f@." !t_tmp2
 ;;
 
-let json s k n =
+let is_applicative es =
+ let bs, rest = List.partition (fun (_,a) -> a = 2) (Rules.signature es) in
+ List.length bs = 1 && List.for_all (fun (_,a) -> a = 0) rest
+;;
+
+let is_duplicating es =
+  let dup (l,r) =
+    Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
+  in
+  List.exists dup (es @ [Rule.flip e | e <- es ])
+;;
+
+let analyze es =
+  (* some counting *)
+  let eqc = "equality count", `Int (L.length es) in
+  let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <- es]) in
+  let rmax (l,r) = max (Term.size l) (Term.size r) in
+  let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
+  let rmax (l,r) = max (Term.depth l) (Term.depth r) in
+  let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
+  let app = "is applicative", `Bool (is_applicative es) in
+  let dup = "is duplicating", `Bool (is_duplicating es) in
+  (* some theory characteristics *)
+  let ac = "acs", `Int (Theory.Ac.count es) in
+  let mon = "monoids", `Int (Theory.Monoid.count es) in
+  let group = "groups", `Int (Theory.Group.count es) in
+  let agroup = "abelian groups", `Int (Theory.AbelianGroup.count es) in
+  let ring = "ring", `Int (Theory.Ring.count es) in
+  let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
+  let lattice = "lattice", `Int (Theory.Lattice.count es) in
+  `Assoc [eqc; eqs; mts; mtd; app; dup;
+          ac; mon; group; agroup; ring; lattice; distrib ]
+;;
+
+let json settings s k =
  let trunc f = `Float ((float_of_int (truncate (f *. 1000.))) /. 1000.) in
  let s = "strategy", `String s in
  let k = "k", `String (if k  < 0 then "if i < 3 then 6 else 2" else string_of_int k) in
- let n = "n", `Int n in
+ let n = "n", `Int !(settings.n) in
  let it = "iterations", `Int !iterations in
  let ea = "equalities", `Int !ces in
  let mem = "memory", `Int (memory ()) in
@@ -100,28 +135,4 @@ let json s k n =
   t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process; t_sat;
   t_cache]
  in t
-;;
-
-let is_applicative es =
- let bs, rest = List.partition (fun (_,a) -> a = 2) (Rules.signature es) in
- List.length bs = 1 && List.for_all (fun (_,a) -> a = 0) rest
-;;
-
-let analyze es =
-  (* some counting *)
-  let eqc = "equality count", `Int (L.length es) in
-  let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <- es]) in
-  let rmax (l,r) = max (Term.size l) (Term.size r) in
-  let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
-  let rmax (l,r) = max (Term.depth l) (Term.depth r) in
-  let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
-  (* some theory characteristics *)
-  let app = "is applicative", `Bool (is_applicative es) in
-  let ac = "acs", `Int (Theory.Ac.count es) in
-  let mon = "monoids", `Int (Theory.Monoid.count es) in
-  let group = "groups", `Int (Theory.Group.count es) in
-  let agroup = "abelian groups", `Int (Theory.AbelianGroup.count es) in
-  let ring = "ring", `Int (Theory.Ring.count es) in
-  let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
-  `Assoc [eqc; eqs; mts; mtd; app; ac; mon; group; agroup; ring; distrib ]
 ;;
