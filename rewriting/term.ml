@@ -215,6 +215,12 @@ let rec size = function
        let size_arg = [size fi | fi <- fs ] in
        1 + (List.fold_left (+) 0 size_arg)
 
+let rec depth = function
+  | V _ -> 1
+  | F(_,fs) ->
+       let depth_arg = [depth fi | fi <- fs ] in
+       1 + (List.fold_left max 0 depth_arg)
+
 let is_sharped = function
   | V _ -> false
   | F (f, _) -> String.contains (get_fun_name f) '#' (* dubios *)

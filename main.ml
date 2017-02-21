@@ -15,6 +15,7 @@ let settings = Settings.default
 
 let k = ref (-1)
 let use_ac = ref false
+let analyze = ref false
 let only_termination = ref false
 let timeout = ref 60.0
 
@@ -24,6 +25,8 @@ let strategy = ref []
 let options = Arg.align 
   [("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");
+   ("-analyze", Arg.Unit (fun _ -> analyze := true),
+    " print problem analysis");
    ("-d", Arg.Set settings.d,
     " print debugging output");
    ("-json", Arg.Set settings.json,
@@ -137,7 +140,10 @@ let print_res res =
     if ee <> [] then printf "ES:@.%a@." print_es ee)
    | Ckb.Proof -> printf "(proof)\n"
 ;;
-         
+
+let print_analysis es =
+ Format.printf "%s\n%!" (pretty_to_string (Statistics.analyze es))
+;;         
 
 let clean =
   let reduce rr = Listx.unique (Variant.reduce rr) in function
@@ -155,7 +161,7 @@ let () =
   | [f] -> 
       let rs, goals = Read.read f in
       let es,gs = Rules.rpl_spcl_char rs, Rules.rpl_spcl_char goals in
-      if not !only_termination then
+      if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
 	      let res =
@@ -172,6 +178,8 @@ let () =
          Statistics.print ()
          )
        with e -> printf "MAYBE@."; raise e end
+      else if !analyze then
+       print_analysis es
       else (
        let timer = Timer.start () in
        let yes = Termination.check (S.get_termination !strategy) es json in

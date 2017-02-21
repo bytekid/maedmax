@@ -66,6 +66,8 @@ val unflatten : Signature.sym list -> t -> t
 
 val size :  t -> int
 
+val depth :  t -> int
+
 val is_sharped : t -> bool
 
 val is_embedded : t -> t -> bool

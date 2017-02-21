@@ -1,6 +1,11 @@
+(*** OPENS *******************************************************************)
 open Format
 open Yojson.Basic
 
+(*** MODULES *****************************************************************)
+module L = List
+
+(*** GLOBALS *****************************************************************)
 let t_ccomp = ref 0.0
 let t_ccpred = ref 0.0
 let t_cred = ref 0.0
@@ -24,6 +29,7 @@ let restarts = ref 0
 let time_diffs = ref []
 let mem_diffs = ref []
 
+(*** FUNCTIONS ***************************************************************)
 let take_time t f x =
  let s = Unix.gettimeofday () in
  let res = f x in
@@ -96,3 +102,26 @@ let json s k n =
  in t
 ;;
 
+let is_applicative es =
+ let bs, rest = List.partition (fun (_,a) -> a = 2) (Rules.signature es) in
+ List.length bs = 1 && List.for_all (fun (_,a) -> a = 0) rest
+;;
+
+let analyze es =
+  (* some counting *)
+  let eqc = "equality count", `Int (L.length es) in
+  let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <- es]) in
+  let rmax (l,r) = max (Term.size l) (Term.size r) in
+  let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
+  let rmax (l,r) = max (Term.depth l) (Term.depth r) in
+  let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
+  (* some theory characteristics *)
+  let app = "is applicative", `Bool (is_applicative es) in
+  let ac = "acs", `Int (Theory.Ac.count es) in
+  let mon = "monoids", `Int (Theory.Monoid.count es) in
+  let group = "groups", `Int (Theory.Group.count es) in
+  let agroup = "abelian groups", `Int (Theory.AbelianGroup.count es) in
+  let ring = "ring", `Int (Theory.Ring.count es) in
+  let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
+  `Assoc [eqc; eqs; mts; mtd; app; ac; mon; group; agroup; ring; distrib ]
+;;
