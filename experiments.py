@@ -59,7 +59,13 @@ def work(problem):
     code = "TIMEOUT" if "TIMEOUT" in res else "SUCCESS" if "YES" in res else "ERROR"
     print(str(problem["number"]) + ": " + problem["file"] + " " + code)
     if "TIMEOUT" in res:
-      return timeout_data(problem)
+      d = timeout_data(problem)
+      cmd = tool + " -analyze " + f + " > " + temp.name
+      os.system(cmd)
+      file = open(temp.name, "r") 
+      res = file.read()
+      d["characteristics"] = json.loads(res)
+      return d
     elif "YES" in res:
       return success_data(problem, json.loads(res))
     else:
