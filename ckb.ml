@@ -380,11 +380,6 @@ let max_k ctx cc gs =
          raise (Restart (select_for_restart cc));
        acc))
    in
-   (*C.store_rule_vars ctx cc_symm;*)
-   List.iter (fun n -> try ignore (C.find_rule n)
-                       with _ -> F.printf "no rule var for %a\n" Rule.print n) cc_symm;
-   assert (List.for_all (fun n -> try ignore (C.find_rule n); true
-                                  with _ -> false) cc_symm);
    if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) cc;
    (* FIXME: restrict to actual rules?! *)
    St.take_time St.t_orient_constr (S.assert_constraints s 0 ctx) cc_symm;
