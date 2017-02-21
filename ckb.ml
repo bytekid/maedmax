@@ -348,12 +348,6 @@ let search_constraints ctx cc gs =
  in L.iter assert_mc (max_constraints ())
 ;;
 
-(* block list of previously obtained TRSs *)
-let rec block_trss ctx rrs cc = 
-  let not_r rr = !! (big_and ctx [ C.find_rule r | r <- rr ]) in
-  big_and ctx [ not_r rr | rr,_,_ <- rrs; rr <> [] ]
-;;
-
 (* find k maximal TRSs *)
 let max_k ctx cc gs =
   let k = !(settings.k) !(St.iterations) in
@@ -363,7 +357,6 @@ let max_k ctx cc gs =
   let rec max_k acc ctx cc n =
     if n = 0 then List.rev acc (* return TRSs in sequence of generation *)
     else (
-      require (block_trss ctx acc cc);
       let sat_call = if use_maxsat () then max_sat else check in
       if St.take_time St.t_sat sat_call ctx then (
         let m = get_model ctx in
@@ -377,6 +370,7 @@ let max_k ctx cc gs =
           assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
         if !(settings.d) then
           S.decode 0 m s;
+        require (!! (big_and ctx [ C.find_rule r | r <- rr ]));
         max_k ((rr, c, gt) :: acc) ctx cc (n-1))
      else (
        if !(settings.d) then F.printf "no further TRS found\n%!"; 
