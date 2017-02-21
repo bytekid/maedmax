@@ -380,6 +380,7 @@ let max_k ctx cc gs =
          raise (Restart (select_for_restart cc));
        acc))
    in
+   C.store_rule_vars ctx cc_symm;
    if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) cc;
    (* FIXME: restrict to actual rules?! *)
    St.take_time St.t_orient_constr (S.assert_constraints s 0 ctx) cc_symm;
@@ -486,8 +487,6 @@ let rec phi ctx aa gs =
     let rrs = max_k ctx aa gs in
     let s = Unix.gettimeofday () in
     let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
-    C.store_rule_vars ctx (NS.to_list (NS.symmetric aa'));
-    C.store_rule_vars ctx (NS.to_list (NS.symmetric gs));
     St.t_process := !(St.t_process) +. (Unix.gettimeofday () -. s);
     let aa' = NS.add_all aa' aa in
     phi ctx aa' gs'
@@ -539,7 +538,6 @@ let rec ckb fs es gs =
   init_settings fs es0;
   let cas = [ Ground.cassociativity f | f <- !(settings.ac_syms)] in
   let es0 = [ Variant.normalize_rule rl | rl <- cas ] @ es0 in
-  C.store_rule_vars ctx (es0 @ [ N.flip n | n <- es0 ] );
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));
