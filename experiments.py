@@ -69,8 +69,7 @@ def accumulate(results, configs):
   global stats
   t=datetime.fromtimestamp(time.time())
   tstamp = t.strftime('%Y-%m-%d %H:%M')
-  data = {"timestamp": tstamp, "configurations": configs, "comment": comment,\
-          "results": results}
+  data = {"timestamp": tstamp, "configurations": configs, "comment": comment, "results": results}
   res = json.dumps(data, sort_keys=True, indent=2)
   rname = t.strftime('%Y-%m-%d') + codename + ".json"
   rfile = open("results/"+rname, "w")
