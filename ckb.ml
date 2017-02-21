@@ -208,6 +208,8 @@ let cps n1 n2 =
     cps)
 ;;
 
+let cps n1 = St.take_time St.t_tmp1 (cps n1)
+
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
  let aa_for_ols = NS.to_list (eqs_for_overlaps aa) in
@@ -378,7 +380,11 @@ let max_k ctx cc gs =
          raise (Restart (select_for_restart cc));
        acc))
    in
-   C.store_rule_vars ctx cc_symm;
+   (*C.store_rule_vars ctx cc_symm;*)
+   List.iter (fun n -> try ignore (C.find_rule n)
+                       with _ -> F.printf "no rule var for %a\n" Rule.print n) cc_symm;
+   assert (List.for_all (fun n -> try ignore (C.find_rule n); true
+                                  with _ -> false) cc_symm);
    if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) cc;
    (* FIXME: restrict to actual rules?! *)
    St.take_time St.t_orient_constr (S.assert_constraints s 0 ctx) cc_symm;
@@ -415,15 +421,10 @@ let stuck_state es gs =
  if List.length (!hash_iteration) > 20 then
    hash_iteration := Listx.take 20 !hash_iteration;
  if rep && !(settings.d) then F.printf "Restart: repeated iteration state\n%!";
- (* smallest equation produced in last 6 iteration was always > 17 *)
- (*let last6 = Listx.take (min 6 (L.length !sizes)) !sizes in
- let deg = L.length !sizes > 10 && L.for_all (fun x -> x > 17) last6 in
- if deg && !(settings.d) then F.printf "Restart: degenerated\n%!";
- *)
  (* iteration/size bound*)
  let max = !(St.iterations) > max_iterations () in
  if max && !(settings.d) then F.printf "Restart: maximum iterations reached\n";
- rep || (*deg || *)max
+ rep || max
 ;;
 
 let set_iteration_stats aa gs =
@@ -490,6 +491,8 @@ let rec phi ctx aa gs =
     let rrs = max_k ctx aa gs in
     let s = Unix.gettimeofday () in
     let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
+    C.store_rule_vars ctx (NS.to_list (NS.symmetric aa'));
+    C.store_rule_vars ctx (NS.to_list (NS.symmetric gs));
     St.t_process := !(St.t_process) +. (Unix.gettimeofday () -. s);
     let aa' = NS.add_all aa' aa in
     phi ctx aa' gs'
@@ -539,9 +542,9 @@ let rec ckb fs es gs =
  let es0 = L.map N.normalize es in
  try
   init_settings fs es0;
-  (*let es0 = Listset.diff es0 (ac_eqs ()) in*)
   let cas = [ Ground.cassociativity f | f <- !(settings.ac_syms)] in
   let es0 = [ Variant.normalize_rule rl | rl <- cas ] @ es0 in
+  C.store_rule_vars ctx (es0 @ [ N.flip n | n <- es0 ] );
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   L.iter (fun s -> S.init s 0 ctx (gs @ es0)) (Listx.unique (t_strategies ()));
