@@ -3,6 +3,7 @@ module L = List
 module H = Hashtbl
 module Sig = Signature
 module G = Ground
+module Ac = Theory.Ac
 
 module Fingerprint = struct
   type feature = Sym of Sig.sym | A | B | N
@@ -113,17 +114,11 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
   val nf_table : (Term.t, Term.t * Rules.t) H.t = H.create 256
 
   val index =
-    let cs = [ G.commutativity f | f <- acs]@[ G.cassociativity f | f <- acs] in
-    let eqs = [ l, ((l,r), false)| l,r <- cs ] in
+    let cs = [ Ac.commutativity f | f <- acs] in
+    let cas = [ Ac.cassociativity f | f <- acs] in
+    let eqs = [ l, ((l,r), false)| l,r <- cs @ cas ] in
     let rules = [ l,((l,r), true) | l,r <- trs ] in
-    let ass = [ G.associativity f | f <- acs ] in
-    let ord = !(Settings.is_ordered) in
-    let assoc =
-      (* rely on LPO/KBO being used: associativity can always be oriented *)
-      if ord then [ l, ((l,r), true) | l,r <- ass ]
-      else [ l, ((l,r), ord) | l,r <- ass ] @ [ r, ((r,l), ord) | l,r <- ass ]
-    in
-    FingerprintIndex.create (assoc @ eqs @ rules)
+    FingerprintIndex.create (eqs @ rules)
 
   method trs = trs
 
@@ -150,7 +145,7 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
   ;;
 
   method check t =
-   let eqs = G.ac_eqs acs in
+   let eqs = Ac.eqs acs in
    let rs = L.filter (fun (l,_) -> Subst.is_instance_of t l) (trs @ eqs) in
    let rs' = List.map fst (FingerprintIndex.get_matches t index) in
    assert (Listset.subset rs rs')

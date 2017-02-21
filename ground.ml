@@ -2,7 +2,8 @@
 open Term
 
 (*** MODULES *****************************************************************)
-module Sig = Signature;;
+module Sig = Signature
+module Ac = Theory.Ac
 
 (*** TYPES *******************************************************************)
 type sys = {
@@ -32,40 +33,6 @@ let debug : bool ref = ref false
 (*** FUNCTIONS ***************************************************************)
 let (<&>) = Yicesx.(<&>)
 let (<|>) = Yicesx.(<|>)
-
-let x = V (-1)
-let y = V (-2)
-let z = V (-3)
-
-let associativity f =
-  let lhs = F(f, [F(f, [x; y]); z]) in
-  let rhs = F(f, [x; F(f, [y; z])]) in
-  (lhs, rhs)
-;;
-
-let commutativity f = (F(f, [x; y]), F(f, [y; x]))
-
-let cassociativity f =
-  let lhs = F(f, [x; F(f, [y; z])]) in
-  let rhs = F(f, [y; F(f, [x; z])]) in
-  (lhs, rhs)
-;;
-
-let ac_symbols es =
-  let is_a f (l,r) = Variant.eq_variant (l,r) (associativity f) in
-  let is_c f (l,r) = Variant.eq_variant (l,r) (commutativity f)  in
-  let binary_root = function F(_, [_;_]) -> true | _ -> false in
-  let fs = [ root l | l,_ <- es@[ r,l | l,r <- es ]; binary_root l ] in
-  let f = [ f | f <- fs; List.exists (is_a f) es && List.exists (is_c f) es ] in
-  Listx.unique f
-;;
-
-let ac_eqs fs =
-  let cs = [ commutativity f | f <- fs ] in
-  let ass = [ associativity f | f <- fs ] in
-  let cas = [ cassociativity f | f <- fs ] in
-  cs @ ass @ cas
-;;
 
 (* we assume the terms to be given descending: a condition s,t means s > t *)
 let rec order_to_conditions = function
@@ -213,7 +180,7 @@ let ordered_ac_step sys ctx conds (l,r) (u,c0) =
   try
     let sub = Subst.pattern_match l u in
     (* condition for these particular rules are instances of x and y *)
-    let x', y' = substitute sub x, substitute sub y in
+    let x', y' = substitute sub Ac.x, substitute sub Ac.y in
     if gt_simp conds (x', y') then substitute sub r, True
     else if no_order_check conds x' y' then u, True (* false/no step *)
     else ( 
@@ -235,9 +202,9 @@ let ac_nf ctx sys conds f u =
     let u0 = subterm_at p u in
     let u1 = Rewriting.nf sys.trs u0 in
     (*if u1 <> u0 then Format.printf "  R step from %a to %a \n%!" Term.print u0 Term.print u1;*)
-    let u2, c2 = ordered_ac_step sys ctx conds (commutativity f) (u1,c) in
+    let u2, c2 = ordered_ac_step sys ctx conds (Ac.commutativity f) (u1,c) in
     (*if u1 <> u2 then Format.printf "  commutativity step from %a to %a \n%!" Term.print u1 Term.print u2;*)
-    let u3, c3 = ordered_ac_step sys ctx conds (cassociativity f) (u2,c <&&> c2) in
+    let u3, c3 = ordered_ac_step sys ctx conds (Ac.cassociativity f) (u2,c <&&> c2) in
     (*if u3 <> u2 then Format.printf "  cassociativity step from %a to %a \n%!" Term.print u2 Term.print u3;*)
     if u0 = u3 then ac_nf c u ps
     else let u' = replace u u3 p in
@@ -253,8 +220,8 @@ let ac_reducts ctx sys conds f (u,c) =
     | [] -> acc
     | p :: ps ->
       let u0 = subterm_at p u in
-      let u1, c1 = ordered_ac_step sys ctx conds (commutativity f) (u0,c) in
-      let u2, c2 = ordered_ac_step sys ctx conds (cassociativity f) (u0,c) in
+      let u1, c1 = ordered_ac_step sys ctx conds (Ac.commutativity f) (u0,c) in
+      let u2, c2 = ordered_ac_step sys ctx conds (Ac.cassociativity f) (u0,c) in
       let us1 = if u0=u1 then [] else [ replace u u1 p,c1 ] in
       let us2 = if u0=u2 then [] else [ replace u u2 p,c2 ] in
       reducts (us1@us2@acc) ps
@@ -336,7 +303,7 @@ and ac_joinable ctx sys p =
 
 and ac_joinable_for ctx sys p f =
   if !debug then Format.printf "%s. check f joinability of %a wrt %!" p.id Rule.print (p.s,p.t);
-  if not (List.exists (Rule.variant (associativity f)) sys.trs)  ||
+  if not (List.exists (Rule.variant (Ac.associativity f)) sys.trs)  ||
     not (order_extensible p.var_order (p.s, p.t)) ||
     (Term.is_variable p.s && Term.is_variable p.t)
   then
@@ -445,10 +412,4 @@ let joinable ctx ord (trs, es, acsyms) st d =
       Format.printf "END: %a %s\n%!" Rule.print st (if j then "YES" else "NO"));
     if j then joinable_cache := (trs, es, st) :: !joinable_cache;
     j)
-;;
-
-let add_ac es acs =
-  let cs = [ Variant.normalize_rule (commutativity f) | f <- acs ] in
-  let cs' = [ Variant.normalize_rule (cassociativity f) | f <- acs ] in
-  Listx.unique (cs @ cs' @ es)
 ;;

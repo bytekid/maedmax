@@ -6,6 +6,7 @@ module O = Overlap
 module R = Rule
 module St = Statistics
 module S = Strategy
+module Ac = Theory.Ac
 
 (*** OPENS *******************************************************************)
 open Prelude
@@ -87,7 +88,7 @@ let pop_strategy _ =
 
 let t_strategies _ = L.map (fun (ts,_,_,_) -> ts) !(settings.strategy)
 
-let ac_eqs () = List.map N.normalize (Ground.ac_eqs !(settings.ac_syms))
+let ac_eqs () = List.map N.normalize (Ac.eqs !(settings.ac_syms))
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
@@ -146,7 +147,7 @@ let succeeds ctx (rr,ee) rewriter cc gs =
   else if not (saturated ctx (rr,ee) rewriter cc) then None
   else
     if !(settings.unfailing) then
-      Some (GroundCompletion (rr, Ground.add_ac ee !(settings.ac_syms)))
+      Some (GroundCompletion (rr, ee))
     else Some (Completion rr)
 ;;
 
@@ -494,7 +495,7 @@ let rec phi ctx aa gs =
 ;;
 
 let init_settings fs es =
- settings.ac_syms := Ground.ac_symbols es;
+ settings.ac_syms := Ac.symbols es;
  settings.d := !(fs.d);
  St.iterations := 0;
  settings.n := !(fs.n);
@@ -507,7 +508,7 @@ let init_settings fs es =
  if !(settings.d) then
    F.printf "AC syms: %s \n%!"
      (List.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
-     (Ground.ac_symbols es))
+     (Ac.symbols es))
 ;;
 
 let remember_state es gs =
@@ -536,7 +537,7 @@ let rec ckb fs es gs =
  let es0 = L.map N.normalize es in
  try
   init_settings fs es0;
-  let cas = [ Ground.cassociativity f | f <- !(settings.ac_syms)] in
+  let cas = [ Ac.cassociativity f | f <- !(settings.ac_syms)] in
   let es0 = [ Variant.normalize_rule rl | rl <- cas ] @ es0 in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
