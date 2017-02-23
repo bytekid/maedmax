@@ -465,7 +465,7 @@ let rec phi ctx aa gs =
   if stuck_state aa gs then
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
-  let process (j, acc, gs) (rr,c, gt) =
+  let process (j, aa, gs) (rr,c, gt) =
     let trs_n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index trs_n in
     let rew = new Rewriter.rewriter rr_red (*!(settings.ac_syms*) [] gt in
@@ -482,14 +482,13 @@ let rec phi ctx aa gs =
     let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.add_list sel acc, NS.add_list gg gs
+     | None -> j+1, NS.add_list sel aa, NS.add_list gg gs
   in
   try
     let rrs = max_k ctx aa gs in
     let s = Unix.gettimeofday () in
-    let _, aa', gs' = L.fold_left process (0, NS.empty (), gs) rrs in
+    let _, aa', gs' = L.fold_left process (0, aa, gs) rrs in
     St.t_process := !(St.t_process) +. (Unix.gettimeofday () -. s);
-    let aa' = NS.add_all aa' aa in
     phi ctx aa' gs'
   with Success r -> r
 ;;
