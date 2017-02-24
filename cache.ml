@@ -23,9 +23,9 @@ let ht_was_oriented : (Rule.t,bool) Hashtbl.t = Hashtbl.create 128;;
 let ht_trsvars : (int, Yicesx.t) Hashtbl.t = Hashtbl.create 128;;
 
 (* bool and int Yices variable for each equation (only for comp setting) *)
-let ht_eqvars : (Rule.t, Yicesx.t * Yicesx.t) Hashtbl.t = Hashtbl.create 128;;
+let eq_vars : (Rule.t * (Yicesx.t * Yicesx.t)) list ref = ref [];;
 (* Yices variable for each rule *)
-let ht_rulevars : (Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 128;;
+let rule_vars : (Rule.t * Yicesx.t) list ref = ref [];;
 (* variables for strategy stage and strict rules *)
 let strict_vars : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 128
 (* variables for strategy stage and weak rules *)
@@ -43,8 +43,8 @@ let clear _ =
   Hashtbl.clear ht_trssi;
   Hashtbl.clear ht_contains;
   Hashtbl.clear ht_trsvars;
-  Hashtbl.clear ht_eqvars;
-  Hashtbl.clear ht_rulevars;
+  eq_vars := [];
+  rule_vars := [];
   Hashtbl.clear strict_vars;
   Hashtbl.clear weak_vars;
   Hashtbl.clear ht_rlycs
@@ -77,7 +77,7 @@ let contains n = St.take_time St.t_cache (contains n)
 let store_rule_var ctx lr =
   let v = mk_fresh_bool_var ctx in
   if not (Rule.is_rule lr) then require (!! v);
-  Hashtbl.add ht_rulevars lr v;
+  rule_vars :=  (lr, v) :: !rule_vars;
   v 
 ;;
 
@@ -87,41 +87,42 @@ let store_eq_var ctx lr =
   let v = mk_fresh_bool_var ctx in
   let vi = mk_int_var ctx ("eqw"^(string_of_int !wc)) in
   wc := !wc + 1;
-  Hashtbl.add ht_eqvars lr (v, vi);
+  eq_vars := (lr, (v, vi)) :: !eq_vars;
   (v, vi) 
 ;;
 
 let store_eq_vars ctx rls = List.iter (ignore <.> store_eq_var ctx) rls
 
 let find_rule rl =
- try Hashtbl.find ht_rulevars rl
+ try snd (List.find (fun (st,_) -> Rule.variant st rl) !rule_vars)
  with Not_found -> failwith ("no rule variable for " ^ (Rule.to_string rl))
 ;;
 
 let rule_var ctx rl =
-  try Hashtbl.find ht_rulevars rl
+  try snd (List.find (fun (st,_) -> Rule.variant st rl) !rule_vars)
   with Not_found -> store_rule_var ctx rl
 ;;
 
 let eq_variant (l,r) st = Rule.variant st (l,r) || Rule.variant st (r,l)
 
 let find_eq rl =
- try fst (Hashtbl.find ht_eqvars rl)
+ try
+ fst (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
  with Not_found -> failwith ("no equation variable for " ^ (Rule.to_string rl))
 ;;
 
 let find_eq_weight rl =
- try snd (Hashtbl.find ht_eqvars rl)
+ try snd (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
  with Not_found -> failwith ("no equation weight for " ^ (Rule.to_string rl))
 ;;
 
 let eq_var ctx rl =
- try fst (Hashtbl.find ht_eqvars rl)
+ try fst (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
  with Not_found -> fst (store_eq_var ctx rl)
 ;;
 
 let eq_weight_var ctx rl =
- try snd (Hashtbl.find ht_eqvars rl)
+ try snd (snd (List.find (fun (st,_) -> eq_variant st rl) !eq_vars))
  with Not_found -> snd (store_eq_var ctx rl)
 ;;
 
