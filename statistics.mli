@@ -25,6 +25,8 @@ val mem_diffs : int list ref
 
 val memory : unit -> int
 
+val is_duplicating : Rules.t -> bool
+
 val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 
 val print : unit -> unit

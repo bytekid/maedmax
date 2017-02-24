@@ -33,6 +33,7 @@ let settings = Settings.default
 
 let sizes = ref [] (* to check degeneration *)
 let last_time = ref 0.0
+let start_time = ref 0.0
 let last_mem = ref 0
 
 (* caching for search strategies*)
@@ -68,7 +69,7 @@ let max_constraints _ =
   | (_,_,ms,_) :: _ -> ms
 ;;
 
-let max_iterations _ = 
+let strategy_limit _ = 
  match !(settings.strategy) with 
   | [] -> failwith "empty strategy list"
   | (_, _, _, i) :: _ -> i
@@ -136,19 +137,15 @@ let saturated ctx (rr,ee) rewriter cc =
 
 let succeeds ctx (rr,ee) rewriter cc gs =
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
-  if not (NS.is_empty gs) then (
-    let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
-    if NS.exists fixed gs then (
-      if !(settings.d) then (
-        let g = List.find fixed (NS.to_list gs) in
-        Format.printf "joined goal %a\n" Rule.print g);
-      Some Proof)
-    else None)
-  else if not (saturated ctx (rr,ee) rewriter cc) then None
-  else
-    if !(settings.unfailing) then
-      Some (GroundCompletion (rr, ee))
+  let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
+  if not (NS.is_empty gs) && NS.exists fixed gs then (
+    let g = List.find fixed (NS.to_list gs) in
+    if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print g;
+    Some Proof)
+  else if saturated ctx (rr,ee) rewriter cc then
+    if !(settings.unfailing) then Some (GroundCompletion (rr, ee))
     else Some (Completion rr)
+  else None
 ;;
 
 let succeeds ctx re rew cc =
@@ -419,9 +416,15 @@ let stuck_state es gs =
    hash_iteration := Listx.take 20 !hash_iteration;
  if rep && !(settings.d) then F.printf "Restart: repeated iteration state\n%!";
  (* iteration/size bound*)
- let max = !(St.iterations) > max_iterations () in
- if max && !(settings.d) then F.printf "Restart: maximum iterations reached\n";
- rep || max
+ let running_time = (Unix.gettimeofday () -. !(start_time)) in
+ let limit =
+   match strategy_limit () with
+    | IterationLimit i when !(St.iterations) > i -> true
+    | TimeLimit l when running_time > l -> true
+    | _ -> false
+ in
+ if limit && !(settings.d) then F.printf "Restart: limit reached\n";
+ rep || (limit && running_time > 3.)
 ;;
 
 let set_iteration_stats aa gs =
@@ -501,6 +504,7 @@ let init_settings fs es =
  settings.strategy := !(fs.strategy);
  settings.tmp := !(fs.tmp);
  settings.es := es;
+ start_time := Unix.gettimeofday ();
  last_time := Unix.gettimeofday ();
  last_mem := St.memory ();
  Settings.is_ordered := !(settings.unfailing);

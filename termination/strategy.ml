@@ -41,7 +41,7 @@ let ts_lpokbo = Orders (Choice (LPO, KBO))
 let ts_mpol = Orders (Seq [MPol])
 
 (* overall strategies *)
-let max = 10000
+let max = IterationLimit 10000
 let strategy_maxcomp = [ts_dpn, [],[Oriented], max]
 let strategy_maxcomp_lpo = [ts_lpo, [],[Oriented], max]
 
@@ -55,11 +55,12 @@ let strategy_dp = [ts_dpn, [Red; Comp], [CPsRed], max]
 let strategy_dg = [ts_dg, [Red; Comp], [CPsRed], max]
 let strategy_dgk = [ts_dgk, [Red; Comp], [CPsRed], max]
 let strategy_not_oriented = [ ts_dpn, [Red; Comp], [NotOriented], max]
-let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed], max); (ts_dp, [Comp], [MaxRed], max)]
-let strategy_ordered = [ (ts_kbo, [], [MaxRed], 8);
-                         (ts_lpo, [], [MaxRed], 12);
-                         (ts_kbo, [], [MaxRed], 100);
-                         (ts_lpo, [], [MaxRed], 100); ]
+let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed], max);
+                    (ts_dp, [Comp], [MaxRed], max)]
+let strategy_ordered = [ (ts_kbo, [], [MaxRed], IterationLimit 8);
+                         (ts_lpo, [], [MaxRed], IterationLimit 12);
+                         (ts_kbo, [], [MaxRed], IterationLimit 100);
+                         (ts_lpo, [], [MaxRed], IterationLimit 200); ]
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
 let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
 let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max]
@@ -112,8 +113,13 @@ let mc_to_string = function
 ;;
 
 let setting_to_string (t, c, mc, i) =
+ let limit =
+   match i with
+    | IterationLimit i -> string_of_int i ^ " cycles"
+    | TimeLimit l -> string_of_float l ^ "s"
+ in
  "(" ^ (term_to_string t) ^ ", " ^(Listx.to_string c_to_string ", " c) ^ ", " ^
-   (Listx.to_string mc_to_string ", " mc) ^ ", " ^ (string_of_int i) ^")"
+   (Listx.to_string mc_to_string ", " mc) ^ ", " ^ limit ^")"
 ;;
 
 let to_string = Listx.to_string setting_to_string ", "
