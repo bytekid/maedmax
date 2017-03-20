@@ -8,16 +8,20 @@ let rename = Rule.rename
 
 let mgu' s t = try Some (mgu s t) with Not_unifiable -> None
 
-let overlaps_between rule1 rule2 =
+let overlap_between_at rule1 rule2 p =
   let l1,r1 = rename rule1 and l2, r2 = rename rule2 in
-  let add acc p =
-   if (p = [] && (Rule.variant (l1, r1) (l2, r2))) then acc
-   else
+  if (p = [] && (Rule.variant (l1, r1) (l2, r2))) then None
+  else
     match mgu' (subterm_at p l2) l1 with
+     | None -> None
+     | Some sigma -> Some ((l1, r1), p, (l2, r2), sigma)
+;;
+
+let overlaps_between rule1 rule2 =
+  let add acc p = match overlap_between_at rule1 rule2 p with
      | None -> acc
-     | Some sigma -> ((l1, r1), p, (l2, r2), sigma) :: acc
-  in   
-  List.fold_left add [] (function_positions l2)
+     | Some o -> o :: acc
+  in List.fold_left add [] (function_positions (fst rule2))
 ;;
 
 let overlap2 rules1 rules2 = 
