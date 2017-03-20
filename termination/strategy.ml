@@ -216,7 +216,7 @@ let order_choice_constraints ctx j rs (o1, o2) =
    let j' = j+1 in
    let choice = try Hashtbl.find choice_vars j with _ -> failwith "no choice var" in
    let c' = (choice <&> (gt j' lr o1)) <|> (!!choice <&> (gt j' lr o2)) in
-   let c =  (s ctx j lr) <=>> c' in
+   let c = (s ctx j lr) <=>> c' in
    Hashtbl.add constraints (lr,j) c; c)
  in big_and ctx [constr rl | rl <- rs ]
 ;;
@@ -470,8 +470,16 @@ let get_termination = function
   | _ -> failwith "Strategy.get_termination: empty settings list"
 ;;
 
-let cond_gt = function
-  | Orders(Seq(LPO :: _)) -> Lpo.cond_gt
-  | Orders(Seq(KBO :: _)) -> Kbo.cond_gt
-  | _ -> failwith "Strategy.cond_gt: not implemented"
+let cond_gt o j c cs s t =
+  let ocgt = function
+      LPO -> Lpo.cond_gt
+    | KBO -> Kbo.cond_gt
+    | _ -> failwith "Strategy.cond_gt: not implemented"
+  in
+  match o with
+    | Orders(Seq(o :: _)) -> ocgt o j c cs s t
+    | Orders (Choice (o1,o2)) ->
+      let choice = Hashtbl.find choice_vars j in
+      (choice <&> (ocgt o1 j c cs s t)) <|> (!!choice <&> (ocgt o2 j c cs s t))
+    | _ -> failwith "Strategy.cond_gt: not implemented"
 ;;
