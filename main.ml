@@ -34,8 +34,7 @@ let options = Arg.align
    ("-K", Arg.Int (fun n -> settings.k := (fun _ -> n); k := n),
     "<n> compute n maximal terminating TRSs");
    ("-M", Arg.String (fun s -> 
-       (*if s = "maxcomp" then settings.max_constraint := Oriented
-       else*) if s = "cpred" then settings.strategy := S.strategy_cpred
+       if s = "cpred" then settings.strategy := S.strategy_cpred
        else if s = "comp" then settings.strategy := S.strategy_comp
        else if s = "dp" then settings.strategy := S.strategy_dp
        else if s = "dg" then settings.strategy := S.strategy_dg
