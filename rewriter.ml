@@ -113,14 +113,24 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
 
   val nf_table : (Term.t, Term.t * Rules.t) H.t = H.create 256
 
-  val index =
+  val mutable index = FingerprintIndex.empty
+
+  method init () =
     let cs = [ Ac.commutativity f | f <- acs] in
     let cas = [ Ac.cassociativity f | f <- acs] in
     let eqs = [ l, ((l,r), false)| l,r <- cs @ cas ] in
     let rules = [ l,((l,r), true) | l,r <- trs ] in
-    FingerprintIndex.create (eqs @ rules)
+    index <- FingerprintIndex.create (eqs @ rules)
 
   method trs = trs
+
+  method add es =
+    let cs = [ Ac.commutativity f | f <- acs] in
+    let cas = [ Ac.cassociativity f | f <- acs] in
+    let es' = es @ [r,l | l,r <- es ] in
+    let eqs = [ l, ((l,r), false)| l,r <- cs @ cas @ es' ] in
+    let rules = [ l,((l,r), true) | l,r <- trs ] in
+    index <- FingerprintIndex.create (eqs @ rules)
 
   (* Returns tuple (u, rs) of some normal form u of t that was obtained using
      rules rs *)

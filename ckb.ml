@@ -471,7 +471,8 @@ let rec phi ctx aa gs =
   let process (j, aa, gs) (rr,c, gt) =
     let trs_n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index trs_n in
-    let rew = new Rewriter.rewriter rr_red (*!(settings.ac_syms*) [] gt in
+    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) gt in
+    rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in
     let irred = NS.filter N.not_increasing (NS.symmetric irred) in
@@ -481,6 +482,7 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
+    rew#add ee;
     let gcps = reduced rew (overlaps_on rr irred gs) in (* rewrite goal CPs *)
     let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
