@@ -237,3 +237,11 @@ let rec is_embedded s t =
    (List.exists (is_embedded s) ts)
   | _, F (g,ts) -> List.exists (is_embedded s) ts
 ;;
+
+let rec to_xml = function
+  | V x -> Xml.Element("var", [], [Xml.PCData (get_var_name x)])
+  | F(f, ts) ->
+    let xs = Xml.Element ("args", [], List.map to_xml ts) in
+    let name = Xml.Element("name", [], [Xml.PCData (get_fun_name f)]) in
+    Xml.Element("funapp", [], [name; xs])
+;;
