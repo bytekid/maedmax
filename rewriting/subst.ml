@@ -39,8 +39,6 @@ let mgu l r =
 let unifiable term1 term2 = 
   try ignore (mgu term1 term2); true with Not_unifiable -> false 
 
-
-
 let rec pattern_match' subst = function 
   | [] -> subst
   | (V x as l, t) :: list ->
