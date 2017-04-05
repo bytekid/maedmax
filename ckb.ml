@@ -21,7 +21,7 @@ module NS = Nodes.Make(N)
 (*** TYPES *******************************************************************)
 type result = Completion of Rules.t
   | GroundCompletion of (Rules.t * Rules.t)
-  | Proof
+  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list))
 
 (*** EXCEPTIONS **************************************************************)
 exception Success of result
@@ -139,9 +139,10 @@ let succeeds ctx (rr,ee) rewriter cc gs =
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
   if not (NS.is_empty gs) && NS.exists fixed gs then (
-    let g = List.find fixed (NS.to_list gs) in
-    if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print g;
-    Some Proof)
+    let (s,t) = List.find fixed (NS.to_list gs) in
+    let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
+    if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print (s,t);
+    Some (Proof ((s,t),(rss,rst))))
   else if saturated ctx (rr,ee) rewriter cc then
     if !(settings.unfailing) then Some (GroundCompletion (rr, ee))
     else Some (Completion rr)
@@ -482,7 +483,7 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
-    rew#add ee;
+    (*rew#add ee;*)
     let gcps = reduced rew (overlaps_on rr irred gs) in (* rewrite goal CPs *)
     let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
@@ -498,7 +499,7 @@ let rec phi ctx aa gs =
   with Success r -> r
 ;;
 
-let init_settings fs es =
+let init_settings fs es gs =
  settings.ac_syms := Ac.symbols es;
  settings.d := !(fs.d);
  St.iterations := 0;
@@ -510,6 +511,8 @@ let init_settings fs es =
  last_time := Unix.gettimeofday ();
  last_mem := St.memory ();
  Settings.is_ordered := !(settings.unfailing);
+ if !(Settings.do_proof) then
+   Trace.add_initials es;
  if !(settings.d) then
    F.printf "AC syms: %s \n%!"
      (List.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
@@ -540,15 +543,16 @@ let rec ckb fs es gs =
  (* init state *)
  let ctx = mk_context () in
  let es0 = L.map N.normalize es in
+ let gs0 = L.map N.normalize gs in
  try
-  init_settings fs es0;
+  init_settings fs es0 gs0;
   let cas = [ Ac.cassociativity f | f <- !(settings.ac_syms)] in
   let es0 = [ Variant.normalize_rule rl | rl <- cas ] @ es0 in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   let ss = Listx.unique (t_strategies ()) in
-  L.iter (fun s -> Strategy.init s 0 ctx (gs @ es0)) ss;
-  let res = phi ctx ns0 (NS.of_list gs) in
+  L.iter (fun s -> Strategy.init s 0 ctx (gs0 @ es0)) ss;
+  let res = phi ctx ns0 (NS.of_list gs0) in
   if !(fs.output_tproof) then termination_output res;
   del_context ctx;
   res

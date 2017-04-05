@@ -79,8 +79,10 @@ let interreduce rr =
 
 let union_es es1 es2 = unique ~eq:eq_variant (es1 @ es2)
 
-let normalize_rule (s,t) =
+let normalize_rule_dir (s,t) =
  let s',t' =  Term.rename_canonical s, Term.rename_canonical t in
- let rule = if s' < t' then (s,t) else (t,s) in
- rename_rule [] rule
+ let rule, dir = if s' < t' then (s,t), true else (t,s), false in
+ rename_rule [] rule, dir
 ;;
+
+let normalize_rule (s,t) = fst (normalize_rule_dir (s,t))

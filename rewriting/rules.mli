@@ -36,3 +36,4 @@ val rpl_spcl_char : t -> t
 
 val is_srs : t -> bool
 
+val to_xml : t -> Xml.xml

@@ -25,7 +25,7 @@ module type T = sig
   (* Compute normal form of term with respect to rules using rewriter object.
      Result is not normalized  *)
   val rewriter_nf_with : Rewriter.rewriter -> t ->
-    (t list * t list * Rule.t list) option
+    (t list * t list * Rules.t) option
   (* whether the TRS joins the equation *)
   val joins : Rules.t -> t -> bool
   (* less-than-or-equal, to fit Ordered module type for heaps *)

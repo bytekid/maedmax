@@ -92,7 +92,6 @@ let map f (l,r) = (f l, f r)
 
 let substitute sigma = map (Term.substitute sigma)
 
-
 let to_xml (l,r) =
   let lhs = Xml.Element("lhs", [], [Term.to_xml l]) in
   let rhs = Xml.Element("rhs", [], [Term.to_xml r]) in

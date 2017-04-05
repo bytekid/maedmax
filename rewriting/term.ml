@@ -6,6 +6,8 @@ type t =
   | V of Signature.var
   | F of Signature.sym * t list
 
+type pos = int list
+
 type binding = Signature.var * t
 
 type subst = binding list
@@ -241,7 +243,7 @@ let rec is_embedded s t =
 let rec to_xml = function
   | V x -> Xml.Element("var", [], [Xml.PCData (get_var_name x)])
   | F(f, ts) ->
-    let xs = Xml.Element ("args", [], List.map to_xml ts) in
+    let xs = List.map (fun a -> Xml.Element ("arg", [], [to_xml a])) ts in
     let name = Xml.Element("name", [], [Xml.PCData (get_fun_name f)]) in
-    Xml.Element("funapp", [], [name; xs])
+    Xml.Element("funapp", [], name :: xs)
 ;;

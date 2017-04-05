@@ -33,7 +33,7 @@ module type T = sig
   (* Compute normal form of term with respect to rules, using rewriter object.
      Result is not normalized  *)
   val rewriter_nf_with : Rewriter.rewriter -> t ->
-    (t list * t list * R.t list) option
+    (t list * t list * Rules.t) option
   (* whether the TRS joins the equation *)
   val joins : Rules.t -> t -> bool
   (* less-than-or-equal, to fit Ordered module type for heaps *)
@@ -69,7 +69,13 @@ module Equation = struct
 
   let not_increasing (l,r) = not (Term.is_subterm l r)
 
-  let cps r1 r2 = [ O.cp_of_overlap o | o <- O.overlaps_between r1 r2 ]
+  let cps r1 r2 =
+    let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2 ] in
+    if !(Settings.do_proof) then (
+      let add ((s,t),o) = if s<>t then Trace.add_overlap (normalize (s,t)) o in
+      List.iter add os);
+    List.map fst os
+  ;;
 
   let cps r1 = Statistics.take_time Statistics.t_tmp2 (cps r1)
 
@@ -84,9 +90,13 @@ module Equation = struct
   let rewriter_nf_with rewriter ((s,t) as rl) =
     let s', rs = rewriter#nf s in
     let t', rt = rewriter#nf t in
-    if s' = t' then Some([], [], rs@rt)
+    let rls = List.map fst (rs @ rt) in
+    if s' = t' then Some([], [], rls)
     else if R.equal rl (s',t') then None
-    else Some([], [s', t'], rs@rt)
+    else (
+      if !(Settings.do_proof) then
+        Trace.add_rewrite (normalize (s',t')) (s,t) (rs,rt);
+      Some ([], [s', t'], rls))
   ;;
   
   let joins trs (s,t) = 

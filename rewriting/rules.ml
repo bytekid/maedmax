@@ -4,8 +4,7 @@ open Term
 
 type t = Rule.t list
 
-let print ppf rules =
-  let rs = List.sort Pervasives.compare rules in
+let print ppf rs =
   fprintf ppf "@[<v 0> %a@]" (print_list Rule.print "\n ") rs
 
 let print_with sep ppf rules =
@@ -89,3 +88,5 @@ let rpl_spcl_char rules =
  [ rpl_trm s, rpl_trm t | s,t <- rules ]
 
 let is_srs rs = List.for_all (fun (_,a) -> a = 1)(signature rs)
+
+let to_xml rs = Xml.Element("rules", [], List.map Rule.to_xml rs)

@@ -184,13 +184,13 @@ let ordered_ac_step sys ctx conds (l,r) (u,c0) =
     if gt_simp conds (x', y') then substitute sub r, True
     else if no_order_check conds x' y' then u, True (* false/no step *)
     else ( 
-    if !debug then Format.printf "   SAT check %a %!" Rule.print (x', y');
+    (*if !debug then Format.printf "   SAT check %a %!" Rule.print (x', y');*)
     let c = Strategy.cond_gt sys.order 1 ctx conds x' y' in
     if check_ordering_constraints sys.trs (yices_answer ctx c0 <&> c) then (
-      if !debug then Format.printf "yes \n%!";
+      (*if !debug then Format.printf "yes \n%!";*)
       substitute sub r, c0 <&&> Maybe c)
     else (
-      if !debug then Format.printf "no \n%!"; u, c0 (* no step *)
+      (*if !debug then Format.printf "no \n%!";*) u, c0 (* no step *)
     ))
   with Subst.Not_matched -> u, c0
 ;;

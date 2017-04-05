@@ -1,5 +1,7 @@
 type t = Rule.t * int list * Rule.t * Subst.t
 
+val overlap_between_at : Rule.t -> Rule.t -> int list -> t option
+
 val overlaps_between : Rule.t -> Rule.t -> t list
 
 val overlaps : Rules.t -> t list

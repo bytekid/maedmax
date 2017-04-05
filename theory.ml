@@ -183,7 +183,6 @@ module Lattice = struct
     Ac.is_for es f && Ac.is_for es g
   ;;
 
-
   let count es =
     let fs = Rules.signature es in
     let bs = [ f | f,a <- fs; a = 2 ] in

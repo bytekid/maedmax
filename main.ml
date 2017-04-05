@@ -1,13 +1,13 @@
 (*** MODULES *****************************************************************)
-module S = Strategy;;
+module S = Strategy
+module F = Format
 
 (*** OPENS *******************************************************************)
 open Format
 open Settings
 open Yojson.Basic
 
-(* command line option *)
-
+(*** GLOBALS *****************************************************************)
 let short_usage = "ckb v0.1\nUsage: ckb <options> <file>\n"
 let filenames = ref []
 
@@ -20,13 +20,17 @@ let only_termination = ref false
 let timeout = ref 60.0
 
 let strategy = ref []
-       
-(* main *)
+
 let options = Arg.align 
   [("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");
    ("-analyze", Arg.Unit (fun _ -> analyze := true),
     " print problem analysis");
+   ("-cpf", Arg.Set Settings.do_proof,
+    " output CPF proof");
+   ("-cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
+                                Settings.do_proof_debug := true),
+    " output CPF proof plus debug output");
    ("-d", Arg.Set settings.d,
     " print debugging output");
    ("-json", Arg.Set settings.json,
@@ -73,6 +77,7 @@ let options = Arg.align
     " various purposes")
  ]
 
+(*** FUNCTIONS ***************************************************************)
 let print_trs ppf rules = 
   fprintf ppf "(VAR %s)@.(RULES@.%a@.)@."
     (String.concat " " (List.map Signature.get_var_name (Rules.variables rules)))
@@ -86,13 +91,13 @@ let print_trs_eqs ppf (rules, eqs) =
 let print_es ppf eqs = fprintf ppf "(EQUATIONS@.%a@.)@." (Rules.print_with "=") eqs
 
 let trs_string rules =
- Format.fprintf Format.str_formatter "%a" print_trs rules;
- Format.flush_str_formatter ()
+ F.fprintf F.str_formatter "%a" print_trs rules;
+ F.flush_str_formatter ()
 ;;
 
 let trs_eqs_string re =
- Format.fprintf Format.str_formatter "%a" print_trs_eqs re;
- Format.flush_str_formatter ()
+ F.fprintf F.str_formatter "%a" print_trs_eqs re;
+ F.flush_str_formatter ()
 ;;
 
 let call () =
@@ -106,7 +111,7 @@ let print_json f res settings =
   | Ckb.Completion rr -> trs_string rr
   | Ckb.GroundCompletion (rr,ee) ->
     if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
-  | Ckb.Proof -> "..."
+  | Ckb.Proof _ -> "..."
  in
  let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
  let t = `Assoc [
@@ -118,7 +123,7 @@ let print_json f res settings =
     (Strategy.to_string !(settings.strategy)) !k;
   "chracteristics", Statistics.analyze !(settings.es)
  ] in
- Format.printf "%s\n%!" (pretty_to_string t)
+ F.printf "%s\n%!" (pretty_to_string t)
 ;;
 
 let print_json_term yes f =
@@ -127,7 +132,7 @@ let print_json_term yes f =
   "result",`String (if yes then "YES" else "MAYBE");
   "time", f;
   "config",`String (call())] in
- Format.printf "%s\n%!" (pretty_to_string t)
+ F.printf "%s\n%!" (pretty_to_string t)
 ;;
 
 let print_res res =
@@ -137,18 +142,27 @@ let print_res res =
    | Ckb.GroundCompletion (rr,ee) ->
     (printf "%a@." print_trs rr;
     if ee <> [] then printf "ES:@.%a@." print_es ee)
-   | Ckb.Proof -> printf "(proof)\n"
+   | Ckb.Proof _ -> printf "(proof)\n"
 ;;
 
 let print_analysis es =
- Format.printf "%s\n%!" (pretty_to_string (Statistics.analyze es))
+ F.printf "%s\n%!" (pretty_to_string (Statistics.analyze es))
 ;;         
 
 let clean =
   let reduce rr = Listx.unique (Variant.reduce rr) in function
  | Ckb.Completion trs -> Ckb.Completion (reduce trs)
  | Ckb.GroundCompletion (rr,ee) -> Ckb.GroundCompletion (reduce rr, reduce ee)
- | Ckb.Proof -> Ckb.Proof
+ | Ckb.Proof p -> Ckb.Proof p
+;;
+
+let show_proof (es,gs) = function
+    Ckb.Proof ((s,t),(rs, rt)) ->
+      let p = Trace.xml_goal_proof es (List.hd gs) ((s,t),(rs, rt)) in
+      F.printf "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+      F.printf "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n";
+      F.printf "%s\n" (Xml.to_string_fmt p)
+  | _ -> failwith "Main.show_proof: not yet supported if no goal present"
 ;;
 
 let () =
@@ -170,11 +184,14 @@ let () =
          let secs = Timer.length ~res:Timer.Seconds timer in
          print_json secs (clean res) settings
         ) else (
-         print_res (clean res);
-	       Timer.stop timer;
-         let secs = Timer.length ~res:Timer.Seconds timer in
-         printf "%s %.2f %s@." "Search time:" secs "seconds";
-         Statistics.print ()
+         if !(Settings.do_proof) then
+           show_proof (es,gs) res
+         else (
+           print_res (clean res);
+	         Timer.stop timer;
+           let secs = Timer.length ~res:Timer.Seconds timer in
+           printf "%s %.2f %s@." "Search time:" secs "seconds";
+           Statistics.print ())
          )
        with e -> printf "MAYBE@."; raise e end
       else if !analyze then

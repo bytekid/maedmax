@@ -39,12 +39,12 @@ module FingerprintIndex = struct
   type 'a t = Leaf of 'a | Node of (F.feature, 'a t) H.t
 
   let rec to_string = function
-    | Leaf rs -> "[" ^ (string_of_int (List.length rs)) ^ "]"
+    | Leaf rs -> "[" ^ (string_of_int (L.length rs)) ^ "]"
     | Node h -> Hashtbl.fold (fun f t r -> (F.feature_string f) ^ " -> @[" ^ (to_string t) ^"@]\n"^ r) h ""
   ;;
 
   let rec print ppf = function
-    | Leaf rs -> Format.fprintf ppf "[%d]%!" (List.length rs)
+    | Leaf rs -> Format.fprintf ppf "[%d]%!" (L.length rs)
     | Node h ->
       let fs = F.feature_string in
       let binding f t = Format.fprintf ppf " %s -> (@[ %a@])\n" (fs f) print t in
@@ -111,7 +111,7 @@ type term_cmp = Term.t -> Term.t -> bool
 class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
   object (self)
 
-  val nf_table : (Term.t, Term.t * Rules.t) H.t = H.create 256
+  val nf_table : (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t = H.create 256
 
   val mutable index = FingerprintIndex.empty
 
@@ -139,10 +139,10 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
   (* Returns tuple (u, rs@rs') where u is a normal form of t that was obtained
      using rules rs'. Lookup in table, otherwise compute. *)
   method nf' rs t = 
-    try let u, urs = H.find nf_table t in u, urs @ rs with
+    try let u, urs = H.find nf_table t in u, rs @ urs with
     Not_found -> (
       let u,urs = self#nf_compute t in
-      H.add nf_table t (u,urs); u, urs @ rs)
+      H.add nf_table t (u,urs); u, rs @ urs)
 
   (* Returns tuple (s, rs) where s is some normal form of t that was obtained
      using rules rs. Attempts doing a parallel step on t; if this yields a
@@ -157,7 +157,7 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
   method check t =
    let eqs = Ac.eqs acs in
    let rs = L.filter (fun (l,_) -> Subst.is_instance_of t l) (trs @ eqs) in
-   let rs' = List.map fst (FingerprintIndex.get_matches t index) in
+   let rs' = L.map fst (FingerprintIndex.get_matches t index) in
    assert (Listset.subset rs rs')
   ;;
 
@@ -180,8 +180,12 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
   method pstep = function
     | Term.V _ as t -> t, []
     | Term.F (f, ts) ->
-      let concat (us,rs) ti = let ui,rsi = self#pstep ti in (us@[ui], rsi@rs) in
-      let us, urs = List.fold_left concat ([], []) ts in
+      let concat (us,rs) (i,ti) =
+        let ui,rsi = self#pstep ti in 
+        let rsi = L.map (fun (rl,p) -> rl,i::p) rsi in
+        us @ [ui], rs @ rsi
+      in
+      let us, urs = L.fold_left concat ([], []) (Listx.index ts) in
       if urs <> [] then Term.F (f, us), urs
       else (* step in arguments not possible, attempt root step *)
         begin
@@ -191,7 +195,7 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
         let opt, u = self#rewrite_at_root (Term.F (f, us)) rs in
         match opt with
           | None -> u, []
-          | Some rl -> u, [rl]
+          | Some rl -> u, [rl,[]]
         end
   ;;
 end

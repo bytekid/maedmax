@@ -51,3 +51,5 @@ val size : t -> int
 val is_dp : t -> bool
 
 val substitute : Term.subst -> t -> t
+
+val to_xml : t -> Xml.xml

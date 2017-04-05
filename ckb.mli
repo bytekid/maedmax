@@ -1,6 +1,6 @@
 type result = Completion of Rules.t
   | GroundCompletion of (Rules.t * Rules.t)
-  | Proof
+  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list))
 
 val settings: Settings.t
 

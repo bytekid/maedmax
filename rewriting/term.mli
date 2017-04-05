@@ -6,6 +6,8 @@ type t =
   | V of Signature.var
   | F of Signature.sym * t list
 
+type pos = int list
+
 type binding = Signature.var * t
 
 type subst = binding list
@@ -71,3 +73,5 @@ val depth :  t -> int
 val is_sharped : t -> bool
 
 val is_embedded : t -> t -> bool
+
+val to_xml : t -> Xml.xml
