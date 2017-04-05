@@ -122,6 +122,20 @@ let reduced rr ns =
   let (irred, news) = rewrite rr ns in NS.add_all news irred
 ;;
 
+let interreduce rr =
+ let rew = new Rewriter.rewriter rr [] (fun _ _ -> false) in
+ let right_reduce (l,r) =
+   let r', rs = rew#nf r in
+   if r <> r' then (
+     if !(Settings.do_proof) then
+       Trace.add_rewrite (N.normalize (l,r')) (l,r) ([],rs);
+     add_rewrite_trace (l,r) (List.map fst rs) (l,r'));
+   (l,r')
+  in
+  let rr_hat = Listx.unique ((List.map right_reduce) rr) in
+  [ l,r | l,r <- rr_hat; not (Rewriting.reducible_with (Listx.remove (l,r) rr_hat) l) ]
+;;
+
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let saturated ctx (rr,ee) rewriter cc =
  let covered n =
@@ -453,7 +467,9 @@ let set_iteration_stats aa gs =
 let store_trs ctx j rr c =
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS is used; have to store *)
-  let rr_reduced = Variant.reduce rr in
+  let rr_reduced =
+    if !(Settings.do_proof) then interreduce rr else Variant.reduce rr
+  in
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;

@@ -270,8 +270,9 @@ let rec goal_ancestors rule_acc gconv_acc g o =
 (* (s,t) is the goal that was proven, (rs,rt) the rules used to rewrite it to
    the common normal form, g_orig is the normalized original goal *)
 let goal_proof g_orig (s,t) (rs,rt) =
-  if !(S.do_proof_debug) then
-    Format.printf "\nfind the goal conversion for %a:\n%!" R.print (s,t);
+  if !(S.do_proof_debug) then (
+    Format.printf "\nProve original goal %a:\n%!" R.print g_orig;
+    Format.printf "\nfind the goal conversion for %a:\n%!" R.print (s,t));
   let t', rtconv = rev (t,rewrite_conv t rt) in
   let goal_conv = (s,t), (s,rewrite_conv s rs @ rtconv) in
   if !(S.do_proof_debug) then
