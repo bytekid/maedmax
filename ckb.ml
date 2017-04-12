@@ -510,7 +510,7 @@ let rec phi ctx aa gs =
     let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.add_list sel aa, NS.add_list gg gs
+     | None -> j+1, NS.subsumption_free (NS.add_list sel aa), NS.add_list gg gs
   in
   try
     let rrs = max_k ctx aa gs in

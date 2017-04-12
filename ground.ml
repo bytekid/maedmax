@@ -222,7 +222,8 @@ let order_extensible ord (s,t) =
 
 let rec joinable ctx sys p =
   if r_joinable ctx sys p || (e_instance ctx sys p) then True
-  else ac_joinable ctx sys p
+  else if sys.acsyms <> [] then ac_joinable ctx sys p
+  else instance_joinable ctx sys p None
   (*let j0 = joinable_args ctx sys p in
   if j0 = True then True else
   let j1 = ac_joinable ctx sys p in
@@ -294,7 +295,7 @@ and ac_joinable_for_ord ctx sys p f =
         (* more case distinction possible *)
         ac_joinable_for ctx sys {p with s = s'; t = t'} f
       else if !extended_signature then False
-      else instance_joinable ctx sys { p with s = s'; t = t' } f)
+      else instance_joinable ctx sys { p with s = s'; t = t' } (Some f))
 
 and instance_joinable ctx sys p ac =
   if p.inst <= 0 then False else
@@ -320,7 +321,9 @@ and instance_joinable ctx sys p ac =
       else (
         let id = p.id ^ Sig.get_fun_name f ^ "-" in
         let p' = { s = s1; t = t1; inst = p.inst-1; var_order = xs; id = id } in
-        ac_joinable_for_ord ctx sys p' ac)
+        match ac with 
+          | Some ac_sym -> ac_joinable_for_ord ctx sys p' ac_sym
+          | None -> if r_joinable ctx sys p' then True else False)
     in
     let ijoin_check a f = if a = False then a else instance_joinable f <&&> a in
     List.fold_left ijoin_check True fs)
