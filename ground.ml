@@ -203,13 +203,13 @@ let ac_reducts ctx sys conds f (u,c) =
   in reducts [] (positions u) (*@ [ r,c | r <- Rewriting.reducts sys.trs u ]*)
 ;;
 
-let ac_equivalent = Node.Equation.is_ac_equivalent
-
 let ac_join ctx sys conds f s t =
   let s_nf, cs = ac_nf ctx sys conds f s in 
   let t_nf, ct = ac_nf ctx sys conds f t in
-  Format.printf "AC normalization: %a = %a get %a = %a\n%!" Term.print s Term.print t Term.print s_nf Term.print t_nf;
-  if s_nf = t_nf || ac_equivalent [f] (s_nf, t_nf) then cs <&&> ct else False
+  if !debug then 
+    Format.printf "AC normalization: %a = %a get %a = %a\n%!"
+      Term.print s Term.print t Term.print s_nf Term.print t_nf;
+  if s_nf=t_nf || Theory.Ac.equivalent [f] (s_nf,t_nf) then cs <&&>ct else False
 ;;
 
 let order_extensible ord (s,t) =
@@ -245,8 +245,10 @@ and joinable_args ctx sys p =
 
 and ac_joinable ctx sys p =
   let join_for = ac_joinable_for ctx sys p in
-  if Node.Equation.is_ac_equivalent sys.acsyms (p.s,p.t) then True
-  else List.fold_left (fun b f -> join_for f <||> b) False sys.acsyms
+  if Theory.Ac.equivalent sys.acsyms (p.s,p.t) then True
+  else
+    let jcheck b f = if b = True then b else join_for f <||> b in
+    List.fold_left jcheck False sys.acsyms
 
 and ac_joinable_for ctx sys p f =
   if !debug then Format.printf "%s. check f joinability of %a wrt %!" p.id Rule.print (p.s,p.t);
@@ -256,14 +258,14 @@ and ac_joinable_for ctx sys p f =
   then
     False
   else
-    (* variables not yet considered in order *)
+    (* add variables not yet considered in order *)
     let varords = extend_var_orders p.var_order (p.s,p.t) in
     let joinable o i =
       let id = p.id ^ (string_of_int i) ^ "-" in
       ac_joinable_for_ord ctx sys {p with var_order = o; id = id }
     in
-    let os = Listx.index varords in
-    List.fold_left (fun a (i,(o,st)) -> joinable o i f <&&> a) True os
+    let jcheck a (i,(o,st)) = if a = False then a else joinable o i f <&&> a in
+    List.fold_left jcheck True (Listx.index varords)
 
 and ac_joinable_for_ord ctx sys p f =
   if !debug then (
@@ -292,7 +294,7 @@ and ac_joinable_for_ord ctx sys p f =
       else instance_joinable ctx sys { p with s = s'; t = t' } f)
 
 and instance_joinable ctx sys p ac =
-  if p.inst <= 0 then (Format.printf "GIVE UP\n"; False) else
+  if p.inst <= 0 then False else
   match List.rev p.var_order with
    | (V x :: _) -> ( (* take smallest *)
     if !debug then Format.printf "  instantiate %a \n" Term.print (V x);
@@ -316,7 +318,9 @@ and instance_joinable ctx sys p ac =
         let id = p.id ^ Sig.get_fun_name f ^ "-" in
         let p' = { s = s1; t = t1; inst = p.inst-1; var_order = xs; id = id } in
         ac_joinable_for_ord ctx sys p' ac)
-    in List.fold_left (fun a f -> instance_joinable f <&&> a) True fs)
+    in
+    let ijoin_check a f = if a = False then a else instance_joinable f <&&> a in
+    List.fold_left ijoin_check True fs)
    | _ -> False
 ;;
 
@@ -330,8 +334,6 @@ let lookup trs es st =
 
 let joinable ctx ord (trs, es, acsyms) st d =
   debug := d;
-  let check ee e = if List.exists (Rule.is_instance e) ee then ee else e::ee in
-  let es = List.fold_left check [] es in 
   if lookup trs es st then true
   else (
     if d then Format.printf "START\ %a n%!" Rule.print st;
@@ -339,8 +341,8 @@ let joinable ctx ord (trs, es, acsyms) st d =
       | True -> true
       | False -> false
       | Maybe c -> if check_ordering_constraints trs c then
-        (if d then Format.printf "Ordering constraints UNSAT\n%!"; true) else
-        (if d then Format.printf "Ordering constraints SAT\n%!"; false)     
+        (if d then Format.printf "Ordering constraints SAT\n%!"; true) else
+        (if d then Format.printf "Ordering constraints UNSAT\n%!"; false)     
     in
     if d then (
       if not j then Format.printf "Not joinable: %a in %a\n" Rule.print st Rules.print es;
