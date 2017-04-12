@@ -46,6 +46,12 @@ let reduce rls =
  let rls_hat = r_hat rls in
  [ l, r | l,r <- rls_hat; l = nf (remove_rule (l,r) rls_hat) l ]
 
+let reduce_encomp rls =
+ let rls_hat = r_hat rls in
+ let proper_enc l l' = Subst.enc l l' && not (Subst.enc l' l) in
+ let enc_red l = List.exists (fun (l',r') -> proper_enc l l') rls_hat in
+ [ l, r | l,r <- rls_hat; not (enc_red l) ]
+
 let right_reduce rls =
  let rls_hat = r_hat rls in
  [ l, r | l,r <- rls_hat; nf (remove_rule (l,r) rls_hat) l <> r ]

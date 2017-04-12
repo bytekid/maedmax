@@ -29,6 +29,7 @@ type t = {
  tmp      : int ref; (* various purpose parameter *)
  output_tproof : bool ref;
  check_subsumption : bool ref;
+ extended_signature: bool ref
 }
 
 (*** GLOBALS *****************************************************************)
@@ -48,7 +49,8 @@ let default = {
  strategy  = ref [];
  tmp       = ref 19;
  output_tproof = ref false;
- check_subsumption = ref false
+ check_subsumption = ref false;
+ extended_signature = ref false
 }
 
 let do_assertions = ref false

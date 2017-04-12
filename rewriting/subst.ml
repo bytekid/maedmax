@@ -12,6 +12,12 @@ let add x t subst =
     (x, t) :: 
     [ y, substitute [x, t] term | (y, term) <- subst; not (x = y) ]
 
+let after mu sigma = 
+  let after1 sigma' (x,t) = add x t sigma' in 
+  List.fold_left after1 sigma mu
+;;
+
+
 let rec unify_aux subst = function
   | [] -> subst
   | (s, t) :: eqs when s = t -> unify_aux subst eqs

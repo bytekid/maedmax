@@ -30,6 +30,8 @@ let joinable_cache : (Rules.t * Rules.t * Rule.t) list ref = ref [];;
 
 let debug : bool ref = ref false
 
+let extended_signature : bool ref = ref false
+
 (*** FUNCTIONS ***************************************************************)
 let (<&>) = Yicesx.(<&>)
 let (<|>) = Yicesx.(<|>)
@@ -291,6 +293,7 @@ and ac_joinable_for_ord ctx sys p f =
       if xs <> [] then
         (* more case distinction possible *)
         ac_joinable_for ctx sys {p with s = s'; t = t'} f
+      else if !extended_signature then False
       else instance_joinable ctx sys { p with s = s'; t = t' } f)
 
 and instance_joinable ctx sys p ac =
@@ -332,12 +335,15 @@ let lookup trs es st =
   List.exists covered !joinable_cache
 ;;
 
-let joinable ctx ord (trs, es, acsyms) st d =
+let joinable ctx ord (trs, es, acsyms) st xsig d =
   debug := d;
+  extended_signature := xsig;
   if lookup trs es st then true
   else (
     if d then Format.printf "START\ %a n%!" Rule.print st;
-    let j = match joinable ctx (mk_sys trs es acsyms ord) (mk_problem st 2) with
+    let sys = mk_sys trs es acsyms ord in
+    let p = mk_problem st 2 in
+    let j = match joinable ctx sys p with
       | True -> true
       | False -> false
       | Maybe c -> if check_ordering_constraints trs c then

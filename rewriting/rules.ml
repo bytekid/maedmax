@@ -90,3 +90,12 @@ let rpl_spcl_char rules =
 let is_srs rs = List.for_all (fun (_,a) -> a = 1)(signature rs)
 
 let to_xml rs = Xml.Element("rules", [], List.map Rule.to_xml rs)
+
+let subsumption_free ee =
+  let pinst = Rule.is_proper_instance in
+  (* n ist proper instance of n' *)
+  let psub n n' = pinst n n' || pinst (Rule.flip n) n' in
+  let ee' = List.filter (fun e -> not (List.exists (psub e) ee)) ee in
+  let var rs r = if List.exists (Rule.variant r) rs then rs else r::rs in
+  List.fold_left var [] ee'
+;;

@@ -22,12 +22,12 @@ let timeout = ref 60.0
 let strategy = ref []
 
 let options = Arg.align 
-  [("-ac", Arg.Unit (fun _ -> use_ac := true),
-    " use AC-completion");
+  [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
+    " use AC-completion");*)
    ("-analyze", Arg.Unit (fun _ -> analyze := true),
-    " print problem analysis");
+    " print problem characteristics");
    ("-cpf", Arg.Set Settings.do_proof,
-    " output CPF proof");
+    " output certifiable CPF proof");
    ("-cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
                                 Settings.do_proof_debug := true),
     " output CPF proof plus debug output");
@@ -59,10 +59,10 @@ let options = Arg.align
        else if s = "temp" then settings.strategy := S.strategy_temp
        else failwith "unsupported option for -M"),
     " strategy (auto, lpo, kbo, mpol, dp, dg, dgk, maxcomp, red, cpred, or comp)");
-   ("-CS", Arg.Set settings.check_subsumption,
+   ("-checksub", Arg.Set settings.check_subsumption,
     " perform subsumption checks");
    ("-N", Arg.Int (fun n -> settings.n := n), 
-    " number of selected equations");
+    " <n> select <n> active equations from CPs of TRS");
    ("-o", Arg.Unit (fun _ -> settings.unfailing := true;
                              settings.k := (fun _ -> 2);
                              settings.strategy := S.strategy_ordered),
@@ -71,10 +71,12 @@ let options = Arg.align
     " perform termination check");
    ("-time", Arg.Set_float timeout,
     " set timeout");
-   ("-tproof", Arg.Set settings.output_tproof,
+   ("-termproof", Arg.Set settings.output_tproof,
     " output termination proof");
    ("-TMP", Arg.Set_int settings.tmp,
-    " various purposes")
+    " various purposes");
+   ("-xsig", Arg.Set settings.extended_signature,
+    " consider signature plus infinitely many constants (ordered completion)")
  ]
 
 (*** FUNCTIONS ***************************************************************)
@@ -152,13 +154,17 @@ let print_analysis es =
 let clean =
   let reduce rr = Listx.unique (Variant.reduce rr) in function
  | Ckb.Completion trs -> Ckb.Completion (reduce trs)
- | Ckb.GroundCompletion (rr,ee) -> Ckb.GroundCompletion (reduce rr, reduce ee)
+ | Ckb.GroundCompletion (rr,ee) ->
+   let nf = Rewriting.nf rr in
+   let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
+   let ee'' = Rules.subsumption_free ee' in
+   Ckb.GroundCompletion (Variant.reduce_encomp rr, ee'')
  | Ckb.Proof p -> Ckb.Proof p
 ;;
 
 let show_proof (es,gs) = function
-    Ckb.Proof ((s,t),(rs, rt)) ->
-      let p = Trace.xml_goal_proof es (List.hd gs) ((s,t),(rs, rt)) in
+    Ckb.Proof ((s,t),(rs, rt), sigma) ->
+      let p = Trace.xml_goal_proof es (List.hd gs) ((s,t),(rs, rt), sigma) in
       F.printf "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
       F.printf "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n";
       F.printf "%s\n" (Xml.to_string_fmt p)

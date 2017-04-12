@@ -44,6 +44,8 @@ module Ac = struct
     Listx.unique (cs @ cs' @ es)
 
   let count es = List.length (symbols es)
+
+  let equivalent acs (s, t) = Term.flatten acs s = Term.flatten acs t
 end
 
 module Monoid = struct

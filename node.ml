@@ -111,7 +111,7 @@ module Equation = struct
     let s = R.size (rule (l,r)) in
     Format.fprintf ppf "%a = %a (%i)" Term.print l Term.print r s
 
-  let is_ac_equivalent acs (l,r) = Term.flatten acs l = Term.flatten acs r
+  let is_ac_equivalent = Theory.Ac.equivalent
 end
 
 

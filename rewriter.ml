@@ -2,7 +2,6 @@ module T = Term
 module L = List
 module H = Hashtbl
 module Sig = Signature
-module G = Ground
 module Ac = Theory.Ac
 
 module Fingerprint = struct

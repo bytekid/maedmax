@@ -60,18 +60,18 @@ let add eq o =
     if not (Hashtbl.mem trace_table eq) then Hashtbl.add trace_table eq o
 
 let add_initials eqs =
-  if !(S.do_proof_debug) then
-    List.iter (fun eq -> Format.printf "initial: %a\n" R.print eq) eqs;
+  (*if !(S.do_proof_debug) then
+    List.iter (fun eq -> Format.printf "initial: %a\n" R.print eq) eqs;*)
   List.iter (fun e -> add e Initial) eqs
 
 let add_overlap eq (rl1,p,rl2,_) =
-  if !(S.do_proof_debug) then
-    Format.printf "overlap: %a\n" R.print eq;
+  (*if !(S.do_proof_debug) then
+    Format.printf "overlap: %a\n" R.print eq;*)
   add eq (Deduce (rl1,p,rl2))
 
 let add_rewrite eq eq0 steps =
-  if !(S.do_proof_debug) then
-    Format.printf "rewrite: %a\n" R.print eq;
+  (*if !(S.do_proof_debug) then
+    Format.printf "rewrite: %a\n" R.print eq;*)
   add eq (Rewrite (eq0,steps))
 
 let ancestors eqs = 
@@ -177,26 +177,22 @@ let conversion_for (s,t) = function
      print (v,conv));
    v,conv
  | Rewrite ((s0,t0), (ss, ts)) ->
-   assert (snd (Variant.normalize_rule_dir (s,t)));
+   (*assert (snd (Variant.normalize_rule_dir (s,t))); not necessarily *)
    let sconv = rewrite_conv s0 ss in
    let tconv = rewrite_conv t0 ts in
    let ren, keep_dir = rename_to (last (s0,sconv), last (t0,tconv)) (s,t) in
    let (s0f,t0f) = Rule.substitute ren (s0, t0) in
    let sconv = subst ren sconv in
    let tconv = subst ren tconv in
-   let st_step = (root,(s0,t0),LeftRight,Term.substitute ren t0f) in
-   if (not (keep_dir && last (s0f, sconv) = s) &&
-       not (not keep_dir && last (s0f, sconv) = t)) then
-     (Format.printf "\nequation %a was derived from %a\n" Rule.print (s,t) Rule.print (s0,t0);
-      Format.printf "last term in this conversion is %a\n" Term.print s;
-      print (s0, rewrite_conv s0 ss));
+   let st_step = (root,(s0,t0),LeftRight,t0f) in
    assert ((keep_dir && last (s0f, sconv) = s) ||
            (not keep_dir && last (s0f, sconv) = t));
-   let s1,rsconv = rev (s0, sconv) in
+   let _,rsconv = rev (s0f, sconv) in
    let conv = rsconv @ st_step :: tconv in
    let v,conv = if keep_dir then (s,conv) else rev (t,conv) in
+   assert (last (v,conv) = t);
    if !(S.do_proof_debug) then (
-     Format.printf "\nrewrite conversion for %a:\n%!" R.print (s,t);
+     Format.printf "\nrewrite conversion for %a (%i):\n%!" R.print (s,t) (if keep_dir then 1 else 0);
      print (v,conv));
    v,conv
 ;;
@@ -208,7 +204,7 @@ let trace_for eqs =
   [ a, conversion_for a o | a, o <- ancestors eqs; o <> Initial ]
 ;;
 
-let rec goal_ancestors rule_acc gconv_acc g o =
+let rec goal_ancestors rule_acc gconv_acc sigma g o =
   try
     let ((v,w) as g1), keep_gdir = Variant.normalize_rule_dir g in
     if !(S.do_proof_debug) then
@@ -231,23 +227,25 @@ let rec goal_ancestors rule_acc gconv_acc g o =
        let ren, not_flipped = rename_to (last (s,sconv), vw) (v,w) in
          (* not_flipped: s is connected to v, t to w *)
        assert ((T.substitute ren vw = w && not_flipped) || (T.substitute ren vw = v && (not not_flipped)));
-       let vw_step = [root,g1,LeftRight,w] in
-       let conv =
-         if not_flipped then s, sconv @ ((root,g1,LeftRight,w) :: rtconv)
-         else s, sconv @ ((root,g1,RightLeft,v) :: rtconv)
+       let vw_step =
+         if not_flipped then (root,g1,LeftRight,w)
+         else (root,g1,RightLeft,v) 
        in
+       let conv = s, sconv @ (vw_step:: rtconv) in
        if !(S.do_proof_debug) then (
          Format.printf "final conv\n%!";
          print conv);
        assert (last conv = t);
        let gconv = (s,t), conv in
        let rls = Listx.unique (List.map fst (rs @ rt)) in
-  assert (snd (Variant.normalize_rule_dir (s,t)));
+       assert (snd (Variant.normalize_rule_dir (s,t)));
        let o = Hashtbl.find trace_table (s,t) in
-       goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) (s,t) o
+       goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) sigma (s,t) o
      | Deduce (rl, p, g0) ->
        let ((rl,p,g0,mgu) as o) = the_overlap rl g0 p in
        let v',w' = O.cp_of_overlap o in (* strange var names *)
+       if !(S.do_proof_debug) then
+         Format.printf " simulated CP: %a\n%!" R.print (v',w');
        let ren, keep_dir = rename_to (v',w') (v,w) in
        let rl',d_rl = normalize rl LeftRight in
        let (s0,t0),d_g = normalize (Rule.substitute mgu g0) LeftRight in
@@ -255,13 +253,13 @@ let rec goal_ancestors rule_acc gconv_acc g o =
          Format.printf " deduce back to %a %i:\n%!" R.print (s0,t0) (if d_g = LeftRight then 1 else 0);
        let u,d = if keep_dir then v, LeftRight else w, RightLeft in
        let gconv =
-         if d_g = LeftRight then (s0,t0), (s0,[(p,rl',d_rl,u); (root,g1,d,t0)])
-         else (s0,t0), (s0,[(root,g1,flip d,u); (p,rl',flip d_rl,t0)])
+         if d_g = LeftRight then (s0,[(p,rl',d_rl,u); (root,g1,d,t0)])
+         else (s0,[(root,g1,flip d,u); (p,rl',flip d_rl,t0)])
        in 
        if !(S.do_proof_debug) then
-         print (snd gconv);
+         print gconv;
        let o = Hashtbl.find trace_table (Variant.normalize_rule g0) in
-       goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) g0 o
+       goal_ancestors (rl' :: rule_acc) (((s0,t0),gconv) :: gconv_acc) sigma g0 o
   with Not_found -> (
     Format.printf "no origin found for goal %a\n%!" R.print g;
     failwith "Trace.goal_ancestors: equation unknown")
@@ -269,12 +267,19 @@ let rec goal_ancestors rule_acc gconv_acc g o =
 
 (* (s,t) is the goal that was proven, (rs,rt) the rules used to rewrite it to
    the common normal form, g_orig is the normalized original goal *)
-let goal_proof g_orig (s,t) (rs,rt) =
+let goal_proof g_orig (s,t) (rs,rt) sigma =
   if !(S.do_proof_debug) then (
     Format.printf "\nProve original goal %a:\n%!" R.print g_orig;
     Format.printf "\nfind the goal conversion for %a:\n%!" R.print (s,t));
-  let t', rtconv = rev (t,rewrite_conv t rt) in
-  let goal_conv = (s,t), (s,rewrite_conv s rs @ rtconv) in
+  let goal_conv =
+    if sigma = [] then 
+      let t', rtconv = rev (t,rewrite_conv t rt) in
+      (s,t), (s,rewrite_conv s rs @ rtconv)
+    else (
+      failwith "substituted proof";
+      let s',t' = Rule.substitute sigma (s,t) in
+      (s',t'), (s',[]))
+  in
   if !(S.do_proof_debug) then
     print (snd goal_conv);
   (* in case (s,t) is not the original goal we need to trace it back.
@@ -286,7 +291,7 @@ let goal_proof g_orig (s,t) (rs,rt) =
       assert (snd (Variant.normalize_rule_dir (s,t)));
       let o = try Hashtbl.find trace_table (s,t) with _ -> Initial in
       Hashtbl.add trace_table g_orig Initial;
-      goal_ancestors [] [] (s,t) o)
+      goal_ancestors [] [] sigma (s,t) o)
     else
       [],[]
   in
@@ -294,7 +299,7 @@ let goal_proof g_orig (s,t) (rs,rt) =
   let t = trace_for rls @ (goal_conv :: gconvs) in
   if !(S.do_proof_debug) then (
     Format.printf "final conversions: \n%!";
-    print_all [ steps | (l,r),steps <- t]);
+    List.iter (fun (rl,c) -> Format.printf "%a:\n%!" Rule.print rl; print c) t);
   t
 ;;
 
@@ -339,9 +344,9 @@ let eqproof_to_xml cs =
   X.Element("equationalProof", [], [ xsub ])
 ;;
 
-let xml_goal_proof es0 g_orig ((s,t), (rs,rt)) =
+let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
   let g_orig = Variant.normalize_rule g_orig in
-  let rulesubs = goal_proof g_orig (s,t) (rs,rt) in
+  let rulesubs = goal_proof g_orig (s,t) (rs,rt) sigma in
   let xinput = input_to_xml es0 g_orig in
   let xversion = X.Element("cpfVersion", [], [ xml_str "2.1" ]) in
   let xproof = X.Element("proof", [], [ eqproof_to_xml rulesubs ]) in

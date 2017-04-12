@@ -21,7 +21,7 @@ module NS = Nodes.Make(N)
 (*** TYPES *******************************************************************)
 type result = Completion of Rules.t
   | GroundCompletion of (Rules.t * Rules.t)
-  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list))
+  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list) * Subst.t)
 
 (*** EXCEPTIONS **************************************************************)
 exception Success of result
@@ -138,6 +138,7 @@ let interreduce rr =
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let saturated ctx (rr,ee) rewriter cc =
+ let ee' = Rules.subsumption_free ee in
  let covered n =
   let s,t = N.rule n in
   let s',t' = fst (rewriter#nf s), fst (rewriter#nf t) in
@@ -145,8 +146,11 @@ let saturated ctx (rr,ee) rewriter cc =
   else
     let str = termination_strategy () in
     let d = !(settings.d) in
-    s' = t' || Ground.joinable ctx str (rr, ee, !(settings.ac_syms)) (s',t') d
- in NS.for_all covered cc
+    let sys = rr, ee', !(settings.ac_syms) in
+    let xsig = !(settings.extended_signature) in
+    s' = t' || Ground.joinable ctx str sys (s',t') xsig d
+ in let res = NS.for_all covered cc in
+ res
 ;;
 
 let succeeds ctx (rr,ee) rewriter cc gs =
@@ -156,11 +160,14 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let (s,t) = List.find fixed (NS.to_list gs) in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print (s,t);
-    Some (Proof ((s,t),(rss,rst))))
-  else if saturated ctx (rr,ee) rewriter cc then
+  (*Format.printf "joining rules for s %a\n%!" Rules.print (List.map fst rss);
+  Format.printf "joining rules for t %a\n%!" Rules.print (List.map fst rst);*)
+    if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
+    else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
+  else if saturated ctx (rr,ee) rewriter cc then (
     if !(settings.unfailing) then Some (GroundCompletion (rr, ee))
     else Some (Completion rr)
-  else None
+  ) else None
 ;;
 
 let succeeds ctx re rew cc =
@@ -458,8 +465,7 @@ let set_iteration_stats aa gs =
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
      !St.iterations (NS.size aa) NS.print aa;
    if !St.goals > 0 then
-   F.printf "\nand %i goals:\n%a%!\n"
-     !St.goals NS.print gs;
+     F.printf "\nand %i goals:\n%a%!\n" !St.goals NS.print gs;
    let json = St.json settings s (!(settings.k) i) in
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string json))
 ;;
