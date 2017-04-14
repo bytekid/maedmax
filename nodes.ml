@@ -85,13 +85,11 @@ module Make(N:Node.T) = struct
   ;;
 
   let subsumption_free ns =
-    let h = Hashtbl.create (H.length ns * 2) in
     let sub n n' =
       let r, r' = N.rule n, N.rule n' in
       R.is_proper_instance r r' || R.is_proper_instance (R.flip r) r'
     in
-    let subfold n _ hr = if not (exists (sub n) ns) then add n hr else hr in
-    variant_free (H.fold subfold ns h) 
+    filter (fun n -> not (exists (sub n) ns))
   ;;
 
   let diff ns d = H.fold (fun n _ nsr -> remove n nsr) d ns 

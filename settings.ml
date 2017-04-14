@@ -19,6 +19,7 @@ type termination_strategy = t_setting list
 
 type t = {
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
+ signature: (Signature.sym * int) list ref;
  d        : bool ref ; (* debug mode *)
  es       : Rules.t ref ;
  json     : bool ref; (* output json result and statistics *)
@@ -37,9 +38,12 @@ type t = {
 let k_default = fun i -> if i < 3 then 6 else 2
 let k2 _ = 2
 
+let tmp = ref false
+
 (* settings *)
 let default = {
  ac_syms   = ref [];
+ signature = ref [];
  d         = ref false;
  es        = ref [] ;
  json      = ref false;

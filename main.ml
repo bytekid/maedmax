@@ -73,7 +73,7 @@ let options = Arg.align
     " set timeout");
    ("-termproof", Arg.Set settings.output_tproof,
     " output termination proof");
-   ("-TMP", Arg.Set_int settings.tmp,
+   ("-TMP", Arg.Set Settings.tmp,
     " various purposes");
    ("-xsig", Arg.Set settings.extended_signature,
     " consider signature plus infinitely many constants (ordered completion)")

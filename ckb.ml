@@ -146,7 +146,7 @@ let saturated ctx (rr,ee) rewriter cc =
   else
     let str = termination_strategy () in
     let d = !(settings.d) in
-    let sys = rr, ee', !(settings.ac_syms) in
+    let sys = rr, ee', !(settings.ac_syms), !(settings.signature) in
     let xsig = !(settings.extended_signature) in
     s' = t' || Ground.joinable ctx str sys (s',t') xsig d
  in let res = NS.for_all covered cc in
@@ -510,7 +510,7 @@ let rec phi ctx aa gs =
     let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None -> j+1, NS.subsumption_free (NS.add_list sel aa), NS.add_list gg gs
+     | None ->j+1, NS.add_list sel aa, NS.add_list gg gs
   in
   try
     let rrs = max_k ctx aa gs in
@@ -523,6 +523,7 @@ let rec phi ctx aa gs =
 
 let init_settings fs es gs =
  settings.ac_syms := Ac.symbols es;
+ settings.signature := Rules.signature (es @ gs);
  settings.d := !(fs.d);
  St.iterations := 0;
  settings.n := !(fs.n);

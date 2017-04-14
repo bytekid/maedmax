@@ -9,6 +9,7 @@ module Ac = Theory.Ac
 type sys = {
   trs: Rules.t;
   es: Rules.t;
+  signature: (Sig.sym * int) list;
   acsyms: Sig.sym list;
   order: Settings.t_term
 }
@@ -73,9 +74,10 @@ let check_ordering_constraints trs c =
 ;;
 
 
-let mk_sys trs es acsyms o = {
+let mk_sys trs es acsyms fs o = {
   trs = trs;
   es = es;
+  signature = fs;
   acsyms = acsyms;
   order = o
 }
@@ -304,7 +306,6 @@ and instance_joinable ctx sys p ac =
     if !debug then Format.printf "  instantiate %a \n" Term.print (V x);
     let rec vs a = if a=0 then [] else (V (Sig.fresh_var ())) :: (vs (a-1)) in 
     let sub (f, a) = substitute [(x, F(f, vs a))] in
-    let fs = Rules.signature (sys.es @ sys.trs) in
     let instance_joinable (f,a) =
       let sub = sub (f,a) in (* call sub only once -> different vars*)
       let s0,t0 = sub p.s, sub p.t in
@@ -326,7 +327,7 @@ and instance_joinable ctx sys p ac =
           | None -> if r_joinable ctx sys p' then True else False)
     in
     let ijoin_check a f = if a = False then a else instance_joinable f <&&> a in
-    List.fold_left ijoin_check True fs)
+    List.fold_left ijoin_check True sys.signature)
    | _ -> False
 ;;
 
@@ -338,13 +339,13 @@ let lookup trs es st =
   List.exists covered !joinable_cache
 ;;
 
-let joinable ctx ord (trs, es, acsyms) st xsig d =
+let joinable ctx ord (trs, es, acsyms, fs) st xsig d =
   debug := d;
   extended_signature := xsig;
   if lookup trs es st then true
   else (
     if d then Format.printf "START\ %a n%!" Rule.print st;
-    let sys = mk_sys trs es acsyms ord in
+    let sys = mk_sys trs es acsyms fs ord in
     let p = mk_problem st 2 in
     let j = match joinable ctx sys p with
       | True -> true
@@ -354,7 +355,7 @@ let joinable ctx ord (trs, es, acsyms) st xsig d =
         (if d then Format.printf "Ordering constraints UNSAT\n%!"; false)     
     in
     if d then (
-      if not j then Format.printf "Not joinable: %a in %a\n" Rule.print st Rules.print es;
+      if not j then Format.printf "Not joinable: %a\n" Rule.print st;
       Format.printf "END: %a %s\n%!" Rule.print st (if j then "YES" else "NO"));
     if j then joinable_cache := (trs, es, st) :: !joinable_cache;
     j)
