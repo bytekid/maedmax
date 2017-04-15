@@ -16,6 +16,8 @@ val is_non_overlapping : t -> bool
 
 val is_non_duplicating : t -> bool
 
+val is_ground : t -> bool
+
 val variable_condition : t -> bool
 
 val is_constructor_system : t -> bool

@@ -339,6 +339,28 @@ let lookup trs es st =
   List.exists covered !joinable_cache
 ;;
 
+let all_joinable ctx ord (trs, es, acsyms, fs) sts xsig d =
+  debug := d;
+  extended_signature := xsig;
+  let sys = mk_sys trs es acsyms fs ord in
+  let check constr st =
+    if constr = False then False
+    else (
+      if d then Format.printf "START joinability check %a \n%!" Rule.print st;
+      if lookup trs es st then constr (* st is joinable *)
+      else constr <&&> joinable ctx sys (mk_problem st 2)) 
+  in
+  let j = match List.fold_left check True sts with
+    | True -> true
+    | False -> false 
+    | Maybe c -> check_ordering_constraints trs c
+  in 
+  if d then
+    Format.printf "END %s\n%!" (if j then "YES" else "NO");
+    (*if j then joinable_cache := (trs, es, st) :: !joinable_cache;*)
+  j
+;;
+
 let joinable ctx ord (trs, es, acsyms, fs) st xsig d =
   debug := d;
   extended_signature := xsig;

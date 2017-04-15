@@ -138,19 +138,13 @@ let interreduce rr =
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let saturated ctx (rr,ee) rewriter cc =
- let ee' = Rules.subsumption_free ee in
- let covered n =
-  let s,t = N.rule n in
-  let s',t' = fst (rewriter#nf s), fst (rewriter#nf t) in
-  if not !(settings.unfailing) then s' = t'
-  else
-    let str = termination_strategy () in
-    let d = !(settings.d) in
-    let sys = rr, ee', !(settings.ac_syms), !(settings.signature) in
-    let xsig = !(settings.extended_signature) in
-    s' = t' || Ground.joinable ctx str sys (s',t') xsig d
- in let res = NS.for_all covered cc in
- res
+  let ee' = Rules.subsumption_free ee in
+  let str = termination_strategy () in
+  let d = !(settings.d) in
+  let sys = rr, ee', !(settings.ac_syms), !(settings.signature) in
+  let xsig = !(settings.extended_signature) in
+  let rs = NS.to_list cc in
+  Ground.all_joinable ctx str sys (List.map N.rule rs) xsig d
 ;;
 
 let succeeds ctx (rr,ee) rewriter cc gs =
@@ -160,12 +154,16 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let (s,t) = List.find fixed (NS.to_list gs) in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print (s,t);
-  (*Format.printf "joining rules for s %a\n%!" Rules.print (List.map fst rss);
-  Format.printf "joining rules for t %a\n%!" Rules.print (List.map fst rst);*)
     if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
     else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
   else if saturated ctx (rr,ee) rewriter cc then (
-    if !(settings.unfailing) then Some (GroundCompletion (rr, ee))
+    if !(settings.unfailing) && !(Settings.inequalities) = [] then
+      Some (GroundCompletion (rr, ee))
+    else if !(settings.unfailing) then
+      let ieqs = !(Settings.inequalities) in
+      if List.exists joinable ieqs then
+        Some (Proof (List.find joinable ieqs,([],[]),[])) (* UNSAT *)
+      else Some (GroundCompletion (rr, ee)) (* SAT *)
     else Some (Completion rr)
   ) else None
 ;;
@@ -542,7 +540,8 @@ let init_settings fs es gs =
      (Ac.symbols es))
 ;;
 
-let remember_state es gs =
+let remember_state es ieqs gs =
+ Settings.inequalities := ieqs;
  let h = Hashtbl.hash (termination_strategy (), es,gs) in
  if h = !hash_initial then raise Fail;
  hash_initial := h
@@ -560,9 +559,11 @@ let termination_output = function
 
 
 (* main ckb function *)
-let rec ckb fs es gs =
+let rec ckb fs (es, ieqs, gs) =
+ if not (Rules.is_ground ieqs) then raise Fail
+ else
  (* store initial state to capture*)
- remember_state es gs;
+ remember_state es ieqs gs;
  (* init state *)
  let ctx = mk_context () in
  let es0 = L.map N.normalize es in
@@ -591,4 +592,4 @@ let rec ckb fs es gs =
   sizes := [];
   St.mem_diffs := [];
   St.time_diffs := [];
-  ckb fs (es_new @ es0) gs)
+  ckb fs (es_new @ es0, ieqs, gs))

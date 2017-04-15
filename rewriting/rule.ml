@@ -88,6 +88,8 @@ let size (s,t) = Term.size s + Term.size t
 
 let is_dp (l,r) = (Term.is_sharped l) && (Term.is_sharped r)
 
+let is_ground (l,r) = variables (l,r) = []
+
 let map f (l,r) = (f l, f r)
 
 let substitute sigma = map (Term.substitute sigma)

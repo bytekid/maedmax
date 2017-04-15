@@ -80,6 +80,8 @@ let options = Arg.align
  ]
 
 (*** FUNCTIONS ***************************************************************)
+let map3 f (a,b,c) = (f a, f b, f c)
+
 let print_trs ppf rules = 
   fprintf ppf "(VAR %s)@.(RULES@.%a@.)@."
     (String.concat " " (List.map Signature.get_var_name (Rules.variables rules)))
@@ -108,6 +110,8 @@ let call () =
  in add_arg 0
 ;;
 
+let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
+
 let print_json f res settings =
  let res_str = match res with
   | Ckb.Completion rr -> trs_string rr
@@ -117,7 +121,7 @@ let print_json f res settings =
  in
  let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
  let t = `Assoc [
-  "result",`String "YES";
+  "result",`String (success_code res);
   "time", f;
   (*"config",`String (call());*)
   "trs", `String res_str;
@@ -138,13 +142,13 @@ let print_json_term yes f =
 ;;
 
 let print_res res =
-  printf "YES@.";
+  printf "# SZS status ";
   match res with
-   | Ckb.Completion trs -> printf "%a@." print_trs trs;
+   | Ckb.Completion trs -> printf "Satisfiable\n%a@." print_trs trs;
    | Ckb.GroundCompletion (rr,ee) ->
-    (printf "%a@." print_trs rr;
+    (printf "Satisfiable\n%a@." print_trs rr;
     if ee <> [] then printf "ES:@.%a@." print_es ee)
-   | Ckb.Proof _ -> printf "(proof)\n"
+   | Ckb.Proof _ -> printf "Unsatisfiable\n%!"
 ;;
 
 let print_analysis es =
@@ -162,8 +166,8 @@ let clean =
  | Ckb.Proof p -> Ckb.Proof p
 ;;
 
-let show_proof (es,gs) = function
-    Ckb.Proof ((s,t),(rs, rt), sigma) ->
+let show_proof (es,ieqs,gs) = function
+    Ckb.Proof ((s,t),(rs, rt), sigma) when ieqs = [] ->
       let p = Trace.xml_goal_proof es (List.hd gs) ((s,t),(rs, rt), sigma) in
       F.printf "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
       F.printf "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n";
@@ -178,20 +182,19 @@ let () =
   let json = !(settings.json) in
   match !filenames with
   | [f] -> 
-      let rs, goals = Read.read f in
-      let es,gs = Rules.rpl_spcl_char rs, Rules.rpl_spcl_char goals in
+      let (es,_,_) as input = map3 Rules.rpl_spcl_char (Read.read f) in
       if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
 	      let res =
-          (*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb settings es gs in
+          (*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb settings input in
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
          print_json secs (clean res) settings
         ) else (
          if !(Settings.do_proof) then
-           show_proof (es,gs) res
+           show_proof input res
          else (
            print_res (clean res);
 	         Timer.stop timer;
@@ -199,7 +202,7 @@ let () =
            printf "%s %.2f %s@." "Search time:" secs "seconds";
            Statistics.print ())
          )
-       with e -> printf "MAYBE@."; raise e end
+       with e -> printf "# SZS status GaveUp"; raise e end
       else if !analyze then
        print_analysis es
       else (

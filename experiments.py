@@ -56,7 +56,7 @@ def work(problem):
     out,err = subprocess.Popen(cmd, shell=True).communicate()
     file = open(temp.name, "r") 
     res = file.read()
-    code = "TIMEOUT" if "TIMEOUT" in res else "SUCCESS" if "YES" in res else "ERROR"
+    code = "TIMEOUT" if "TIMEOUT" in res else "UNSAT" if "UNSAT" in res else "SAT" if "SAT" in res in res else "ERROR"
     print(str(problem["number"]) + ": " + problem["file"] + " " + code)
     if "TIMEOUT" in res:
       d = timeout_data(problem)
@@ -66,7 +66,7 @@ def work(problem):
       res = file.read()
       d["characteristics"] = json.loads(res)
       return d
-    elif "YES" in res:
+    elif "SAT" in res:
       return success_data(problem, json.loads(res))
     else:
       return error_data(problem)
@@ -82,8 +82,10 @@ def accumulate(results, configs):
   rfile.write(res)
   for r in results:
     conf = r['config']
-    if r['result'] == "YES":
-      stats[conf]['successes'] = stats[conf]['successes'] + 1
+    if r['result'] == "SAT":
+      stats[conf]['SAT'] = stats[conf]['SAT'] + 1
+    if r['result'] == "UNSAT":
+      stats[conf]['UNSAT'] = stats[conf]['UNSAT'] + 1
     elif r['result'] == "TIMEOUT":
       stats[conf]['timeouts'] = stats[conf]['timeouts'] + 1
     else:
@@ -98,7 +100,7 @@ if __name__ == "__main__":
   i = 0
   configs = get_configs()
   for c in configs:
-    stats[c] = { "successes" : 0, "timeouts" : 0, "errors": 0}
+    stats[c] = { "SAT" : 0, "UNSAT" : 0, "timeouts" : 0, "errors": 0}
   for subdir, dirs, problems in os.walk(problems):
     for p in problems:
       for c in configs:
@@ -117,4 +119,4 @@ if __name__ == "__main__":
   accumulate(results.get(), configs)
   for c in configs:
     s = stats[c]
-    print "{}: {} successes, {} timeouts, {} errors".format(c, s['successes'], s['timeouts'], s['errors'])
+    print "{}: {} SAT, {} UNSAT, {} timeouts, {} errors".format(c, s['SAT'], s['UNSAT'], s['timeouts'], s['errors'])

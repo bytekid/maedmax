@@ -46,6 +46,8 @@ val remove : t list -> t -> t list
 
 val is_rule : t -> bool
 
+val is_ground : t -> bool
+
 val size : t -> int
 
 val is_dp : t -> bool

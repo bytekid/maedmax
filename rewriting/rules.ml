@@ -87,7 +87,9 @@ let rpl_spcl_char rules =
  in
  [ rpl_trm s, rpl_trm t | s,t <- rules ]
 
-let is_srs rs = List.for_all (fun (_,a) -> a = 1)(signature rs)
+let is_srs rs = List.for_all (fun (_,a) -> a = 1) (signature rs)
+
+let is_ground = List.for_all Rule.is_ground
 
 let to_xml rs = Xml.Element("rules", [], List.map Rule.to_xml rs)
 

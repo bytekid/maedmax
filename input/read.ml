@@ -23,7 +23,8 @@ let read_trs filename =
     let lex_curr_p = 
       { lexbuf.lex_curr_p with pos_fname = filename } in
     try
-      Parser.toplevel Lexer.token { lexbuf with lex_curr_p = lex_curr_p }
+      let buf = { lexbuf with lex_curr_p = lex_curr_p } in
+      Parser.toplevel Lexer.token buf
     with Parsing.Parse_error -> 
       (syntax_error lexbuf.lex_curr_p; exit 1)
   in
@@ -32,6 +33,7 @@ let read_trs filename =
   with Sys_error s -> 
     (eprintf "Error:@.%s@." s; exit 1)
 
+let union3 (xs,ys,zs) (xs',ys',zs') = (xs @ xs',ys @ ys',zs @ zs')
 
 let rec read_tptp filename =
   let read ch =
@@ -43,13 +45,12 @@ let rec read_tptp filename =
       (syntax_error lexbuf.lex_curr_p; exit 1)
   in
   try
-    let axs, rls, gls = open_in_do ~path:filename read in
-    let add (rs,gs) a = let rs',gs' = read_tptp a in rs'@rs, gs'@gs in
-    List.fold_left add (rls,gls) axs
+    let axs, eqs, ieqs, gls = open_in_do ~path:filename read in
+    let add res a = let res' = read_tptp a in union3 res res' in
+    List.fold_left add (eqs,ieqs,gls) axs
   with Sys_error s ->
     (eprintf "Error:@.%s@." s; exit 1)
 
 let read filename = 
-  if Filename.check_suffix filename "trs"  then
-   fst (read_trs filename), []
+  if Filename.check_suffix filename "trs"  then fst (read_trs filename), [], []
   else read_tptp filename
