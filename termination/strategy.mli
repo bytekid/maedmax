@@ -19,6 +19,7 @@ val strategy_ordered : t
 val strategy_ordered_lpo : t
 val strategy_ordered_kbo : t
 val strategy_ordered_lpokbo : t
+val strategy_ordered_sat : t
 
 val term_to_string : Settings.t_term -> string
 

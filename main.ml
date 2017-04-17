@@ -186,8 +186,7 @@ let () =
       if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
-	      let res =
-          (*if !use_ac then Ac_ckb.ckb th else*) Ckb.ckb settings input in
+	      let res = Ckb.ckb settings input in
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
@@ -202,7 +201,7 @@ let () =
            printf "%s %.2f %s@." "Search time:" secs "seconds";
            Statistics.print ())
          )
-       with e -> printf "# SZS status GaveUp"; raise e end
+       with e -> printf "# SZS status GaveUp\n%!"; raise e end
       else if !analyze then
        print_analysis es
       else (

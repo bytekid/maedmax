@@ -61,6 +61,9 @@ let strategy_ordered = [ (ts_kbo, [], [MaxRed], IterationLimit 8);
                          (ts_lpo, [], [MaxRed], IterationLimit 12);
                          (ts_kbo, [], [MaxRed], IterationLimit 100);
                          (ts_lpo, [], [MaxRed], IterationLimit 200); ]
+let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11);
+                         (ts_kbo, [], [MaxRed], IterationLimit 100);
+                         (ts_lpo, [], [MaxRed], IterationLimit 200); ]
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
 let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
 let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max]

@@ -123,7 +123,7 @@ let reduced rr ns =
 ;;
 
 let interreduce rr =
- let rew = new Rewriter.rewriter rr [] (fun _ _ -> false) in
+ let rew = new Rewriter.rewriter rr [] (fun _ _ -> false) None in
  let right_reduce (l,r) =
    let r', rs = rew#nf r in
    if r <> r' then (
@@ -148,6 +148,7 @@ let saturated ctx (rr,ee) rewriter cc =
 ;;
 
 let succeeds ctx (rr,ee) rewriter cc gs =
+  rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
   if not (NS.is_empty gs) && NS.exists fixed gs then (
@@ -156,7 +157,8 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print (s,t);
     if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
     else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
-  else if saturated ctx (rr,ee) rewriter cc then (
+  else if rr @ ee = [] || (saturated ctx (rr,ee) rewriter cc &&
+          ((*ee = [] ||*) Rules.is_ground (NS.to_list gs))) then (
     if !(settings.unfailing) && !(Settings.inequalities) = [] then
       Some (GroundCompletion (rr, ee))
     else if !(settings.unfailing) then
@@ -412,6 +414,13 @@ let max_k ctx cc gs =
 
 let max_k ctx cc = St.take_time St.t_maxk (max_k ctx cc)
 
+let mconst gt =
+  let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
+  match [ c | c,a <- !(settings.signature); a = 0] with
+      [] -> None
+    | c :: cs -> Some (List.fold_left cmp c cs)
+;;
+
 (* some logging functions *)
 let log_iteration i aa =
  F.printf "Iteration %i\n%!" i;
@@ -463,7 +472,7 @@ let set_iteration_stats aa gs =
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
      !St.iterations (NS.size aa) NS.print aa;
    if !St.goals > 0 then
-     F.printf "\nand %i goals:\n%a%!\n" !St.goals NS.print gs;
+     F.printf "\nand %i goals:\n%a %i%!\n" !St.goals NS.print gs (if Rules.is_ground (NS.to_list gs) then 1 else 0);
    let json = St.json settings s (!(settings.k) i) in
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string json))
 ;;
@@ -492,7 +501,7 @@ let rec phi ctx aa gs =
   let process (j, aa, gs) (rr,c, gt) =
     let trs_n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index trs_n in
-    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) gt in
+    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) gt (mconst gt) in
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in
@@ -503,7 +512,6 @@ let rec phi ctx aa gs =
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then NS.iter (ignore <.> (C.store_eq_var ctx)) rest;
     let rr,ee = rr, NS.to_list irred in
-    (*rew#add ee;*)
     let gcps = reduced rew (overlaps_on rr irred gs) in (* rewrite goal CPs *)
     let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
@@ -519,9 +527,9 @@ let rec phi ctx aa gs =
   with Success r -> r
 ;;
 
-let init_settings fs es gs =
+let init_settings fs es ieqs gs =
  settings.ac_syms := Ac.symbols es;
- settings.signature := Rules.signature (es @ gs);
+ settings.signature := Rules.signature (es @ ieqs @gs);
  settings.d := !(fs.d);
  St.iterations := 0;
  settings.n := !(fs.n);
@@ -562,6 +570,11 @@ let termination_output = function
 let rec ckb fs (es, ieqs, gs) =
  if not (Rules.is_ground ieqs) then raise Fail
  else
+ let gs = 
+   if List.length gs <= 1 then gs
+   else [ Term.F(-1, List.map fst gs), Term.F(-1, List.map snd gs)]
+ in
+ (*if gs = [] then settings.strategy := Strategy.strategy_ordered_sat;*)
  (* store initial state to capture*)
  remember_state es ieqs gs;
  (* init state *)
@@ -569,13 +582,13 @@ let rec ckb fs (es, ieqs, gs) =
  let es0 = L.map N.normalize es in
  let gs0 = L.map N.normalize gs in
  try
-  init_settings fs es0 gs0;
+  init_settings fs es0 ieqs gs0;
   let cas = [ Ac.cassociativity f | f <- !(settings.ac_syms)] in
   let es0 = [ Variant.normalize_rule rl | rl <- cas ] @ es0 in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
   let ss = Listx.unique (t_strategies ()) in
-  L.iter (fun s -> Strategy.init s 0 ctx (gs0 @ es0)) ss;
+  L.iter (fun s -> Strategy.init s 0 ctx (gs0 @ ieqs @ es0)) ss;
   let res = phi ctx ns0 (NS.of_list gs0) in
   if !(fs.output_tproof) then termination_output res;
   del_context ctx;
@@ -592,4 +605,4 @@ let rec ckb fs (es, ieqs, gs) =
   sizes := [];
   St.mem_diffs := [];
   St.time_diffs := [];
-  ckb fs (es_new @ es0, ieqs, gs))
+  ckb fs ((if gs = [] then es0 else es_new @ es0), ieqs, gs))

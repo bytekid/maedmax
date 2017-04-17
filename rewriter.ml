@@ -107,7 +107,8 @@ end
 
 type term_cmp = Term.t -> Term.t -> bool
 
-class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
+class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp)
+  (bot:Signature.sym option) =
   object (self)
 
   val nf_table : (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t = H.create 256
@@ -130,6 +131,12 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
     let eqs = [ l, ((l,r), false)| l,r <- cs @ cas @ es' ] in
     let rules = [ l,((l,r), true) | l,r <- trs ] in
     index <- FingerprintIndex.create (eqs @ rules)
+
+  method add_more es =
+    let es' = es @ [r,l | l,r <- es ] in
+    let eqs = [ l, ((l,r), false)| l,r <- es' ] in
+    index <- L.fold_left FingerprintIndex.insert index eqs;
+    Hashtbl.clear nf_table
 
   (* Returns tuple (u, rs) of some normal form u of t that was obtained using
      rules rs *)
@@ -168,8 +175,16 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp) =
         assert (Rule.is_rule (l,r));
       try
         let lsub,rsub = Rule.substitute (Subst.pattern_match l t) (l,r) in
-        if b || gt lsub rsub then Some (l,r), rsub
-        else self#rewrite_at_root t rules
+        if b then Some (l,r), rsub
+        else
+          let rho = match bot with
+             None -> []
+           | Some c -> let vars = Listset.diff (T.variables r) (T.variables l) in
+              [ x, T.F(c,[]) | x <- vars ]
+          in
+          let rsub = Term.substitute rho rsub in
+          if gt lsub rsub then Some (l,r), rsub
+          else self#rewrite_at_root t rules
       with Subst.Not_matched -> self#rewrite_at_root t rules)
   ;;
 
