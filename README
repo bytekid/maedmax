@@ -35,6 +35,8 @@ Options are the following:
   assume the underlying signature to have infinitely many constants
 -D
   trigger debugging output
+-I <i>
+  control instantiation depth in ground confluence test
 -K <k>
   in every iteration <k> TRSs are chosen
 -M <mode>

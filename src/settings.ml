@@ -64,3 +64,4 @@ let do_proof_debug = ref false
 let is_ordered = ref false
 
 let inequalities : Rules.t ref = ref []
+let inst_depth : int ref = ref 2

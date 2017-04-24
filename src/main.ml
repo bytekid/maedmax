@@ -47,6 +47,8 @@ let options = Arg.align
     " print debugging output");
    ("--json", Arg.Set settings.json,
     " output result and stats in JSON format");
+   ("-I", Arg.Int (fun n -> Settings.inst_depth := n),
+    "<i> instantiation depth for ground confluence check");
    ("-K", Arg.Int (fun n -> settings.k := (fun _ -> n); k := n),
     "<k> compute k maximal terminating TRSs");
    ("--kb", Arg.Unit do_unordered,

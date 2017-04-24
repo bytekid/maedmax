@@ -348,7 +348,7 @@ let all_joinable ctx ord (trs, es, acsyms, fs) sts xsig d =
     else (
       if d then Format.printf "START joinability check %a \n%!" Rule.print st;
       if lookup trs es st then constr (* st is joinable *)
-      else constr <&&> joinable ctx sys (mk_problem st 2)) 
+      else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))) 
   in
   let j = match List.fold_left check True sts with
     | True -> true
@@ -368,7 +368,7 @@ let joinable ctx ord (trs, es, acsyms, fs) st xsig d =
   else (
     if d then Format.printf "START\ %a n%!" Rule.print st;
     let sys = mk_sys trs es acsyms fs ord in
-    let p = mk_problem st 2 in
+    let p = mk_problem st !(Settings.inst_depth) in
     let j = match joinable ctx sys p with
       | True -> true
       | False -> false
