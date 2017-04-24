@@ -1,9 +1,9 @@
-OCB_FLAGS = -use-ocamlfind -pkg unix -pkg yojson -pkg ocamlyices -pkg xml-light -I util -I input -I logic -I rewriting -I termination
+OCB_FLAGS = -use-ocamlfind -pkg unix -pkg yojson -pkg ocamlyices -pkg xml-light -I src -I src/util -I src/input -I src/logic -I src/rewriting -I src/termination
 
 OCB = 		ocamlbuild $(OCB_FLAGS)
 
 all: 		native byte # profile debug
-		cp main.byte maedmax
+		    cp main.byte maedmax
 
 clean:
 			$(OCB) -clean

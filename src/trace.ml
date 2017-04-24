@@ -277,8 +277,8 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
       (s,t), (s,rewrite_conv s rs @ rtconv)
     else (
       failwith "substituted proof";
-      let s',t' = Rule.substitute sigma (s,t) in
-      (s',t'), (s',[]))
+      (*let s',t' = Rule.substitute sigma (s,t) in
+      (s',t'), (s',[])*))
   in
   if !(S.do_proof_debug) then
     print (snd goal_conv);
