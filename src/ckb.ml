@@ -482,7 +482,8 @@ let set_iteration_stats aa gs =
 let store_trs ctx j rr c =
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS is used; have to store *)
-  let rr_reduced = Variant.reduce_encomp rr
+  let rr_reduced =
+    if !(Settings.do_proof) then interreduce rr else Variant.reduce_encomp rr
   in
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
