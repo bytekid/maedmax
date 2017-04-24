@@ -1,4 +1,0 @@
-(VAR x y z)
-(RULES
-multiply(multiply(x,y),z) -> multiply(x,multiply(y,z))
-)
