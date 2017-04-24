@@ -136,44 +136,6 @@ let interreduce rr =
   [ l,r | l,r <- rr_hat; not (Rewriting.reducible_with (Listx.remove (l,r) rr_hat) l) ]
 ;;
 
-(* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let saturated ctx (rr,ee) rewriter cc =
-  let ee' = Rules.subsumption_free ee in
-  let str = termination_strategy () in
-  let d = !(settings.d) in
-  let sys = rr, ee', !(settings.ac_syms), !(settings.signature) in
-  let xsig = !(settings.extended_signature) in
-  let rs = NS.to_list cc in
-  Ground.all_joinable ctx str sys (List.map N.rule rs) xsig d
-;;
-
-let succeeds ctx (rr,ee) rewriter cc gs =
-  rewriter#add_more ee;
-  let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
-  let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
-  if not (NS.is_empty gs) && NS.exists fixed gs then (
-    let (s,t) = List.find fixed (NS.to_list gs) in
-    let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
-    if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print (s,t);
-    if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
-    else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
-  else if rr @ ee = [] || (saturated ctx (rr,ee) rewriter cc &&
-          ((*ee = [] ||*) Rules.is_ground (NS.to_list gs))) then (
-    if !(settings.unfailing) && !(Settings.inequalities) = [] then
-      Some (GroundCompletion (rr, ee))
-    else if !(settings.unfailing) then
-      let ieqs = !(Settings.inequalities) in
-      if List.exists joinable ieqs then
-        Some (Proof (List.find joinable ieqs,([],[]),[])) (* UNSAT *)
-      else Some (GroundCompletion (rr, ee)) (* SAT *)
-    else Some (Completion rr)
-  ) else None
-;;
-
-let succeeds ctx re rew cc =
-  St.take_time St.t_success_check (succeeds ctx re rew cc)
-;;
-
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc ss =
   F.printf "select %i from %i:\n%a\n%!" (List.length ss) (NS.size cc)
@@ -246,6 +208,46 @@ let overlaps_on rr aa gs =
  let ns = rr @ (NS.to_list (eqs_for_overlaps aa)) in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps r g ]
+;;
+
+(* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
+let saturated ctx (rr,ee) rewriter cc =
+  let ee' = Rules.subsumption_free ee in
+  let str = termination_strategy () in
+  let d = !(settings.d) in
+  let sys = rr, ee', !(settings.ac_syms), !(settings.signature) in
+  let xsig = !(settings.extended_signature) in
+  (*let ns = if !(settings.unfailing) then rr @ ee else rr in
+  let cc' = !(settings.es) @ [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ] in*)
+  let rs = [ Rewriting.nf rr l, Rewriting.nf rr r | l,r <- NS.to_list cc ] in
+  Ground.all_joinable ctx str sys (List.map N.rule rs) xsig d
+;;
+
+let succeeds ctx (rr,ee) rewriter cc gs =
+  rewriter#add_more ee;
+  let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
+  let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
+  if not (NS.is_empty gs) && NS.exists fixed gs then (
+    let (s,t) = List.find fixed (NS.to_list gs) in
+    let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
+    if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print (s,t);
+    if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
+    else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
+  else if rr @ ee = [] || (saturated ctx (rr,ee) rewriter cc &&
+          ((*ee = [] ||*) Rules.is_ground (NS.to_list gs))) then (
+    if !(settings.unfailing) && !(Settings.inequalities) = [] then
+      Some (GroundCompletion (rr, ee))
+    else if !(settings.unfailing) then
+      let ieqs = !(Settings.inequalities) in
+      if List.exists joinable ieqs then
+        Some (Proof (List.find joinable ieqs,([],[]),[])) (* UNSAT *)
+      else Some (GroundCompletion (rr, ee)) (* SAT *)
+    else Some (Completion rr)
+  ) else None
+;;
+
+let succeeds ctx re rew cc =
+  St.take_time St.t_success_check (succeeds ctx re rew cc)
 ;;
 
 (* * FIND TRSS  * * *  * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -480,8 +482,7 @@ let set_iteration_stats aa gs =
 let store_trs ctx j rr c =
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS is used; have to store *)
-  let rr_reduced =
-    if !(Settings.do_proof) then interreduce rr else Variant.reduce rr
+  let rr_reduced = Variant.reduce_encomp rr
   in
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
@@ -516,7 +517,8 @@ let rec phi ctx aa gs =
     let gg = fst (select ~k:2 gcps 30) in
     match succeeds ctx (rr, ee) rew (NS.add_list !(settings.es) cps) gs with
        Some r -> raise (Success r)
-     | None ->j+1, NS.add_list sel aa, NS.add_list gg gs
+     | None ->
+       (j+1, NS.add_list sel aa, NS.add_list gg gs)
   in
   try
     let rrs = max_k ctx aa gs in

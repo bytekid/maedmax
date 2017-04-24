@@ -60,15 +60,16 @@ let options = Arg.align
        if s = "kbauto" then settings.strategy := S.strategy_auto
        (*else if s = "auto2" then settings.strategy := S.strategy_auto2
        else if s = "red" then settings.strategy := S.strategy_red
-       else if s = "no" then settings.strategy := S.strategy_not_oriented
-       else if s = "lpo" then settings.strategy := S.strategy_lpo*)
+       else if s = "no" then settings.strategy := S.strategy_not_oriented*)
+       else if s = "lpo" then settings.strategy := S.strategy_lpo
        else if s = "olpo" then settings.strategy := S.strategy_ordered_lpo
        else if s = "okbo" then settings.strategy := S.strategy_ordered_kbo
        else if s = "olpokbo" then settings.strategy := S.strategy_ordered_lpokbo
-       (*else if s = "kbo" then settings.strategy := S.strategy_kbo
-       else if s = "mpol" then settings.strategy := S.strategy_mpol
-       else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
+       else if s = "kbo" then settings.strategy := S.strategy_kbo
        else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
+       else if s = "okbauto" then settings.strategy := S.strategy_ordered
+       (*else if s = "mpol" then settings.strategy := S.strategy_mpol
+       else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
        else if s = "ordered" then settings.strategy := S.strategy_ordered
        else if s = "temp" then settings.strategy := S.strategy_temp*)
        else failwith "unsupported option for -M"),
