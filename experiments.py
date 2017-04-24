@@ -12,9 +12,9 @@ srcdir = sys.argv[1]
 timeout = sys.argv[2]
 config_file = sys.argv[3]
 numprocs = int(sys.argv[4]) if len(sys.argv) > 4 else 2
-codename = sys.argv[5] if len(sys.argv) > 5 else "madmax"
+codename = sys.argv[5] if len(sys.argv) > 5 else "maedmax"
 comment = sys.argv[6] if len(sys.argv) > 6 else ""
-tool = "./madmax"
+tool = "./maedmax"
 jobs = []
 stats = {}
 

@@ -3,7 +3,7 @@ OCB_FLAGS = -use-ocamlfind -pkg unix -pkg yojson -pkg ocamlyices -pkg xml-light 
 OCB = 		ocamlbuild $(OCB_FLAGS)
 
 all: 		native byte # profile debug
-		cp main.byte madmax
+		cp main.byte maedmax
 
 clean:
 			$(OCB) -clean

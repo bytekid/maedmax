@@ -8,7 +8,7 @@ open Settings
 open Yojson.Basic
 
 (*** GLOBALS *****************************************************************)
-let short_usage = "ckb v0.1\nUsage: ckb <options> <file>\n"
+let short_usage = "maedmax v0.9\nUsage: maedmax <options> <file>\n"
 let filenames = ref []
 
 let settings = Settings.default
@@ -21,61 +21,71 @@ let timeout = ref 60.0
 
 let strategy = ref []
 
+let do_ordered _ =
+  settings.unfailing := true;
+  settings.k := (fun _ -> 2);
+  settings.strategy := S.strategy_ordered
+;;
+
+let do_unordered _ =
+  settings.unfailing := false;
+  settings.k := (fun _ -> 2);
+  settings.strategy := S.strategy_auto
+;;
+
 let options = Arg.align 
   [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");*)
-   ("-analyze", Arg.Unit (fun _ -> analyze := true),
+   ("--analyze", Arg.Unit (fun _ -> analyze := true),
     " print problem characteristics");
-   ("-cpf", Arg.Set Settings.do_proof,
+   ("--cpf", Arg.Set Settings.do_proof,
     " output certifiable CPF proof");
-   ("-cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
+   (*("-cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
                                 Settings.do_proof_debug := true),
-    " output CPF proof plus debug output");
-   ("-d", Arg.Set settings.d,
+    " output CPF proof plus debug output");*)
+   ("-D", Arg.Set settings.d,
     " print debugging output");
-   ("-json", Arg.Set settings.json,
+   ("--json", Arg.Set settings.json,
     " output result and stats in JSON format");
    ("-K", Arg.Int (fun n -> settings.k := (fun _ -> n); k := n),
-    "<n> compute n maximal terminating TRSs");
+    "<k> compute k maximal terminating TRSs");
+   ("--kb", Arg.Unit do_unordered,
+    " Knuth-Bendix completion (unordered)");
    ("-M", Arg.String (fun s -> 
-       if s = "cpred" then settings.strategy := S.strategy_cpred
+       (*if s = "cpred" then settings.strategy := S.strategy_cpred
        else if s = "comp" then settings.strategy := S.strategy_comp
        else if s = "dp" then settings.strategy := S.strategy_dp
        else if s = "dg" then settings.strategy := S.strategy_dg
-       else if s = "dgk" then settings.strategy := S.strategy_dgk
-       else if s = "auto" then settings.strategy := S.strategy_auto
-       else if s = "auto2" then settings.strategy := S.strategy_auto2
+       else if s = "dgk" then settings.strategy := S.strategy_dgk*)
+       if s = "kbauto" then settings.strategy := S.strategy_auto
+       (*else if s = "auto2" then settings.strategy := S.strategy_auto2
        else if s = "red" then settings.strategy := S.strategy_red
        else if s = "no" then settings.strategy := S.strategy_not_oriented
-       else if s = "lpo" then settings.strategy := S.strategy_lpo
+       else if s = "lpo" then settings.strategy := S.strategy_lpo*)
        else if s = "olpo" then settings.strategy := S.strategy_ordered_lpo
        else if s = "okbo" then settings.strategy := S.strategy_ordered_kbo
        else if s = "olpokbo" then settings.strategy := S.strategy_ordered_lpokbo
-       else if s = "kbo" then settings.strategy := S.strategy_kbo
+       (*else if s = "kbo" then settings.strategy := S.strategy_kbo
        else if s = "mpol" then settings.strategy := S.strategy_mpol
        else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
        else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
        else if s = "ordered" then settings.strategy := S.strategy_ordered
-       else if s = "temp" then settings.strategy := S.strategy_temp
+       else if s = "temp" then settings.strategy := S.strategy_temp*)
        else failwith "unsupported option for -M"),
-    " strategy (auto, lpo, kbo, mpol, dp, dg, dgk, maxcomp, red, cpred, or comp)");
-   ("-checksub", Arg.Set settings.check_subsumption,
-    " perform subsumption checks");
+    "<mode> strategy (kbauto, olpo, okbo, olpokbo)");
+   (*("-checksub", Arg.Set settings.check_subsumption,
+    " perform subsumption checks");*)
    ("-N", Arg.Int (fun n -> settings.n := n), 
-    " <n> select <n> active equations from CPs of TRS");
-   ("-o", Arg.Unit (fun _ -> settings.unfailing := true;
-                             settings.k := (fun _ -> 2);
-                             settings.strategy := S.strategy_ordered),
-    " ordered completion");
-   ("-term", Arg.Set only_termination,
+    "<n> select <n> active equations from CPs of TRS");
+   ("--term", Arg.Set only_termination,
     " perform termination check");
-   ("-time", Arg.Set_float timeout,
-    " set timeout");
-   ("-termproof", Arg.Set settings.output_tproof,
+   ("-T", Arg.Set_float timeout,
+    "<t> timeout");
+   (*("-termproof", Arg.Set settings.output_tproof,
     " output termination proof");
    ("-TMP", Arg.Set Settings.tmp,
-    " various purposes");
-   ("-xsig", Arg.Set settings.extended_signature,
+    " various purposes");*)
+   ("--xsig", Arg.Set settings.extended_signature,
     " consider signature plus infinitely many constants (ordered completion)")
  ]
 
@@ -176,6 +186,7 @@ let show_proof (es,ieqs,gs) = function
 ;;
 
 let () =
+  do_ordered ();
   Arg.parse options 
    (fun x -> filenames := !filenames @ [x]) short_usage;
   strategy := !(settings.strategy);
