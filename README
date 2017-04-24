@@ -1,33 +1,65 @@
 -------------------------------------------------------------------------------
-   MAXCOMPDP
+   MAEDMAX
 -------------------------------------------------------------------------------
 
-MaxcompDP extends the Maxcomp tool [0] by encodings of dependency pair (DP)
-techniques and control strategies.
+Maedmax implements ordered completion, extending the Maxcomp tool [0].
 
-Besides OCaml and camlp4 it requires Yices [1], the OCamlYices [2] bindings 
-for OCaml, and the json libraray Yojson [3] for output.
+Besides OCaml, camlp4, ocamlfind, and Ocamlbuild [1], it requires Yices [2], the
+OCamlYices [3] bindings for OCaml, and the json library Yojson [4] as well as
+xml-light [5] for output.
 
-Using OCamlMakefile, the MaxcompDP executable can be typed by executing
+Using OCamlbuild, the Maedmax executable can be created by executing
  $ make
 in this directory.
 
 
-The usage of MaxcompDP is as follows:
+The usage of Maedmax is as follows:
 
- $ ./maxcompdp -M auto eq_systems/slothrop_cge.trs
+ $ ./maedmax <options> <input>
 
-The option -M allows to specify a strategy for MaxcompDP. Options include
-auto, lpo, kbo, mpol, dp, dg, dgk, maxcomp, red, cpred, and comp.
-The options -N and -K allow to set the n and k parameters. The input file
-is supposed to be in the trs format [4].
+The input file can be in TPTP [6] or trs format [7].
 
-If you have come across any questions, please contact sarah.winkler@uibk.ac.at.
+Options are the following:
+--analyze
+  only prints some characteristics extracted from the input problem
+--cpf
+  if a goal is given and Maedmax can prove it, it will output the proof in
+  CPF [8], such that it can be checked by CeTA [9].
+--json
+  upon success, statistics are output in json format 
+--kb
+  apply standard Knuth-Bendix completion, rather than ordered completion
+--term
+  only check termination of the input system
+--xsig
+  assume the underlying signature to have infinitely many constants
+-D
+  trigger debugging output
+-K <k>
+  in every iteration <k> TRSs are chosen
+-M <mode>
+  <mode> may be one of the predefined strategies kbauto, olpo, okbo, olpokbo,
+  where the first one is for Knuth-Bendix completion and the others for 
+  ordered completion
+-T <t> 
+  give a timeout in seconds
+-N <n>
+ the number of equations that get activated for a TRS
 
+Some further information may be found on
+  http://cl-informatik.uibk.ac.at/software/maedmax
+
+If you have come across any questions or problems, please contact
+  sarah.winkler@uibk.ac.at
 
 
 [0] http://www.jaist.ac.jp/project/maxcomp/
-[1] http://yices.csl.sri.com/
-[2] https://github.com/polazarus/ocamlyices
-[3] http://mjambon.com/yojson.html
-[4] https://www.lri.fr/~marche/tpdb/format.html
+[1] https://github.com/ocaml/ocamlbuild/blob/master/manual/manual.adoc
+[2] http://yices.csl.sri.com/
+[3] https://github.com/polazarus/ocamlyices
+[4] http://mjambon.com/yojson.html
+[5] https://opam.ocaml.org/packages/xml-light/
+[6] http://www.cs.miami.edu/~tptp/
+[7] https://www.lri.fr/~marche/tpdb/format.html
+[8] http://cl-informatik.uibk.ac.at/software/cpf/
+[9] http://cl-informatik.uibk.ac.at/software/ceta/
