@@ -101,11 +101,10 @@ let print_trs ppf rules =
     Rules.print rules
 
 let print_trs_eqs ppf (rules, eqs) =
-  fprintf ppf "(VAR %s)@.(RULES@.%a@.)(EQUATIONS@.%a@.)@."
-    (String.concat " " (List.map Signature.get_var_name (Rules.variables rules)))
+  fprintf ppf "%a\n%a\n%!"
     Rules.print rules (Rules.print_with "=") eqs
 
-let print_es ppf eqs = fprintf ppf "(EQUATIONS@.%a@.)@." (Rules.print_with "=") eqs
+let print_es ppf eqs = fprintf ppf "%a@." (Rules.print_with "=") eqs
 
 let trs_string rules =
  F.fprintf F.str_formatter "%a" print_trs rules;
