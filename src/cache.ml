@@ -178,7 +178,7 @@ let assert_with ctx f ce =
  List.iter consider ce
 ;;
 
-let decode m i =
+let decode_print m i =
  let s = Hashtbl.fold (fun (j,rl) v l -> if i=j then (rl,v)::l else l) strict_vars [] in
  let s' = [ rl | (rl,v) <- s; eval m v ] in
  let w = Hashtbl.fold (fun (j,rl) v l -> if i=j then (rl,v)::l else l) weak_vars [] in

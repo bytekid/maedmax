@@ -57,7 +57,7 @@ let init (ctx,k) fs =
  one <>=> (sum ctx [ite (dec (ctx,k) f) one zero | f <- !funs ])
 ;;
 
-let decode k m = 
+let decode_print k m = 
  let dps = [ rl | rl,v <- C.get_all_strict 1; eval m v ] in
  let rls = [ rl | rl,v <- C.get_all_strict 0; eval m v ] in
  let fs = Rules.functions (dps @ rls) in

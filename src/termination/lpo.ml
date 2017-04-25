@@ -230,7 +230,7 @@ let decode_prec k m fs =
  F.printf "\n%!"
 ;;
 
-let decode_af k m =
+let decode_print_af k m =
  let dps = [ rl | rl,v <- C.get_all_strict 1; eval m v ] in
  let rls = [ rl | rl,v <- C.get_all_strict 0; eval m v ] in
  let fs = Rules.functions (dps @ rls) in
@@ -251,7 +251,7 @@ let decode_af k m =
  L.iter dec [ (f,a) | (f,a) <- !funs; L.mem f fs]
 ;;
 
-let decode k m =
+let decode_print k m =
  Format.printf "LPO: \n %!";
  let fs = Rules.functions [ rl | rl,_ <- C.get_all_strict 0] in
  decode_prec k m fs
@@ -275,6 +275,20 @@ let decode_term_gt k m =
        let lex_gt = fst (L.fold_left lex (false, true) (List.combine ss ts)) in
        sub_gt || (lex_gt && L.for_all (gt s) ts))
   in gt
+;;
+
+let decode k m =
+  let gt = decode_term_gt k m in
+  let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
+  let bot =  match [ c | c,a <- !funs; a = 0] with
+      [] -> None
+    | c :: cs -> Some (List.fold_left cmp c cs)
+  in
+  object
+    method bot = bot;;
+    method gt = gt;;
+    method print = fun _ -> decode_print k m 
+  end
 ;;
 
 let cond_gt i ctx conds s t =

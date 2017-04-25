@@ -416,18 +416,18 @@ let bootstrap_constraints j ctx rs =
 
 (* Decodes termination argument associated with strategy s using model m,
    and outputs relevant information. Stage j is required for lookups. *)
-let decode j m s = 
+let decode_print j m s = 
  let dec_ord ?(af=false) (i,o) =
   Format.printf "decode strategy %s\n%!" (term_to_string s);
   match o with
-  | LPO -> (if af then Lpo.decode_af else Lpo.decode) i m
-  | KBO -> Kbo.decode i m
-  | Cfs -> Cfs.decode i m
-  | Cfsn -> Cfsn.decode i m
-  | MPol -> MPol.decode i m
-  | _ -> failwith "Strategy.decode: order not implemented"
+  | LPO -> (if af then Lpo.decode_print_af else Lpo.decode_print) i m
+  | KBO -> Kbo.decode_print i m
+  | Cfs -> Cfs.decode_print i m
+  | Cfsn -> Cfsn.decode_print i m
+  | MPol -> MPol.decode_print i m
+  | _ -> failwith "Strategy.decode_print: order not implemented"
  in
-Format.printf "Problem:\n"; Cache.decode m 0;
+Format.printf "Problem:\n"; Cache.decode_print m 0;
  match s with
     Orders (Seq os) -> List.iter dec_ord (index ~i:(j+1) os)
   | Orders (Choice (o1,o2)) ->
@@ -435,29 +435,29 @@ Format.printf "Problem:\n"; Cache.decode m 0;
     if eval m choice then dec_ord (j+1,o1)
     else dec_ord (j+1,o2)
   | Dp (Seq os) ->
-   (Dp.decode j m;
-   Cache.decode m 1;
-   List.iter (fun (i, o) -> dec_ord ~af:true (i,o); Cache.decode m (i+1)) (index ~i:(j+2) os))
+   (Dp.decode_print j m;
+   Cache.decode_print m 1;
+   List.iter (fun (i, o) -> dec_ord ~af:true (i,o); Cache.decode_print m (i+1)) (index ~i:(j+2) os))
   | Dg (Seq os) ->
-   (Dp.decode j m;
-    Cache.decode m 1;
-    Dg.decode (j+1) m;
-    Cache.decode m 2;
-    Cache.decode m 3;
-    List.iter (fun (i, o) -> dec_ord ~af:true (i,o); Cache.decode m (i+1)) (index ~i:(j+3) os))
+   (Dp.decode_print j m;
+    Cache.decode_print m 1;
+    Dg.decode_print (j+1) m;
+    Cache.decode_print m 2;
+    Cache.decode_print m 3;
+    List.iter (fun (i, o) -> dec_ord ~af:true (i,o); Cache.decode_print m (i+1)) (index ~i:(j+3) os))
   | DgScc (k,Seq os) ->
-   (Dp.decode j m;
-    Cache.decode m 1;
-    Cache.decode m 2;
+   (Dp.decode_print j m;
+    Cache.decode_print m 1;
+    Cache.decode_print m 2;
     let ios = [ index ~i:(j+3+offset*i) os | i <- Listx.interval 0 (k-1) ] in
-    List.iter  (fun (i, o) -> dec_ord ~af:true (i,o); Cache.decode m i) (List.concat ios))
-  | _ -> failwith "Strategy.decode: not implemented"
+    List.iter  (fun (i, o) -> dec_ord ~af:true (i,o); Cache.decode_print m i) (List.concat ios))
+  | _ -> failwith "Strategy.decode_print: not implemented"
 ;;
 
-let decode_term_gt j m s = 
+let decode j m s = 
  let dec_ord ?(af=false) i = function
-  | LPO -> Lpo.decode_term_gt i m
-  | KBO -> Kbo.decode_term_gt i m
+  | LPO -> Lpo.decode i m
+  | KBO -> Kbo.decode i m
   | _ -> failwith "Strategy.decode_term_cmp: order not implemented"
  in
  match s with

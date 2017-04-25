@@ -34,10 +34,9 @@ val assert_constraints : Settings.t_term -> int -> Yices.context -> Rules.t ->
 
 val bootstrap_constraints : int -> Yices.context -> Rules.t -> Yicesx.t
 
-val decode : int -> Yices.model -> Settings.t_term -> unit
+val decode_print : int -> Yices.model -> Settings.t_term -> unit
 
-val decode_term_gt : int -> Yices.model -> Settings.t_term ->
-  (Term.t -> Term.t -> bool)
+val decode : int -> Yices.model -> Settings.t_term -> Order.t
 
 val clear : unit -> unit
 

@@ -20,8 +20,9 @@ module NS = Nodes.Make(N)
 
 (*** TYPES *******************************************************************)
 type result = Completion of Rules.t
-  | GroundCompletion of (Rules.t * Rules.t)
-  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list) * Subst.t)
+  | GroundCompletion of (Rules.t * Rules.t * Order.t)
+  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list) *
+              Subst.t)
 
 (*** EXCEPTIONS **************************************************************)
 exception Success of result
@@ -123,7 +124,7 @@ let reduced rr ns =
 ;;
 
 let interreduce rr =
- let rew = new Rewriter.rewriter rr [] (fun _ _ -> false) None in
+ let rew = new Rewriter.rewriter rr [] Order.default in
  let right_reduce (l,r) =
    let r', rs = rew#nf r in
    if r <> r' then (
@@ -215,7 +216,7 @@ let saturated ctx (rr,ee) rewriter cc =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
   let d = !(settings.d) in
-  let sys = rr, ee', !(settings.ac_syms), !(settings.signature) in
+  let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
   (*let ns = if !(settings.unfailing) then rr @ ee else rr in
   let cc' = !(settings.es) @ [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ] in*)
@@ -227,21 +228,23 @@ let succeeds ctx (rr,ee) rewriter cc gs =
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let fixed (u,v) = joinable (u,v) || Subst.unifiable u v in
+  let sat = saturated ctx (rr,ee) rewriter cc in
+  let order = match sat with None -> rewriter#order | Some o -> o in
   if not (NS.is_empty gs) && NS.exists fixed gs then (
     let (s,t) = List.find fixed (NS.to_list gs) in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if !(settings.d) then F.printf "joined goal %a\n%!" Rule.print (s,t);
     if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
     else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
-  else if rr @ ee = [] || (saturated ctx (rr,ee) rewriter cc &&
-          ((*ee = [] ||*) Rules.is_ground (NS.to_list gs))) then (
+  else if rr @ ee = [] || (sat <> None &&
+          (Rules.is_ground (NS.to_list gs))) then (
     if !(settings.unfailing) && !(Settings.inequalities) = [] then
-      Some (GroundCompletion (rr, ee))
+      Some (GroundCompletion (rr, ee, order))
     else if !(settings.unfailing) then
       let ieqs = !(Settings.inequalities) in
       if List.exists joinable ieqs then
         Some (Proof (List.find joinable ieqs,([],[]),[])) (* UNSAT *)
-      else Some (GroundCompletion (rr, ee)) (* SAT *)
+      else Some (GroundCompletion (rr, ee, order)) (* SAT *)
     else Some (Completion rr)
   ) else None
 ;;
@@ -389,13 +392,13 @@ let max_k ctx cc gs =
           let rl = N.rule n in eval m (C.find_rule rl) && (not (Rule.is_dp rl))
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
-        let gt = Strategy.decode_term_gt 0 m s in
-        if !Settings.do_assertions then
-          assert (List.for_all (fun (l,r) -> gt l r && not (gt r l)) rr);
-        if !(settings.d) then
-          Strategy.decode 0 m s;
+        let order = Strategy.decode 0 m s in
+        if !(settings.d) then order#print ();
+        if !Settings.do_assertions then (
+          let oriented (l,r) = order#gt l r && not (order#gt r l) in
+          assert (List.for_all oriented rr));
         require (!! (big_and ctx [ C.find_rule r | r <- rr ]));
-        max_k ((rr, c, gt) :: acc) ctx cc (n-1))
+        max_k ((rr, c, order) :: acc) ctx cc (n-1))
      else (
        if !(settings.d) then F.printf "no further TRS found\n%!"; 
        if (n = k && L.length !(settings.strategy) > 1) then
@@ -415,13 +418,6 @@ let max_k ctx cc gs =
 ;;
 
 let max_k ctx cc = St.take_time St.t_maxk (max_k ctx cc)
-
-let mconst gt =
-  let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
-  match [ c | c,a <- !(settings.signature); a = 0] with
-      [] -> None
-    | c :: cs -> Some (List.fold_left cmp c cs)
-;;
 
 (* some logging functions *)
 let log_iteration i aa =
@@ -500,10 +496,10 @@ let rec phi ctx aa gs =
   if stuck_state aa gs then
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
-  let process (j, aa, gs) (rr,c, gt) =
+  let process (j, aa, gs) (rr,c, order) =
     let trs_n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index trs_n in
-    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) gt (mconst gt) in
+    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in
@@ -558,16 +554,6 @@ let remember_state es ieqs gs =
  hash_initial := h
 ;;
 
-let termination_output = function
-  GroundCompletion (trs,_) -> (
-    let s = termination_strategy () in
-    try
-      F.printf "TERMINATION PROOF:\n";
-      assert (Termination.check s trs !(settings.json)) 
-    with _ -> F.printf "(sorry, no proof output for termination strategy)\n%!")
-  | _ -> () 
-;;
-
 
 (* main ckb function *)
 let rec ckb fs (es, ieqs, gs) =
@@ -593,7 +579,6 @@ let rec ckb fs (es, ieqs, gs) =
   let ss = Listx.unique (t_strategies ()) in
   L.iter (fun s -> Strategy.init s 0 ctx (gs0 @ ieqs @ es0)) ss;
   let res = phi ctx ns0 (NS.of_list gs0) in
-  if !(fs.output_tproof) then termination_output res;
   del_context ctx;
   res
  with Restart es_new -> (

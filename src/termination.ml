@@ -8,7 +8,7 @@ let check s trs is_json =
  require (Strategy.bootstrap_constraints 0 ctx trs);
  require (big_and ctx [ Cache.find_rule st | st <- trs ]);
  if check ctx then (
-   if not is_json then Strategy.decode 0 (get_model ctx) s;
+   if not is_json then Strategy.decode_print 0 (get_model ctx) s;
    true)
  else false
 ;;

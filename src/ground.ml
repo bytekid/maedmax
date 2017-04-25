@@ -4,6 +4,7 @@ open Term
 (*** MODULES *****************************************************************)
 module Sig = Signature
 module Ac = Theory.Ac
+module S = Strategy
 
 (*** TYPES *******************************************************************)
 type sys = {
@@ -11,7 +12,7 @@ type sys = {
   es: Rules.t;
   signature: (Sig.sym * int) list;
   acsyms: Sig.sym list;
-  order: Settings.t_term
+  strategy: Settings.t_term
 }
 
 type problem = {
@@ -64,22 +65,38 @@ let get_model c =
   a
 ;;
 
-let check c = get_model c <> None 
-
-
-let check_ordering_constraints trs c =
-  match get_model (Yicesx.big_and1 (c :: [ Cache.find_rule r | r <- trs ])) with
-  Some m -> true
-  | None -> false
+let get_model_decode c strategy =
+  let ctx = Yicesx.ctx c in
+  Yicesx.push ctx;
+  Yicesx.require c;
+  let a =
+    if Yicesx.check ctx then
+      let m = Yicesx.get_model ctx in
+      Some (Strategy.decode 0 m strategy)
+    else None
+  in
+  Yicesx.pop ctx;
+  a
 ;;
 
+let check c = get_model c <> None 
 
-let mk_sys trs es acsyms fs o = {
+let check_constraints strategy trs c =
+  match get_model (Yicesx.big_and1 (c :: [ Cache.find_rule r | r <- trs ])) with
+    Some m -> Some m
+  | None -> None
+;;
+
+let check_decode_constraints s trs c =
+  get_model_decode (Yicesx.big_and1 (c :: [ Cache.find_rule r | r <- trs ])) s
+;;
+
+let mk_sys trs es acsyms fs s = {
   trs = trs;
   es = es;
   signature = fs;
   acsyms = acsyms;
-  order = o
+  strategy = s
 }
 
 let mk_problem st i = {
@@ -93,7 +110,7 @@ let mk_problem st i = {
 let contradictory_constraints sys ctx p =
   let cs = order_to_conditions (p.var_order) in
   let cs_rem st = Listx.remove st cs in
-  let contradict (s,t) = Strategy.cond_gt sys.order 1 ctx (cs_rem (s,t)) t s in
+  let contradict (s,t) = S.cond_gt sys.strategy 1 ctx (cs_rem (s,t)) t s in
   check (Yicesx.big_or ctx [ contradict c | c <- cs ])
 ;;
 
@@ -164,8 +181,9 @@ let ordered_ac_step sys ctx conds (l,r) (u,c0) =
     else if no_order_check conds x' y' then u, True (* false/no step *)
     else ( 
     (*if !debug then Format.printf "   SAT check %a %!" Rule.print (x', y');*)
-    let c = Strategy.cond_gt sys.order 1 ctx conds x' y' in
-    if check_ordering_constraints sys.trs (yices_answer ctx c0 <&> c) then (
+    let c = Strategy.cond_gt sys.strategy 1 ctx conds x' y' in
+    let c' = yices_answer ctx c0 <&> c in
+    if check_constraints sys.strategy sys.trs c' <> None then (
       (*if !debug then Format.printf "yes \n%!";*)
       substitute sub r, c0 <&&> Maybe c)
     else (
@@ -311,10 +329,6 @@ and instance_joinable ctx sys p ac =
       let s0,t0 = sub p.s, sub p.t in
       let s1,t1 = Rewriting.nf sys.trs s0, Rewriting.nf sys.trs t0 in
       let xs = List.map sub p.var_order in
-      (*if !debug then (
-        Format.printf "  Instantiated to %a, reduced to %a wrt %!" Rule.print (s0, t0) Rule.print (s1,t1);
-        print_order xs;
-        Format.printf "\n%!");*)
       if s1 = t1 then True
       (* instantiation is not in normal form: kill TODO prove *)
       else if List.exists (Rewriting.reducible_with sys.trs) xs then 
@@ -339,46 +353,25 @@ let lookup trs es st =
   List.exists covered !joinable_cache
 ;;
 
-let all_joinable ctx ord (trs, es, acsyms, fs) sts xsig d =
+let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
   debug := d;
   extended_signature := xsig;
-  let sys = mk_sys trs es acsyms fs ord in
+  let sys = mk_sys trs es acsyms fs str in
   let check constr st =
     if constr = False then False
     else (
       if d then Format.printf "START joinability check %a \n%!" Rule.print st;
-      if lookup trs es st then constr (* st is joinable *)
-      else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))) 
+      let c = if lookup trs es st then constr (* st is joinable *)
+       else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))
+      in if d then Format.printf "END \n%!";
+    c)
   in
   let j = match List.fold_left check True sts with
-    | True -> true
-    | False -> false 
-    | Maybe c -> check_ordering_constraints trs c
+    | True -> Some ord
+    | False -> None 
+    | Maybe c -> check_decode_constraints str trs c
   in 
   if d then
-    Format.printf "END %s\n%!" (if j then "YES" else "NO");
-    (*if j then joinable_cache := (trs, es, st) :: !joinable_cache;*)
+    Format.printf "END %s\n%!" (if j <> None then "YES" else "NO");
   j
-;;
-
-let joinable ctx ord (trs, es, acsyms, fs) st xsig d =
-  debug := d;
-  extended_signature := xsig;
-  if lookup trs es st then true
-  else (
-    if d then Format.printf "START\ %a n%!" Rule.print st;
-    let sys = mk_sys trs es acsyms fs ord in
-    let p = mk_problem st !(Settings.inst_depth) in
-    let j = match joinable ctx sys p with
-      | True -> true
-      | False -> false
-      | Maybe c -> if check_ordering_constraints trs c then
-        (if d then Format.printf "Ordering constraints SAT\n%!"; true) else
-        (if d then Format.printf "Ordering constraints UNSAT\n%!"; false)     
-    in
-    if d then (
-      if not j then Format.printf "Not joinable: %a\n" Rule.print st;
-      Format.printf "END: %a %s\n%!" Rule.print st (if j then "YES" else "NO"));
-    if j then joinable_cache := (trs, es, st) :: !joinable_cache;
-    j)
 ;;

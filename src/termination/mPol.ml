@@ -235,7 +235,7 @@ let decode_weights k m fs =
  in List.iter dec fs
 ;;
 
-let decode k m =
+let decode_print k m =
  let fs = Rules.functions [ rl | rl,_ <- C.get_all_strict 0] in
  decode_prec k m fs;
  decode_weights k m !funs;

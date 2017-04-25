@@ -14,6 +14,6 @@ val x_w : Yices.context -> int -> Signature.sym -> Yicesx.t
 
 val x_scc : Yices.context -> int -> Signature.sym -> Yicesx.t
 
-val decode : int -> Yices.model -> unit
+val decode_print : int -> Yices.model -> unit
 
 val uf : Rule.t list -> Signature.sym list list

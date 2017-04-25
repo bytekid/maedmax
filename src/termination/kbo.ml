@@ -125,8 +125,6 @@ let cond_gt k ctx conds s t =
 ;;
 
 
-let decode m k = ()
-
 let eval_table k m h =
  let add (k',f) x p =
    if k <> k' then p
@@ -161,14 +159,37 @@ let decode_term_gt k m =
   in gt
 ;;
 
-let decode k m = 
- Format.printf "KBO: \n %!";
- let prec = Hashtbl.find (eval_table k m precedence) in
- let name = Signature.get_fun_name in
- let fs' = List.sort (fun (_, p) (_,q) -> p - q) [ f, prec f | f,_ <- !funs ] in
- List.iter (fun (f,i) -> Format.printf "< %s:%d " (name f) i) fs';
- Format.printf "\n %!";
- let w = Hashtbl.find (eval_table k m weights) in
- List.iter (fun (f,_) -> Format.printf "w(%s) = %d " (name f) (w f)) !funs;
- Format.printf "\n%!"
+let eval k m =
+  let name = Signature.get_fun_name in
+  let prec f = try Hashtbl.find (eval_table k m precedence) f with _ -> 42 in
+  let w f = try Hashtbl.find (eval_table k m weights) f with _ -> 42 in
+  List.sort (fun (_, p, _) (_,q, _) -> p - q) [ f, prec f, w f | f,_ <- !funs ]
+;;
+
+
+let print fpw = 
+  Format.printf "KBO: \n %!";
+  let name = Signature.get_fun_name in
+  List.iter (fun (f,i,_) -> Format.printf "< %s:%d %!" (name f) i) fpw;
+  Format.printf "\n%!";
+  List.iter (fun (f,_,w) -> Format.printf "w(%s) = %d " (name f) w) fpw;
+  Format.printf "\n%!"
+;;
+
+
+let decode_print k m = print (eval k m)
+
+let decode k m =
+  let gt = decode_term_gt k m in
+  let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
+  let bot =  match [ c | c,a <- !funs; a = 0] with
+      [] -> None
+    | c :: cs -> Some (List.fold_left cmp c cs)
+  in
+  let fpw = eval k m in
+  object
+    method bot = bot;;
+    method gt = gt;;
+    method print = fun _ -> print fpw 
+  end
 ;;

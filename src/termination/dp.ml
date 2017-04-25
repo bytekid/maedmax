@@ -55,7 +55,7 @@ let dp_constraint ctx j ((l,r) as lr) =
  else !! x_rule
 ;;
 
-let decode j m =
+let decode_print j m =
  Format.printf "DPs:@\n ";
  let dps = [ dp | (dp,v) <- C.get_all_strict (j+1); eval m v ] in
  Listx.print Rule.print "@\n" dps;

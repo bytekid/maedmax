@@ -107,12 +107,10 @@ end
 
 type term_cmp = Term.t -> Term.t -> bool
 
-class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp)
-  (bot:Signature.sym option) =
+class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
   object (self)
 
   val nf_table : (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t = H.create 256
-
   val mutable index = FingerprintIndex.empty
 
   method init () =
@@ -123,6 +121,8 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp)
     index <- FingerprintIndex.create (eqs @ rules)
 
   method trs = trs
+  
+  method order : Order.t = order
 
   method add es =
     let cs = [ Ac.commutativity f | f <- acs] in
@@ -177,13 +177,13 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (gt : term_cmp)
         let lsub,rsub = Rule.substitute (Subst.pattern_match l t) (l,r) in
         if b then Some (l,r), rsub
         else
-          let rho = match bot with
+          let rho = match order#bot with
              None -> []
-           | Some c -> let vars = Listset.diff (T.variables r) (T.variables l) in
-              [ x, T.F(c,[]) | x <- vars ]
+           | Some c -> let vs = Listset.diff (T.variables r) (T.variables l) in
+              [ x, T.F(c,[]) | x <- vs ]
           in
           let rsub = Term.substitute rho rsub in
-          if gt lsub rsub then Some (l,r), rsub
+          if order#gt lsub rsub then Some (l,r), rsub
           else self#rewrite_at_root t rules
       with Subst.Not_matched -> self#rewrite_at_root t rules)
   ;;

@@ -48,4 +48,4 @@ val was_oriented : Rule.t -> bool
 
 val clear : unit -> unit
 
-val decode : Yices.model -> int -> unit
+val decode_print : Yices.model -> int -> unit

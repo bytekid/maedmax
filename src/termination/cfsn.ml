@@ -61,7 +61,7 @@ let init (ctx,k) fs =
  big_and ctx (List.map add fs)
 ;;
 
-let decode k m = 
+let decode_print k m = 
  let dec (f, a) =
   let v = Hashtbl.find weights (k,f) in
   let fn = Signature.get_fun_name f in

@@ -128,7 +128,7 @@ let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
 let print_json f res settings =
  let res_str = match res with
   | Ckb.Completion rr -> trs_string rr
-  | Ckb.GroundCompletion (rr,ee) ->
+  | Ckb.GroundCompletion (rr,ee,_) ->
     if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
   | Ckb.Proof _ -> "..."
  in
@@ -158,9 +158,10 @@ let print_res res =
   printf "# SZS status ";
   match res with
    | Ckb.Completion trs -> printf "Satisfiable\n%a@." print_trs trs;
-   | Ckb.GroundCompletion (rr,ee) ->
+   | Ckb.GroundCompletion (rr,ee,order) ->
     (printf "Satisfiable\n%a@." print_trs rr;
-    if ee <> [] then printf "ES:@.%a@." print_es ee)
+    if ee <> [] then printf "ES:@.%a@." print_es ee;
+    order#print ())
    | Ckb.Proof _ -> printf "Unsatisfiable\n%!"
 ;;
 
@@ -171,11 +172,11 @@ let print_analysis es =
 let clean =
   let reduce rr = Listx.unique (Variant.reduce rr) in function
  | Ckb.Completion trs -> Ckb.Completion (reduce trs)
- | Ckb.GroundCompletion (rr,ee) ->
+ | Ckb.GroundCompletion (rr,ee,o) ->
    let nf = Rewriting.nf rr in
    let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
    let ee'' = Rules.subsumption_free ee' in
-   Ckb.GroundCompletion (Variant.reduce_encomp rr, ee'')
+   Ckb.GroundCompletion (Variant.reduce_encomp rr, ee'',o)
  | Ckb.Proof p -> Ckb.Proof p
 ;;
 
