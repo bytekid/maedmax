@@ -95,10 +95,7 @@ let options = Arg.align
 (*** FUNCTIONS ***************************************************************)
 let map3 f (a,b,c) = (f a, f b, f c)
 
-let print_trs ppf rules = 
-  fprintf ppf "(VAR %s)@.(RULES@.%a@.)@."
-    (String.concat " " (List.map Signature.get_var_name (Rules.variables rules)))
-    Rules.print rules
+let print_trs ppf rules = fprintf ppf "%a@." Rules.print rules
 
 let print_trs_eqs ppf (rules, eqs) =
   fprintf ppf "%a\n%a\n%!"
@@ -156,11 +153,12 @@ let print_json_term yes f =
 let print_res res =
   printf "# SZS status ";
   match res with
-   | Ckb.Completion trs -> printf "Satisfiable\n%a@." print_trs trs;
+   | Ckb.Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
    | Ckb.GroundCompletion (rr,ee,order) ->
-    (printf "Satisfiable\n%a@." print_trs rr;
-    if ee <> [] then printf "ES:@.%a@." print_es ee;
-    order#print ())
+    (printf "Satisfiable\n\n%a@." print_trs rr;
+    if ee <> [] then printf "%a@." print_es ee;
+    order#print ();
+    Format.printf "\n")
    | Ckb.Proof _ -> printf "Unsatisfiable\n%!"
 ;;
 

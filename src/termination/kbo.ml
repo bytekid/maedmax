@@ -160,20 +160,25 @@ let decode_term_gt k m =
 ;;
 
 let eval k m =
-  let name = Signature.get_fun_name in
   let prec f = try Hashtbl.find (eval_table k m precedence) f with _ -> 42 in
   let w f = try Hashtbl.find (eval_table k m weights) f with _ -> 42 in
   List.sort (fun (_, p, _) (_,q, _) -> p - q) [ f, prec f, w f | f,_ <- !funs ]
 ;;
 
 
-let print fpw = 
-  Format.printf "KBO: \n %!";
-  let name = Signature.get_fun_name in
-  List.iter (fun (f,i,_) -> Format.printf "< %s:%d %!" (name f) i) fpw;
-  Format.printf "\n%!";
-  List.iter (fun (f,_,w) -> Format.printf "w(%s) = %d " (name f) w) fpw;
-  Format.printf "\n%!"
+let print = function
+    [] -> ()
+  | (f,p,w) :: fpw ->
+    Format.printf "KBO: \n %!";
+    let name = Signature.get_fun_name in
+    if fpw <> [] then (
+      Format.printf " %s:%d " (name f) p;
+      List.iter (fun (f,i,_) -> Format.printf "< %s:%d %!" (name f) i) fpw;
+      Format.printf "\n"
+      );
+    Format.printf "  w0 = 1, w(%s) = %d" (name f) w;
+    List.iter (fun (f,_,w) -> Format.printf ", w(%s) = %d" (name f) w) fpw;
+    Format.printf "\n%!"
 ;;
 
 
