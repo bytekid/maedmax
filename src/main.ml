@@ -98,8 +98,9 @@ let map3 f (a,b,c) = (f a, f b, f c)
 let print_trs ppf rules = fprintf ppf "%a@." Rules.print rules
 
 let print_trs_eqs ppf (rules, eqs) =
-  fprintf ppf "%a\n%a\n%!"
-    Rules.print rules (Rules.print_with "=") eqs
+  fprintf ppf "%a%!" Rules.print rules;
+  fprintf ppf "%a%!" (Rules.print_with "=") eqs
+;;
 
 let print_es ppf eqs = fprintf ppf "%a@." (Rules.print_with "=") eqs
 

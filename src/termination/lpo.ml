@@ -222,19 +222,31 @@ let decode_prec_aux k m =
  in Hashtbl.fold add precedence (Hashtbl.create 16)
 ;;
 
-let decode_prec k m fs =
+let eval_prec k m =
  let prec = Hashtbl.find (decode_prec_aux k m) in
- let name = Signature.get_fun_name in
- let fs' = List.sort (fun (_, p) (_,q) -> p - q) [ f, prec f | f,_ <- !funs ] in
- List.iter (fun (f,i) -> Format.printf "< %s:%d " (name f) i) fs';
- F.printf "\n%!"
+ List.sort (fun (_, p) (_,q) -> p - q) [ f, prec f | f,_ <- !funs ]
 ;;
+
+
+let print_prec = function
+    [] -> ()
+  | (f,p) :: fp ->
+    Format.printf "LPO \n %!";
+    let name = Signature.get_fun_name in
+    if fp <> [] then (
+      Format.printf " %s " (name f);
+      List.iter (fun (f,_) -> Format.printf "< %s %!" (name f)) fp;
+      Format.printf "\n"
+      );
+;;
+
+
+let decode_print k m = print_prec (eval_prec k m)
 
 let decode_print_af k m =
  let dps = [ rl | rl,v <- C.get_all_strict 1; eval m v ] in
  let rls = [ rl | rl,v <- C.get_all_strict 0; eval m v ] in
- let fs = Rules.functions (dps @ rls) in
- decode_prec k m fs;
+ decode_print k m;
  let dec (f,a) =
   try
   F.printf " pi(%s)=" (Signature.get_fun_name f); 
@@ -248,13 +260,7 @@ let decode_print_af k m =
   with Not_found -> failwith "decode_af: Not_found"
  in
  F.printf "argument filtering: @\n"; 
- L.iter dec [ (f,a) | (f,a) <- !funs; L.mem f fs]
-;;
-
-let decode_print k m =
- Format.printf "LPO: \n %!";
- let fs = Rules.functions [ rl | rl,_ <- C.get_all_strict 0] in
- decode_prec k m fs
+ L.iter dec [ (f,a) | (f,a) <- !funs; L.mem f (Rules.functions (dps @ rls))]
 ;;
 
 let decode_term_gt k m =
@@ -284,10 +290,11 @@ let decode k m =
       [] -> None
     | c :: cs -> Some (List.fold_left cmp c cs)
   in
+  let prec = eval_prec k m in
   object
     method bot = bot;;
     method gt = gt;;
-    method print = fun _ -> decode_print k m 
+    method print = fun _ -> print_prec prec
   end
 ;;
 
