@@ -2,7 +2,8 @@
    MAEDMAX
 -------------------------------------------------------------------------------
 
-Maedmax implements ordered completion, extending the Maxcomp tool [0].
+Welcome to maedmax! Maedmax implements ordered completion, extending the
+powerful completion tool Maxcomp [0].
 
 Besides OCaml, camlp4, ocamlfind, and Ocamlbuild [1], it requires Yices [2], the
 OCamlYices [3] bindings for OCaml, and the json library Yojson [4] as well as
@@ -12,47 +13,62 @@ Using OCamlbuild, the Maedmax executable can be created by executing
  $ make
 in this directory.
 
+-------------------------------------------------------------------------------
+   USAGE
+-------------------------------------------------------------------------------
 
 The usage of Maedmax is as follows:
-
  $ ./maedmax <options> <input>
 
-The input file can be in TPTP [6] or trs format [7].
+where the input file can be in TPTP [6] or trs format [7].
+In case you are happy with the default options, you can simply e.g. call
+ $ ./maedmax RNG042-2.p
 
-Options are the following:
---analyze
-  only prints some characteristics extracted from the input problem
---cpf
-  if a goal is given and Maedmax can prove it, it will output the proof in
-  CPF [8], such that it can be checked by CeTA [9].
---json
-  upon success, statistics are output in json format 
---kb
-  apply standard Knuth-Bendix completion, rather than ordered completion
---term
-  only check termination of the input system
---xsig
-  assume the underlying signature to have infinitely many constants
--D
-  trigger debugging output
--I <i>
-  control instantiation depth in ground confluence test
--K <k>
-  in every iteration <k> TRSs are chosen
--M <mode>
-  <mode> may be one of the predefined strategies kbauto, olpo, okbo, olpokbo,
-  where the first one is for Knuth-Bendix completion and the others for 
-  ordered completion
--T <t> 
-  give a timeout in seconds
--N <n>
- the number of equations that get activated for a TRS
+-------------------------------------------------------------------------------
+   OPTIONS
+-------------------------------------------------------------------------------
+
+You can also specify a number options, as for instance in the call
+ $ ./maedmax -T 5 -M olpo -K 2 -N 10 RNG042-2.p
+
+Here is what these (and all other) options mean:
+ - A timeout in seconds can be specified using option -T.
+ - The termination strategy can be controlled with the option -M, which takes an
+   additional string specifying the strategy. An example call is
+    $ ./maedmax -M olpo RNG042-2.p
+   Possible values for -M are olpo for LPO, okbo for KBO, or olpokbo for a
+   combination (which is the default).
+ - Ground joinability is attempted to be proven over an extended signature, i.e.
+   the signature extended by infinitely many constants when using option --xsig.
+ - The tool attempts to produce a proof in the certifiable CPF format when
+   called with option --cpf.
+ - The tool can also be run in standard completion mode using option --kb. In
+   this mode it closely resembles maxcomp.
+ - A number of options allows to control parameters of the maximal completion
+   procedure and the ground confluence checks. All of the following require to
+   specify a natural number.
+   - Option -K controls the number of TRSs selected in every iteration.
+   - Option -N controls how many passive equations are added to the set of
+     active facts, per selected TRS.
+   - The instantiation depth of ground joinability checks is controlled by -I 
+     (cf. the number of repetitions in the strategy given on p.9 of the paper). 
+ - The remaining options are mainly there for analyzing input problems and
+   debugging.
+   - Option --term performs a termination check of the input system, considering
+     the rules to be oriented as given.
+   - Option --analyze prints problem properties, including recognized theories.
+   - Debugging output is triggered by the option -D. 
+
+
+-------------------------------------------------------------------------------
+   WHAT'S MORE ...
+-------------------------------------------------------------------------------
 
 Some further information may be found on
   http://cl-informatik.uibk.ac.at/software/maedmax
 
-If you have come across any questions or problems, please contact
-  sarah.winkler@uibk.ac.at
+If you have come across any questions or problems, please do not hesitate to
+contact sarah.winkler@uibk.ac.at.
 
 
 [0] http://www.jaist.ac.jp/project/maxcomp/
