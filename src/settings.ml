@@ -23,6 +23,7 @@ type t = {
  d        : bool ref ; (* debug mode *)
  es       : Rules.t ref ;
  json     : bool ref; (* output json result and statistics *)
+ gs       : Rules.t ref ;
  k        : (int -> int) ref;  (* k TRSs are chosen in an iteration *)
  n        : int ref;  (* how many equations are (at most) selected *)
  unfailing : bool ref;
@@ -47,6 +48,7 @@ let default = {
  d         = ref false;
  es        = ref [] ;
  json      = ref false;
+ gs        = ref [] ;
  k         = ref k_default;
  n         = ref 10;
  unfailing = ref false;
