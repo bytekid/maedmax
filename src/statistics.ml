@@ -37,7 +37,10 @@ let take_time t f x =
  t := !t +. (Unix.gettimeofday () -. s);
  res
 
-let memory _ = int_of_float (Gc.allocated_bytes () /. 1048576.)
+let memory _ =
+  let s = Gc.quick_stat () in
+  s.heap_words * (Sys.word_size / 8 ) / (1024 * 1024)
+;;
 
 let memory_diff_str _ =
  List.fold_left (fun s d -> s ^ " " ^ (string_of_int d)) "" !mem_diffs
@@ -54,9 +57,9 @@ let print () =
   if !goals > 0 then
     printf "goals               %i@." !goals;
   printf "restarts            %i@." !restarts;
-  printf "memory              %d@." (memory ());
-  printf "time diffs         %s@." (time_diff_str ());
-  printf "memory diffs       %s@." (memory_diff_str ());
+  printf "memory (MB)         %d@." (memory ());
+  (*printf "time diffs         %s@." (time_diff_str ());
+  printf "memory diffs       %s@." (memory_diff_str ());*)
   printf "times@.";
   printf " ground join checks %.3f@." !t_gjoin_check;
   printf " maxk               %.3f@." !t_maxk;
@@ -87,7 +90,7 @@ let is_duplicating es =
   List.exists dup (es @ [Rule.flip e | e <- es ])
 ;;
 
-let analyze es =
+let analyze es gs =
   (* some counting *)
   let eqc = "equality count", `Int (L.length es) in
   let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <- es]) in
@@ -95,6 +98,7 @@ let analyze es =
   let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
   let rmax (l,r) = max (Term.depth l) (Term.depth r) in
   let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
+  let gc = "goal count", `Int (L.length gs) in
   let app = "is applicative", `Bool (is_applicative es) in
   let dup = "is duplicating", `Bool (is_duplicating es) in
   (* some theory characteristics *)
@@ -105,7 +109,7 @@ let analyze es =
   let ring = "ring", `Int (Theory.Ring.count es) in
   let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
-  `Assoc [eqc; eqs; mts; mtd; app; dup;
+  `Assoc [eqc; eqs; mts; mtd; gc; app; dup;
           ac; mon; group; agroup; ring; lattice; distrib ]
 ;;
 
