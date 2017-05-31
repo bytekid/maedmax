@@ -66,7 +66,7 @@ let options = Arg.align
        else if s = "lpo" then settings.strategy := S.strategy_lpo
        else if s = "olpo" then settings.strategy := S.strategy_ordered_lpo
        else if s = "okbo" then settings.strategy := S.strategy_ordered_kbo
-       else if s = "olpokbo" then settings.strategy := S.strategy_ordered_lpokbo
+       else if s = "olpokbo" then settings.strategy := S.strategy_ordered
        else if s = "kbo" then settings.strategy := S.strategy_kbo
        else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
        else if s = "okbauto" then settings.strategy := S.strategy_ordered
@@ -75,7 +75,7 @@ let options = Arg.align
        else if s = "ordered" then settings.strategy := S.strategy_ordered
        else if s = "temp" then settings.strategy := S.strategy_temp*)
        else failwith "unsupported option for -M"),
-    "<mode> strategy (kbauto, olpo, okbo, olpokbo)");
+    "<mode> strategy (olpo, okbo, olpokbo)");
    (*("-checksub", Arg.Set settings.check_subsumption,
     " perform subsumption checks");*)
    ("-N", Arg.Int (fun n -> settings.n := n), 
@@ -133,11 +133,10 @@ let print_json f res settings =
  let t = `Assoc [
   "result",`String (success_code res);
   "time", f;
-  (*"config",`String (call());*)
   "trs", `String res_str;
   "statistics", Statistics.json settings 
     (Strategy.to_string !(settings.strategy)) !k;
-  "chracteristics", Statistics.analyze !(settings.es)
+  "chracteristics", Statistics.analyze !(settings.es) !(settings.gs)
  ] in
  F.printf "%s\n%!" (pretty_to_string t)
 ;;
@@ -163,8 +162,8 @@ let print_res res =
    | Ckb.Proof _ -> printf "Unsatisfiable\n%!"
 ;;
 
-let print_analysis es =
- F.printf "%s\n%!" (pretty_to_string (Statistics.analyze es))
+let print_analysis es gs =
+ F.printf "%s\n%!" (pretty_to_string (Statistics.analyze es gs))
 ;;         
 
 let clean =
@@ -195,7 +194,7 @@ let () =
   let json = !(settings.json) in
   match !filenames with
   | [f] -> 
-      let (es,_,_) as input = map3 Rules.rpl_spcl_char (Read.read f) in
+      let (es,_,gs) as input = map3 Rules.rpl_spcl_char (Read.read f) in
       if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
@@ -216,7 +215,7 @@ let () =
          )
        with e -> printf "# SZS status GaveUp\n%!"; raise e end
       else if !analyze then
-       print_analysis es
+       print_analysis es gs
       else (
        let timer = Timer.start () in
        let yes = Termination.check (S.get_termination !strategy) es json in
