@@ -393,7 +393,6 @@ let max_k ctx cc gs =
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
         let order = Strategy.decode 0 m s in
-        if !(settings.d) then order#print ();
         if !Settings.do_assertions then (
           let oriented (l,r) = order#gt l r && not (order#gt r l) in
           assert (List.for_all oriented rr));
@@ -535,6 +534,7 @@ let init_settings fs es ieqs gs =
  settings.strategy := !(fs.strategy);
  settings.tmp := !(fs.tmp);
  settings.es := es;
+ settings.gs := gs;
  start_time := Unix.gettimeofday ();
  last_time := Unix.gettimeofday ();
  last_mem := St.memory ();
