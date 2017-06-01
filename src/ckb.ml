@@ -392,8 +392,11 @@ let max_k ctx cc gs =
           let rl = N.rule n in eval m (C.find_rule rl) && (not (Rule.is_dp rl))
         in
         let rr = [ n | n <- cc_symm; is_rl n ] in
-        let order = Strategy.decode 0 m s in
-        if !Settings.do_assertions then (
+        let order =
+          if !(settings.unfailing) then Strategy.decode 0 m s
+          else Order.default
+        in
+        if !(settings.unfailing) && !Settings.do_assertions then (
           let oriented (l,r) = order#gt l r && not (order#gt r l) in
           assert (List.for_all oriented rr));
         require (!! (big_and ctx [ C.find_rule r | r <- rr ]));
