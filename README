@@ -28,16 +28,15 @@ In case you are happy with the default options, you can simply e.g. call
    OPTIONS
 -------------------------------------------------------------------------------
 
-You can also specify a number options, as for instance in the call
- $ ./maedmax -T 5 -M olpo -K 2 -N 10 RNG042-2.p
+You can also specify a number options, as for instance in the calls
+ $ ./maedmax -T 5 -M olpo -K 2 -N 10 examples/RNG042-2.p
+ $ ./maedmax --xsig examples/MN90_Ex4_5_ACgroups_exp2.tptp
 
 Here is what these (and all other) options mean:
  - A timeout in seconds can be specified using option -T.
  - The termination strategy can be controlled with the option -M, which takes an
-   additional string specifying the strategy. An example call is
-    $ ./maedmax -M olpo RNG042-2.p
-   Possible values for -M are olpo for LPO, okbo for KBO, or olpokbo for a
-   combination (which is the default).
+   additional string specifying the strategy.  Possible values for -M are olpo
+   for LPO, okbo for KBO, or olpokbo for a combination (which is the default).
  - Ground joinability is attempted to be proven over an extended signature, i.e.
    the signature extended by infinitely many constants when using option --xsig.
  - The tool attempts to produce a proof in the certifiable CPF format when
