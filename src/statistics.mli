@@ -31,4 +31,4 @@ val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 
 val print : unit -> unit
 val json : Settings.t -> string -> int -> Yojson.Basic.json
-val analyze : Rules.t -> Yojson.Basic.json
+val analyze : Rules.t -> Rules.t -> Yojson.Basic.json
