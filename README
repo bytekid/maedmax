@@ -22,15 +22,16 @@ The usage of Maedmax is as follows:
 
 where the input file can be in TPTP [6] or trs format [7].
 In case you are happy with the default options, you can simply e.g. call
- $ ./maedmax RNG042-2.p
+ $ ./maedmax examples/RNG042-2.tptp
 
 -------------------------------------------------------------------------------
    OPTIONS
 -------------------------------------------------------------------------------
 
 You can also specify a number options, as for instance in the calls
- $ ./maedmax -T 5 -M olpo -K 2 -N 10 examples/RNG042-2.p
+ $ ./maedmax -T 5 -M olpo -K 2 -N 10 examples/RNG042-2.tptp
  $ ./maedmax --xsig examples/MN90_Ex4_5_ACgroups_exp2.tptp
+ $ ./maedmax --cpf examples/GRP154-1.tptp
 
 Here is what these (and all other) options mean:
  - A timeout in seconds can be specified using option -T.
