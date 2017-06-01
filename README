@@ -29,9 +29,9 @@ In case you are happy with the default options, you can simply e.g. call
 -------------------------------------------------------------------------------
 
 You can also specify a number options, as for instance in the calls
- $ ./maedmax -T 5 -M olpo -K 2 -N 10 examples/RNG042-2.tptp
  $ ./maedmax --xsig examples/MN90_Ex4_5_ACgroups_exp2.tptp
  $ ./maedmax --cpf examples/GRP154-1.tptp
+ $ ./maedmax -T 5 -M olpo -K 2 -N 10 examples/RNG042-2.tptp
 
 Here is what these (and all other) options mean:
  - A timeout in seconds can be specified using option -T.
