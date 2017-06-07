@@ -1,4 +1,0 @@
-(VAR x y z )
-(RULES 
- f(x) -> g(x,x)
-)

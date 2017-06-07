@@ -1,4 +1,6 @@
 %{
+module L = Literal
+
 open Lexing
 open Parsing
 open Term
@@ -13,10 +15,11 @@ let syntax_error msg =
     p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol + 1) msg;
   exit 1
 
-let add_axioms a (axs,es,ieqs,gs) =  a::axs, es, ieqs, gs;;
-let add_equation (e,is_eq) (axs,es,ieqs,gs) =
-  if is_eq then axs, e::es, ieqs, gs else axs, es, e::ieqs, gs;;
-let add_goal g (axs,es,ieqs,gs) = axs, es, ieqs, g::gs;;
+let add_axioms a (axs,ls,gs) =  a::axs, ls, gs;;
+let add_equation (e,is_eq) (axs,ls,gs) =
+  let l = if is_eq then L.make_axiom e else L.make_neg_axiom e in 
+  axs, l::ls, gs;;
+let add_goal g (axs,es,gs) = axs, es, L.make_neg_goal g::gs;;
 
 %}
 
@@ -27,7 +30,7 @@ let add_goal g (axs,es,ieqs,gs) = axs, es, ieqs, g::gs;;
 %token EQ NEQ COMMA SEMICOLON EOF TICK DOT COMMENT
 %token CNF AXIOM HYPOTHESIS CONJECTURE NCONJECTURE INCLUDEAXIOMS
 
-%type <string list * Rules.t * Rules.t * Rules.t> toplevel
+%type <string list * Literal.literal list * Literal.literal list> toplevel
 %start toplevel
 
 %%
@@ -41,7 +44,7 @@ decl:
   | hypothesis decl { add_equation $1 $2 }
   | conjecture decl { add_goal (fst $1) $2 }
   | COMMENT decl { $2 }
-  | { [],[],[],[] }
+  | { [],[],[]}
   | error { syntax_error "Syntax error." }
 
 axiom:

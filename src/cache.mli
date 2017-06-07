@@ -32,6 +32,8 @@ val trs_of_index : int -> Rule.t list
 
 val redtrs_of_index : int -> Rules.t
 
+val store_rule_var : Yices.context -> Rule.t -> Yicesx.t
+
 val store_rule_vars : Yices.context -> Rule.t list -> unit
 
 val store_eq_var : Yices.context -> Rule.t -> Yicesx.t * Yicesx.t

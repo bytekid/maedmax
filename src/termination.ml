@@ -1,6 +1,7 @@
 open Yicesx
 
-let check s trs is_json =
+let check s ls is_json =
+ let trs = List.map (fun l -> l#terms) ls in
  let ctx = Yices.mk_context () in
  Strategy.init s 0 ctx trs;
  Cache.store_rule_vars ctx (trs @ [ t,s | s,t <- trs ]); 

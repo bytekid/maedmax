@@ -14,7 +14,8 @@ let rec convert_term xs = function
   | FF (x, []) when List.mem x xs -> V (Signature.var_called x)
   | FF (f, ts) -> F (Signature.fun_called f, List.map (convert_term xs) ts)
 
-let convert_rule xs (l, r) = (convert_term xs l, convert_term xs r)
+let convert_rule xs (l, r) =
+ Literal.make_axiom (convert_term xs l, convert_term xs r)
 
 let convert_rules (xs, rs, th) = List.map (convert_rule xs) rs, th
 
@@ -33,7 +34,7 @@ let syntax_error msg =
 %token AC
 %token INNERMOST CONTEXTSENSITIVE
 
-%type <Rules.t * string list> toplevel
+%type <Literal.literal list * string list> toplevel
 %start toplevel
 
 %%

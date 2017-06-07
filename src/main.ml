@@ -1,6 +1,7 @@
 (*** MODULES *****************************************************************)
 module S = Strategy
 module F = Format
+module Lit = Literal
 
 (*** OPENS *******************************************************************)
 open Format
@@ -122,7 +123,7 @@ let call () =
 
 let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
 
-let print_json f res settings =
+let print_json (es, gs) f res settings =
  let res_str = match res with
   | Ckb.Completion rr -> trs_string rr
   | Ckb.GroundCompletion (rr,ee,_) ->
@@ -136,7 +137,7 @@ let print_json f res settings =
   "trs", `String res_str;
   "statistics", Statistics.json settings 
     (Strategy.to_string !(settings.strategy)) !k;
-  "chracteristics", Statistics.analyze !(settings.es) !(settings.gs)
+  "chracteristics", Statistics.analyze es gs
  ] in
  F.printf "%s\n%!" (pretty_to_string t)
 ;;
@@ -177,8 +178,8 @@ let clean =
  | Ckb.Proof p -> Ckb.Proof p
 ;;
 
-let show_proof (es,ieqs,gs) = function
-    Ckb.Proof ((s,t),(rs, rt), sigma) when ieqs = [] ->
+let show_proof (es,gs) = function
+    Ckb.Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
       let p = Trace.xml_goal_proof es (List.hd gs) ((s,t),(rs, rt), sigma) in
       F.printf "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
       F.printf "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n";
@@ -194,7 +195,7 @@ let () =
   let json = !(settings.json) in
   match !filenames with
   | [f] -> 
-      let (es,_,gs) as input = map3 Rules.rpl_spcl_char (Read.read f) in
+      let (es,gs) as input = Read.read f in
       if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
@@ -202,7 +203,7 @@ let () =
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
-         print_json secs (clean res) settings
+         print_json (es,gs) secs (clean res) settings
         ) else (
          if !(Settings.do_proof) then
            show_proof input res
@@ -222,7 +223,7 @@ let () =
        Timer.stop timer;
        let secs = Timer.length ~res:Timer.Seconds timer in
        if json then print_json_term yes secs else (
-        printf "@.%a@." print_trs es;
+        printf "@.%a@." print_trs [ e#terms | e <- es ];
         let a = if yes then "YES" else "MAYBE" in
         printf "%s\n" a;
         printf "%s %.2f %s@." "time:" secs "seconds")

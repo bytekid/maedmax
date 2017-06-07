@@ -39,7 +39,7 @@ let take_time t f x =
 
 let memory _ =
   let s = Gc.quick_stat () in
-  s.heap_words * (Sys.word_size / 8 ) / (1024 * 1024)
+  s.Gc.heap_words * (Sys.word_size / 8 ) / (1024 * 1024)
 ;;
 
 let memory_diff_str _ =
@@ -91,15 +91,19 @@ let is_duplicating es =
 ;;
 
 let analyze es gs =
+  let es, ies = List.partition Literal.is_equality es in
+  let all = [ e#terms | e <- es@ies ] in
   (* some counting *)
   let eqc = "equality count", `Int (L.length es) in
-  let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <- es]) in
+  let ieqc = "inequality count", `Int (L.length ies) in
+  let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <-all]) in
   let rmax (l,r) = max (Term.size l) (Term.size r) in
-  let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
+  let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
   let rmax (l,r) = max (Term.depth l) (Term.depth r) in
-  let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <- es]) in
+  let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
   let gc = "goal count", `Int (L.length gs) in
-  let app = "is applicative", `Bool (is_applicative es) in
+  let app = "is applicative", `Bool (is_applicative all) in
+  let es = [ e#terms | e <- es ] in
   let dup = "is duplicating", `Bool (is_duplicating es) in
   (* some theory characteristics *)
   let ac = "acs", `Int (Theory.Ac.count es) in
@@ -109,7 +113,7 @@ let analyze es gs =
   let ring = "ring", `Int (Theory.Ring.count es) in
   let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
-  `Assoc [eqc; eqs; mts; mtd; gc; app; dup;
+  `Assoc [eqc; ieqc; eqs; mts; mtd; gc; app; dup;
           ac; mon; group; agroup; ring; lattice; distrib ]
 ;;
 

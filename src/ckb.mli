@@ -6,4 +6,4 @@ type result = Completion of Rules.t
 val settings: Settings.t
 
 (* given settings, equations and goals, produce a (ground-)complete system *)
-val ckb : Settings.t -> (Rules.t * Rules.t * Rules.t) -> result
+val ckb : Settings.t -> (Literal.literal list * Literal.literal list) -> result
