@@ -236,7 +236,8 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let g = List.find fixed (NS.to_list gs) in
     let s,t = g#terms in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
-    if !(settings.d) then F.printf "joined %a\n%!" (fun f g -> g#print f) g;
+    if !(settings.d) then
+      F.printf "joined %a\n%!" (fun f g -> g#print f) g;
     if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
     else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
   else if rr @ ee = [] || (sat <> None &&
