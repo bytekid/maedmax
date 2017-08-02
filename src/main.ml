@@ -41,9 +41,9 @@ let options = Arg.align
     " print problem characteristics");
    ("--cpf", Arg.Set Settings.do_proof,
     " output certifiable CPF proof");
-   (*("-cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
+   ("--cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
                                 Settings.do_proof_debug := true),
-    " output CPF proof plus debug output");*)
+    " output CPF proof plus debug output");
    ("-D", Arg.Set settings.d,
     " print debugging output");
    ("--json", Arg.Set settings.json,
