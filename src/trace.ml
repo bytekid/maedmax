@@ -130,11 +130,11 @@ let rec last (t, steps) =
    | (_,_,_,u) :: steps' -> last (u,steps')
 ;;
 
+let equation_of (t, conv) = (t, last (t,conv))
+
 let flip = function LeftRight -> RightLeft | _ -> LeftRight
 
 (* Revert a cpf conversion *)
-;;
-
 let rev (t,steps) = 
  let rec rev (t, steps) =
   match steps with
@@ -146,6 +146,11 @@ let rev (t,steps) =
   u, spets
 ;;
 
+let subst sub (t,steps) =
+  let ssteps = List.map (fun (p,rl,d,u) -> (p,rl,d,T.substitute sub u)) steps in
+  T.substitute sub t, ssteps
+;;
+
 (* Given a conversion for s = t where u = v or v = u occurs produce a conversion
    for u = v using s = t or t = s. *)
 let solve (s,steps) (u,v) =
@@ -155,20 +160,27 @@ let solve (s,steps) (u,v) =
  let rec solve steps_bef s' = function 
      [] -> failwith "Trace.solve: equation not found"
    | (p,rl,d,t') :: steps_aft ->
-     if (s',t') <> (u,v) && (s',t') <> (v,u) then
+     if rl <> (u,v) && rl <> (v,u) then
        solve ((p,rl,flip d,s') :: steps_bef) t' steps_aft
      else
        let st_step = root, (s,t), LeftRight, t in
        let res = s', steps_bef @ [st_step] @ (snd (rev (t',steps_aft))) in
-       if (s',t') = (u,v) then res else rev res
+       let oriented_rl = if d = LeftRight then rl else Rule.flip rl in
+       if (s',t') = oriented_rl then
+         (if rl = (u,v) then res else rev res), Subst.empty
+       else (
+         let sigma = Rule.instantiate_to oriented_rl (s',t') in
+         let conv = subst sigma (if rl = (u,v) then res else rev res) in
+         if !(S.do_proof_debug) then
+           Format.printf "SUBSTITUTE TO %a\n" Rule.print (equation_of conv);
+         conv, sigma)
+         (*failwith "oh no, a substitution!";*)
  in
- let res = solve [] s steps in
+ let conv, sigma = solve [] s steps in
  if !(S.do_proof_debug) then
-  (Format.printf "RESULT: \n"; print res);
- res
+  (Format.printf "RESULT: \n"; print conv);
+ conv, sigma
 ;;
-
-let subst sub = List.map (fun (p,rl,d,u) -> (p,rl,d,T.substitute sub u)) 
 
 let flip_unless keep_dir d = if keep_dir then d else flip d
 
@@ -226,8 +238,8 @@ let conversion_for (s,t) o =
    let tconv = rewrite_conv t0 ts in
    let ren, keep_dir = rename_to (last (s0,sconv), last (t0,tconv)) (s,t) in
    let (s0f,t0f) = Rule.substitute ren (s0, t0) in
-   let sconv = subst ren sconv in
-   let tconv = subst ren tconv in
+   let _,sconv = subst ren (s0,sconv) in
+   let _,tconv = subst ren (t0,tconv) in
    let st_step = (root,(s0,t0),LeftRight,t0f) in
    assert ((keep_dir && last (s0f, sconv) = s) ||
            (not keep_dir && last (s0f, sconv) = t));
@@ -266,7 +278,9 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
      | Rewrite ((s,t), (rs,rt)) ->
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY REWRITE FROM %a:\n%!" R.print (s,t);
-       let gconv = (s,t), solve (conversion_for (v,w) o) (s,t) in
+       let conv = subst sigma (conversion_for (v,w) o) in
+       (* no substitution added by solve *)
+       let gconv = (s,t), fst (solve conv (s,t)) in
        let rls = Listx.unique (List.map fst (rs @ rt)) in
        let o = H.find goal_trace_table (s,t) in
        goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) sigma (s,t) o
@@ -275,10 +289,13 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
        let g0 = Variant.normalize_rule g0 in
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY DEDUCE FROM %a:\n%!" R.print g0;
-       let gconv = g0, solve (conversion_for (v,w) o) g0 in
+       let conv = subst sigma (conversion_for (v,w) o) in
+       let conv, tau = solve conv g0 in
+       let gconv = Rule.substitute tau g0, conv in
        let rl',d_rl = normalize rl LeftRight in
        let o = H.find goal_trace_table g0 in
-       goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) sigma g0 o
+       let sigma' = Subst.after tau sigma in
+       goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) sigma' g0 o
   with Not_found -> (
     F.printf "no origin found for goal %a\n%!" R.print g;
     failwith "Trace.goal_ancestors: equation unknown")
