@@ -116,30 +116,31 @@ let trs_eqs_string re =
 ;;
 
 let call () =
- let rec add_arg i =
-  if i < Array.length Sys.argv then Sys.argv.(i)^" "^(add_arg (i+1)) else "" 
- in add_arg 0
+  let rec add_arg i =
+    if i < Array.length Sys.argv then Sys.argv.(i)^" "^(add_arg (i+1)) else "" 
+  in add_arg 0
 ;;
 
 let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
 
-let print_json (es, gs) f res settings =
- let res_str = match res with
-  | Ckb.Completion rr -> trs_string rr
-  | Ckb.GroundCompletion (rr,ee,_) ->
-    if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
-  | Ckb.Proof _ -> "..."
- in
- let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
- let t = `Assoc [
-  "result",`String (success_code res);
-  "time", f;
-  "trs", `String res_str;
-  "statistics", Statistics.json settings 
-    (Strategy.to_string !(settings.strategy)) !k;
-  "chracteristics", Statistics.analyze es gs
- ] in
- F.printf "%s\n%!" (pretty_to_string t)
+let print_json (es, gs) f res settings proof =
+  let res_str = match res with
+    | Ckb.Completion rr -> trs_string rr
+    | Ckb.GroundCompletion (rr,ee,_) ->
+      if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
+    | Ckb.Proof _ -> "..."
+  in
+  let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
+  let strat = !(settings.strategy) in
+  let t = `Assoc [
+    "result",`String (success_code res);
+    "time", f;
+    "trs", `String res_str;
+    "statistics", Statistics.json settings (Strategy.to_string strat) !k;
+    "chracteristics", Statistics.analyze es gs;
+    "proof", `String (match proof with Some s -> s | _ -> "")
+  ] in
+  F.printf "%s\n%!" (pretty_to_string t)
 ;;
 
 let print_json_term yes f =
@@ -178,13 +179,17 @@ let clean =
  | Ckb.Proof p -> Ckb.Proof p
 ;;
 
-let show_proof (es,gs) = function
+let proof_string ?(readable=true) (es,gs) = function
     Ckb.Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
       let p = Trace.xml_goal_proof es (List.hd gs) ((s,t),(rs, rt), sigma) in
-      F.printf "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-      F.printf "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n";
-      F.printf "%s\n" (Xml.to_string_fmt p)
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ^ 
+      "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n" ^
+      ((if readable then Xml.to_string_fmt else Xml.to_string) p)
   | _ -> failwith "Main.show_proof: not yet supported if no goal present"
+;;
+
+let show_proof (es,gs) res =
+  let p = proof_string (es,gs) res in Format.printf "%s\n" p
 ;;
 
 let () =
@@ -203,7 +208,14 @@ let () =
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
-         print_json (es,gs) secs (clean res) settings
+         let proof =
+           if !(Settings.do_proof) then
+             Some (proof_string ~readable:false input res)
+           else None
+         in
+         print_json (es,gs) secs (clean res) settings proof;
+         if !(Settings.do_proof) then
+           show_proof input res
         ) else (
          if !(Settings.do_proof) then
            show_proof input res
