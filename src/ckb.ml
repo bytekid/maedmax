@@ -381,7 +381,7 @@ let search_constraints ctx cc gs =
 (* find k maximal TRSs *)
 let max_k ctx cc gs =
   let k = !(settings.k) !(St.iterations) in
-  let cc_symm = [ c | c <- NS.to_list (NS.symmetric cc) ] in 
+  let cc_symm = NS.to_list (NS.symmetric cc) in 
   if !(settings.d) then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
   let rec max_k acc ctx cc n =
