@@ -276,7 +276,15 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
     match o with
      (* recursion stops if we reach an initial goal; need to reverse the list
         of subsequent goals encountered *)
-     | Initial -> Listx.unique rule_acc, List.rev gconv_acc
+     | Initial ->
+       let gconvs = (* actual goal might be flipped as not normalized *)
+        match gconv_acc with
+          [] -> []
+        | (g0,gconv) :: gs ->
+          if g0 = equation_of gconv then (g0,gconv) :: gs
+          else (g0, rev gconv) :: gs
+       in
+       Listx.unique rule_acc, List.rev gconvs
      (* (v,w) was obtained from rewriting goal (s,t) using rule (rs,rt) *)
      | Rewrite ((s,t), (rs,rt)) ->
        if !(S.do_proof_debug) then
