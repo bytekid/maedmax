@@ -169,8 +169,11 @@ let solve (s,steps) (u,v) =
        if (s',t') = oriented_rl then
          (if rl = (u,v) then res else rev res), Subst.empty
        else (
+         if !(S.do_proof_debug) then
+           Format.printf "INSTANTIATE  %a TO %a\n" Rule.print oriented_rl Rule.print (s',t');
          let sigma = Rule.instantiate_to oriented_rl (s',t') in
-         let conv = subst sigma (if rl = (u,v) then res else rev res) in
+         assert ((Rule.substitute sigma oriented_rl) = (s',t'));
+         let conv = if rl = (u,v) then res else rev res in
          if !(S.do_proof_debug) then
            Format.printf "SUBSTITUTE TO %a\n" Rule.print (equation_of conv);
          conv, sigma)
@@ -280,7 +283,7 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
          F.printf "DERIVED BY REWRITE FROM %a:\n%!" R.print (s,t);
        let conv = subst sigma (conversion_for (v,w) o) in
        (* no substitution added by solve *)
-       let gconv = (s,t), fst (solve conv (s,t)) in
+       let gconv = Rule.substitute sigma (s,t), fst (solve conv (s,t)) in
        let rls = Listx.unique (List.map fst (rs @ rt)) in
        let o = H.find goal_trace_table (s,t) in
        goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) sigma (s,t) o
@@ -291,10 +294,10 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
          F.printf "DERIVED BY DEDUCE FROM %a:\n%!" R.print g0;
        let conv = subst sigma (conversion_for (v,w) o) in
        let conv, tau = solve conv g0 in
-       let gconv = Rule.substitute tau g0, conv in
+       let sigma' = Subst.after tau sigma in
+       let gconv = Rule.substitute sigma' g0, conv in
        let rl',d_rl = normalize rl LeftRight in
        let o = H.find goal_trace_table g0 in
-       let sigma' = Subst.after tau sigma in
        goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) sigma' g0 o
   with Not_found -> (
     F.printf "no origin found for goal %a\n%!" R.print g;
