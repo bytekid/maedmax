@@ -7,6 +7,8 @@ exception Not_unifiable
 
 exception Not_matched
 
+let empty = []
+
 let add x t subst =
   if V x = t then subst else
     (x, t) :: 
