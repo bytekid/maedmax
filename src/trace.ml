@@ -340,7 +340,7 @@ let pos_to_xml p =
 let equation_to_xml (l,r) = X.Element("equation",[],[T.to_xml l;T.to_xml r])
 
 let input_to_xml es g =
-  let es0 = [ Variant.normalize_rule e#terms | e <- es ] in
+  let es0 = [ Variant.normalize_rule e | e <- es ] in
   let xes = X.Element("equations",[], [ Rules.to_xml es0 ] ) in
   let xgs = [ equation_to_xml g ] in
   let input = X.Element("equationalReasoningInput",[],xes :: xgs) in
@@ -370,7 +370,7 @@ let eqproof_to_xml cs =
 ;;
 
 let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
-  let g_orig = Variant.normalize_rule g_orig#terms in
+  let g_orig = Variant.normalize_rule g_orig in
   let rulesubs = goal_proof g_orig (s,t) (rs,rt) sigma in
   let xinput = input_to_xml es0 g_orig in
   let xversion = X.Element("cpfVersion", [], [ xml_str "2.1" ]) in

@@ -1,88 +1,90 @@
 module O = Overlap
 module T = Trace
 
-class literal (ts : Rule.t) (pos : bool) (goal : bool) = object (self)
+type t = { terms: Rule.t; is_goal: bool; is_equality: bool }
 
-  method terms = ts
+let make ts e g = {terms = ts; is_goal = g; is_equality = e }
 
-  method is_goal = goal
+let terms l = l.terms
 
-  method is_equality = pos
+let is_goal l = l.is_goal
 
-  method is_inequality = not pos
+let is_equality l = l.is_equality
 
-  method compare (l : literal) =
-    Pervasives.compare (ts, pos, goal) (l#terms, l#is_equality, l#is_goal)
+let is_inequality l = not l.is_equality
 
-  method equal l = (self#compare l) = 0
+let is_equal l l' = compare l l' = 0
 
-  method flip = new literal (Rule.flip ts) pos goal
+let flip l = { l with terms = Rule.flip l.terms }
 
-  method is_subsumed (l : < terms : Rule.t >) =
-    Rule.is_instance ts l#terms || Rule.is_instance (Rule.flip ts) l#terms
+let is_subsumed l l' =
+  Rule.is_instance l.terms l'.terms ||
+  Rule.is_instance (Rule.flip l.terms) l'.terms
+;;
 
-  method is_trivial = (fst ts = snd ts)
+let is_trivial l = fst l.terms = snd l.terms
 
-  method normalize = new literal (Variant.normalize_rule ts) pos goal
+let normalize l = { l with terms = Variant.normalize_rule l.terms }
 
-  method not_increasing = not (Term.is_subterm (fst ts) (snd ts))
+let not_increasing l = not (Term.is_subterm (fst l.terms) (snd l.terms))
 
-  (* already normalized *)
-  method cps (l : literal) =
-    assert (not (goal && l#is_goal));
-    if not pos && not l#is_equality then []
-    else
-      let r1, r2 = ts, l#terms in
-      let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2 ] in
-      let is_eq, is_goal = pos && l#is_equality, goal || l#is_goal in
-      if !(Settings.do_proof) then (
-        let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
-        let add ((s,t),o) =
-          if s<>t then trace (Variant.normalize_rule (s,t)) o
-        in List.iter add os);
-      [ new literal (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+let cps l l' =
+  assert (not (l.is_goal && l'.is_goal));
+  if not l.is_equality && not l'.is_equality then []
+  else
+    let r1, r2 = l.terms, l'.terms in
+    let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2 ] in
+    let is_eq = l.is_equality && l'.is_equality in
+    let is_goal = l.is_goal || l'.is_goal in
+    if !(Settings.do_proof) then (
+      let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
+      let add ((s,t),o) =
+        if s<>t then trace (Variant.normalize_rule (s,t)) o
+      in List.iter add os);
+      [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+;;
+
+let rewriter_nf_with l rewriter =
+  let ts = l.terms in
+  let s', rs = rewriter#nf (fst ts) in
+  let t', rt = rewriter#nf (snd ts) in
+  let rls = List.map fst (rs @ rt) in
+  if s' = t' then Some([], rls)
+  else if Rule.equal ts (s',t') then None
+  else (
+    let st' = Variant.normalize_rule (s',t') in
+    if !(Settings.do_proof) then
+      (if l.is_goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
+    (* preserve goal/equality status *)
+    Some ([ make st' l.is_equality l.is_goal ], rls))
+;;
   
-  method rewriter_nf_with (rewriter : Rewriter.rewriter) =
-    let s', rs = rewriter#nf (fst ts) in
-    let t', rt = rewriter#nf (snd ts) in
-    let rls = List.map fst (rs @ rt) in
-    if s' = t' then Some([], rls)
-    else if Rule.equal ts (s',t') then None
-    else (
-      let st' = Variant.normalize_rule (s',t') in
-      if !(Settings.do_proof) then
-        (if goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
-      (* preserve goal/equality status *)
-      Some ([ new literal st' pos goal ], rls))
+let to_nf l (rewriter : Rewriter.rewriter) =
+  let s, _ = rewriter#nf (fst l.terms) in
+  let t, _ = rewriter#nf (snd l.terms) in
+  make (Variant.normalize_rule (s,t)) l.is_equality l.is_goal
+;;
   
-  method to_nf (rewriter : Rewriter.rewriter) =
-    let s, _ = rewriter#nf (fst ts) in
-    let t, _ = rewriter#nf (snd ts) in
-    new literal (Variant.normalize_rule (s,t)) pos goal
-  
-  method joins trs = 
-    let _, s' = Rewriting.nf_with trs (fst ts) in
-    let _, t' = Rewriting.nf_with trs (snd ts) in
-    s' = t'
+let joins l trs =
+  let _, s' = Rewriting.nf_with trs (fst l.terms) in
+  let _, t' = Rewriting.nf_with trs (snd l.terms) in
+  s' = t'
+;;
 
-  method print ppf =
-    Format.fprintf ppf "%a %s %a" Term.print (fst ts)
-      ((if pos then "=" else "!=") ^ (if goal then "G" else ""))
-      Term.print (snd ts)
+let print ppf l =
+  let eq = if l.is_equality then "=" else "!=" in
+  let eq = eq ^ (if l.is_goal then "G" else "") in
+  Format.fprintf ppf "%a %s %a" Term.print (fst l.terms) eq Term.print (snd l.terms)
+;;
 
-  method is_ac_equivalent fs = Theory.Ac.equivalent fs ts
+let is_ac_equivalent l fs = Theory.Ac.equivalent fs l.terms
 
-  method is_ground = Rule.is_ground ts
-end
+let is_ground l = Rule.is_ground l.terms
 
-type t = literal
+let make_axiom ts = make ts true false
 
-let make_axiom ts = new literal ts true false
+let make_neg_axiom ts = make ts false false
 
-let make_neg_axiom ts = new literal ts true false
+let make_goal ts = make ts true true
 
-let make_goal ts = new literal ts true true
-
-let make_neg_goal ts = new literal ts false true
-
-let is_equality l = l#is_equality
+let make_neg_goal ts = make ts false true

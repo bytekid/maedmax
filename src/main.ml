@@ -181,7 +181,9 @@ let clean =
 
 let proof_string ?(readable=true) (es,gs) = function
     Ckb.Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
-      let p = Trace.xml_goal_proof es (List.hd gs) ((s,t),(rs, rt), sigma) in
+      let goal = Literal.terms (List.hd gs) in
+      let es = List.map Literal.terms es in
+      let p = Trace.xml_goal_proof es goal ((s,t),(rs, rt), sigma) in
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ^ 
       "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n" ^
       ((if readable then Xml.to_string_fmt else Xml.to_string) p)
@@ -233,7 +235,7 @@ let () =
        Timer.stop timer;
        let secs = Timer.length ~res:Timer.Seconds timer in
        if json then print_json_term yes secs else (
-        printf "@.%a@." print_trs [ e#terms | e <- es ];
+        printf "@.%a@." print_trs [ Literal.terms e | e <- es ];
         let a = if yes then "YES" else "MAYBE" in
         printf "%s\n" a;
         printf "%s %.2f %s@." "time:" secs "seconds")

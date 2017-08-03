@@ -30,7 +30,7 @@ let add_goal g (axs,es,gs) = axs, es, L.make_neg_goal g::gs;;
 %token EQ NEQ COMMA SEMICOLON EOF TICK DOT COMMENT
 %token CNF AXIOM HYPOTHESIS CONJECTURE NCONJECTURE INCLUDEAXIOMS
 
-%type <string list * Literal.literal list * Literal.literal list> toplevel
+%type <string list * Literal.t list * Literal.t list> toplevel
 %start toplevel
 
 %%

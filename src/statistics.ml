@@ -92,7 +92,7 @@ let is_duplicating es =
 
 let analyze es gs =
   let es, ies = List.partition Literal.is_equality es in
-  let all = [ e#terms | e <- es@ies ] in
+  let all = List.map Literal.terms (es @ ies) in
   (* some counting *)
   let eqc = "equality count", `Int (L.length es) in
   let ieqc = "inequality count", `Int (L.length ies) in
@@ -103,7 +103,7 @@ let analyze es gs =
   let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
   let gc = "goal count", `Int (L.length gs) in
   let app = "is applicative", `Bool (is_applicative all) in
-  let es = [ e#terms | e <- es ] in
+  let es = List.map Literal.terms es in
   let dup = "is duplicating", `Bool (is_duplicating es) in
   (* some theory characteristics *)
   let ac = "acs", `Int (Theory.Ac.count es) in

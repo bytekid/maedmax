@@ -1,2 +1,2 @@
 (* return (axioms, inequality axioms, goals) *)
-val read : string -> Literal.literal list * Literal.literal list
+val read : string -> Literal.t list * Literal.t list

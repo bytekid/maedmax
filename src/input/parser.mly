@@ -34,7 +34,7 @@ let syntax_error msg =
 %token AC
 %token INNERMOST CONTEXTSENSITIVE
 
-%type <Literal.literal list * string list> toplevel
+%type <Literal.t list * string list> toplevel
 %start toplevel
 
 %%

@@ -1,6 +1,7 @@
 open Prelude
 
 module L = List
+module Lit = Literal
 module H = Hashtbl
 module R = Rule
 
@@ -29,19 +30,19 @@ let of_termss ctx rs =
 
 let symmetric ns =
   let nsc = H.copy ns in
-  H.fold (fun n _ res -> add n#flip res) ns nsc
+  H.fold (fun n _ res -> add (Lit.flip n) res) ns nsc
 ;;
 
 let to_list ns = H.fold (fun n _ l -> n::l) ns [] 
 
 let cmp n1 n2 =
-  let s1, s2 = Rule.size n1#terms, Rule.size n2#terms in
+  let s1, s2 = Rule.size (Lit.terms n1), Rule.size (Lit.terms n2) in
   if s1 <> s2 then s1 - s2
   else
     let minsize (l,r) = min (Term.size l) (Term.size r) in
-    minsize n1#terms - (minsize n2#terms) (* prefer equal size terms *)
+    minsize (Lit.terms n1) - (minsize (Lit.terms n2)) (* prefer equal size *)
 
-let cmp n1 n2 = Rule.size n1#terms - Rule.size n2#terms
+let cmp n1 n2 = Rule.size (Lit.terms n1) - Rule.size (Lit.terms n2)
 
 let mul_gt gt ts1 ts2 =
   let ts1' = Listset.diff ts1 ts2 in
@@ -50,10 +51,10 @@ let mul_gt gt ts1 ts2 =
 ;;
 
 let cmp_gt gt n1 n2 =
-  let s1, s2 = Rule.size n1#terms, Rule.size n2#terms in
+  let s1, s2 = Rule.size (Lit.terms n1), Rule.size (Lit.terms n2) in
   if s1 <> s2 then s1 - s2
   else(
-    let (l1,r1),(l2,r2) = n1#terms, n2#terms in
+    let (l1,r1),(l2,r2) = (Lit.terms n1), (Lit.terms n2) in
     let lr,rl = mul_gt gt [l2;r2] [l1;r1], mul_gt gt [l1;r1] [l2;r2] in
     let r = if lr then -1 else if rl then 1 else 0 in
     Format.printf "%a > %a: %d\n%!" Rule.print (l1,r1) Rule.print (l2,r2) r;
@@ -62,7 +63,7 @@ let cmp_gt gt n1 n2 =
 
 let sort_smaller_than t ns = 
   let l = to_list ns in
-  let small = L.filter (fun n -> Rule.size n#terms < t) l in
+  let small = L.filter (fun n -> Rule.size (Lit.terms n) < t) l in
   L.sort cmp small
 ;;
 
@@ -77,13 +78,13 @@ let for_all p ns = H.fold (fun n _ b -> b && p n) ns true
 
 let variant_free ns =
   let h = Hashtbl.create (H.length ns * 2) in
-  let var e e' = Rule.variant e#terms e'#terms in
+  let var e e' = Rule.variant (Lit.terms e) (Lit.terms e') in
   H.fold (fun n _ hr -> if not (exists (var n) hr) then add n hr else hr) ns h 
 ;;
 
 let subsumption_free ns =
   let sub n n' =
-    let r, r' = n#terms, n'#terms in
+    let r, r' = Lit.terms n, Lit.terms n' in
     R.is_proper_instance r r' || R.is_proper_instance (R.flip r) r'
   in
   filter (fun n -> not (exists (sub n) ns))
@@ -96,7 +97,7 @@ let diff_list ns = L.fold_left (fun nsr n -> remove n nsr) ns
 let print ppf ns = 
   let l = to_list ns in
   let rs = List.sort Pervasives.compare l in
-  let print_list = Formatx.print_list (fun f n -> n#print f) "\n " in
+  let print_list = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
   Format.fprintf ppf "@[<v 0> %a@]" print_list rs
 
 let iter f = H.iter (fun n _ -> f n)
