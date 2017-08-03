@@ -5,6 +5,8 @@ type t = Term.subst
 exception Not_unifiable
 exception Not_matched
 
+val empty : t
+
 val mgu : Term.t -> Term.t -> t
 
 val mgu_list : (Term.t * Term.t) list -> t
