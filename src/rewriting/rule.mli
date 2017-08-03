@@ -42,6 +42,8 @@ val is_instance : t -> t -> bool
 
 val is_proper_instance : t -> t -> bool
 
+val instantiate_to : t -> t -> Subst.t
+
 val remove : t list -> t -> t list
 
 val is_rule : t -> bool

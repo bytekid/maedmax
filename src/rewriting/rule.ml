@@ -57,10 +57,15 @@ let right_linear (l, r) = Term.linear r
 
 let linear (l, r) = Term.linear l && Term.linear r
 
-let is_instance (l1, r1) (l2, r2) =
+(*instantiate rule1 to rule2 *)
+let instantiate_to (l1, r1) (l2, r2) =
   let (l2, r2) = rename (l2, r2) in
   let lr1 = Term.F (100, [l1; r1]) and lr2 = Term.F (100, [l2; r2]) in
-  Subst.is_instance_of lr1 lr2
+  Subst.pattern_match lr1 lr2
+;;
+
+let is_instance (l1, r1) (l2, r2) =
+  try let _ = instantiate_to (l1, r1) (l2, r2) in true with _ -> false
 ;;
 
 let variant (l1, r1) (l2, r2) =
