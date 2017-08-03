@@ -213,9 +213,7 @@ let () =
              Some (proof_string ~readable:false input res)
            else None
          in
-         print_json (es,gs) secs (clean res) settings proof;
-         if !(Settings.do_proof) then
-           show_proof input res
+         print_json (es,gs) secs (clean res) settings proof
         ) else (
          if !(Settings.do_proof) then
            show_proof input res
