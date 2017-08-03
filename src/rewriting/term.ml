@@ -16,6 +16,7 @@ let compare = Pervasives.compare
 
 let rec print ppf = function
   | V x -> fprintf ppf "%s" (get_var_name x)
+  | F (f, []) -> fprintf ppf "%s" (get_fun_name f)
   | F (f, ts) -> fprintf ppf "%s(%a)" (get_fun_name f) (print_list print ",") ts
 
 let rec functions_aux = function
