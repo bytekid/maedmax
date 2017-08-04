@@ -176,10 +176,9 @@ let solve (s,steps) (u,v) sigma =
          let tau = Rule.instantiate_to oriented_rl (s',t') in
          assert ((Rule.substitute tau oriented_rl) = (s',t'));
          assert (equation_of res = (s',t'));
-         if (Rule.substitute tau (u,v) <> (s',t')) then (
+         if (!(S.do_proof_debug) && Rule.substitute tau (u,v) <> (s',t')) then (
            Format.printf "SUBSTITUTED IS  %a\n%!" Rule.print (Rule.substitute tau (u,v));
-           assert (Rule.substitute tau (v,u) = (s',t'));
-           Format.printf "FLIP!\n%!");
+           assert (Rule.substitute tau (v,u) = (s',t')));
          let conv = rev_unless res (Rule.substitute tau (u,v) = (s',t')) in
          if !(S.do_proof_debug) then
            Format.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
@@ -295,6 +294,8 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
        (* no substitution added by solve *)
        let conv',_ = solve conv (s,t) sigma in
        let gconv = Rule.substitute sigma (s,t), conv' in
+       if !(S.do_proof_debug) then (
+         F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv); print (snd gconv));
        let rls = Listx.unique (List.map fst (rs @ rt)) in
        let o = H.find goal_trace_table (s,t) in
        goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) sigma (s,t) o
@@ -307,7 +308,9 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
        let conv = subst sigma (conversion_for (v,w) o) in
        let conv', tau = solve conv g0 sigma in
        let sigma' = Subst.after tau sigma in
-       let gconv = Rule.substitute sigma' g0, conv' in
+       let gconv = Rule.substitute tau g0, conv' in
+       if !(S.do_proof_debug) then (
+         F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv); print (snd gconv));
        let rl',d_rl = normalize rl LeftRight in
        let o = H.find goal_trace_table g0 in
        goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) sigma' g0 o
