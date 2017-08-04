@@ -176,6 +176,10 @@ let solve (s,steps) (u,v) sigma =
          let tau = Rule.instantiate_to oriented_rl (s',t') in
          assert ((Rule.substitute tau oriented_rl) = (s',t'));
          assert (equation_of res = (s',t'));
+         if (Rule.substitute tau (u,v) <> (s',t')) then (
+           Format.printf "SUBSTITUTED IS  %a\n%!" Rule.print (Rule.substitute tau (u,v));
+           assert (Rule.substitute tau (v,u) = (s',t'));
+           Format.printf "FLIP!\n%!");
          let conv = rev_unless res (Rule.substitute tau (u,v) = (s',t')) in
          if !(S.do_proof_debug) then
            Format.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
@@ -281,14 +285,6 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
      (* recursion stops if we reach an initial goal; need to reverse the list
         of subsequent goals encountered *)
      | Initial ->
-       (*let gconvs = (* actual goal might be flipped as not normalized *)
-        match gconv_acc with
-          [] -> []
-        | (g0,gconv) :: gs ->
-          if g0 = equation_of gconv then (g0,gconv) :: gs
-          else (g0, rev gconv) :: gs
-       in*)
-       (*assert (List.for_all (fun (g,gc) -> g = equation_of gc) gconv_acc);*)
        Listx.unique rule_acc, List.rev gconv_acc
      (* (v,w) was obtained from rewriting goal (s,t) using rule (rs,rt) *)
      | Rewrite ((s,t), (rs,rt)) ->
