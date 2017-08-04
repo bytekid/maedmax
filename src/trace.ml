@@ -146,6 +146,8 @@ let rev (t,steps) =
   u, spets
 ;;
 
+let rev_unless conv b = if b then conv else rev conv
+
 let subst sub (t,steps) =
   let ssteps = List.map (fun (p,rl,d,u) -> (p,rl,d,T.substitute sub u)) steps in
   T.substitute sub t, ssteps
@@ -153,7 +155,7 @@ let subst sub (t,steps) =
 
 (* Given a conversion for s = t where u = v or v = u occurs produce a conversion
    for u = v using s = t or t = s. *)
-let solve (s,steps) (u,v) =
+let solve (s,steps) (u,v) sigma =
  if !(S.do_proof_debug) then
   (Format.printf "LOOK FOR %a IN: \n" Rule.print (u,v); print (s,steps));
  let t = last (s,steps) in
@@ -167,22 +169,23 @@ let solve (s,steps) (u,v) =
        let res = s', steps_bef @ [st_step] @ (snd (rev (t',steps_aft))) in
        let oriented_rl = if d = LeftRight then rl else Rule.flip rl in
        if (s',t') = oriented_rl then
-         (if rl = (u,v) then res else rev res), Subst.empty
+         rev_unless res ((s',t') = (u,v)), Subst.empty
        else (
          if !(S.do_proof_debug) then
-           Format.printf "INSTANTIATE  %a TO %a\n" Rule.print oriented_rl Rule.print (s',t');
-         let sigma = Rule.instantiate_to oriented_rl (s',t') in
-         assert ((Rule.substitute sigma oriented_rl) = (s',t'));
-         let conv = if rl = (u,v) then res else rev res in
+           Format.printf "INSTANTIATE  %a TO %a\n%!" Rule.print oriented_rl Rule.print (s',t');
+         let tau = Rule.instantiate_to oriented_rl (s',t') in
+         assert ((Rule.substitute tau oriented_rl) = (s',t'));
+         let conv = rev_unless res (rl = (u,v)) in
          if !(S.do_proof_debug) then
-           Format.printf "SUBSTITUTE TO %a\n" Rule.print (equation_of conv);
-         conv, sigma)
-         (*failwith "oh no, a substitution!";*)
+           Format.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
+         conv, tau)
  in
- let conv, sigma = solve [] s steps in
- if !(S.do_proof_debug) then
-  (Format.printf "RESULT: \n"; print conv);
- conv, sigma
+ let conv, tau = solve [] s steps in
+ if !(S.do_proof_debug) then (
+   let uv' = Rule.substitute (Subst.after tau sigma) (u,v) in
+   assert (equation_of conv = uv');
+   (Format.printf "RESULT: \n"; print conv));
+ conv, tau
 ;;
 
 let flip_unless keep_dir d = if keep_dir then d else flip d
@@ -229,7 +232,7 @@ let conversion_for (s,t) o =
    let r2,d2 = normalize r2 LeftRight in
    let s',t' = Rule.substitute ren (s',t') in
    let conv = s', [(p, r1, d1, u); (root, r2, d2, t')] in
-   let v, conv = if keep_dir then conv else rev conv in
+   let v, conv = rev_unless conv keep_dir in
    if !(S.do_proof_debug) then (
      F.printf "\ndeduce conversion for %a %s:\n%!"
        R.print (s',t') (if keep_dir then "" else "(flipped)");
@@ -270,46 +273,55 @@ let trace_for eqs =
    separately). *)
 let rec goal_ancestors rule_acc gconv_acc sigma g o =
   try
-    let ((v,w) as g1), keep_gdir = Variant.normalize_rule_dir g in
+    let (v,w), keep_gdir = Variant.normalize_rule_dir g in
     if !(S.do_proof_debug) then
       F.printf "TRACE BACK GOAL %a:\n%!" R.print (v,w);
     match o with
      (* recursion stops if we reach an initial goal; need to reverse the list
         of subsequent goals encountered *)
      | Initial ->
-       let gconvs = (* actual goal might be flipped as not normalized *)
+       (*let gconvs = (* actual goal might be flipped as not normalized *)
         match gconv_acc with
           [] -> []
         | (g0,gconv) :: gs ->
           if g0 = equation_of gconv then (g0,gconv) :: gs
           else (g0, rev gconv) :: gs
-       in
-       Listx.unique rule_acc, List.rev gconvs
+       in*)
+       (*assert (List.for_all (fun (g,gc) -> g = equation_of gc) gconv_acc);*)
+       Listx.unique rule_acc, List.rev gconv_acc
      (* (v,w) was obtained from rewriting goal (s,t) using rule (rs,rt) *)
      | Rewrite ((s,t), (rs,rt)) ->
+       assert (snd (Variant.normalize_rule_dir (s,t)));
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY REWRITE FROM %a:\n%!" R.print (s,t);
        let conv = subst sigma (conversion_for (v,w) o) in
        (* no substitution added by solve *)
-       let gconv = Rule.substitute sigma (s,t), fst (solve conv (s,t)) in
+       let conv',_ = solve conv (s,t) sigma in
+       let gconv = Rule.substitute sigma (s,t), conv' in
        let rls = Listx.unique (List.map fst (rs @ rt)) in
        let o = H.find goal_trace_table (s,t) in
        goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) sigma (s,t) o
      (* (v,w) was obtained from deduce with goal g0 using rule rl *)
      | Deduce (rl, p, g0) ->
+       (*assert (snd (Variant.normalize_rule_dir g0));*)
        let g0 = Variant.normalize_rule g0 in
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY DEDUCE FROM %a:\n%!" R.print g0;
        let conv = subst sigma (conversion_for (v,w) o) in
-       let conv, tau = solve conv g0 in
+       let conv', tau = solve conv g0 sigma in
        let sigma' = Subst.after tau sigma in
-       let gconv = Rule.substitute sigma' g0, conv in
+       let gconv = Rule.substitute sigma' g0, conv' in
        let rl',d_rl = normalize rl LeftRight in
        let o = H.find goal_trace_table g0 in
        goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) sigma' g0 o
   with Not_found -> (
     F.printf "no origin found for goal %a\n%!" R.print g;
     failwith "Trace.goal_ancestors: equation unknown")
+;;
+
+let append (s,sconv) (t,tconv) =
+  let sigma = Subst.mgu (last (s,sconv)) t in
+  subst sigma  (s,sconv @ tconv)
 ;;
 
 (* (s,t) is the goal that was proven, (rs,rt) the rules used to rewrite it to
@@ -320,9 +332,11 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
     F.printf "\n1. PROVEN GOAL %a\n%!" R.print (s,t));
   let goal_conv =
     if sigma = [] then (
+      (*Format.printf "t: rewrite conv from %a:" Term.print t; print (t,rewrite_conv t rt);
+      Format.printf "s: rewrite conv from %a:" Term.print t; print (s,rewrite_conv s rs);*)
       let t', rtconv = rev (t,rewrite_conv t rt) in
       (* conversion for the proven goal using the rules *)
-      let pg_conv =  (s,rewrite_conv s rs @ rtconv) in
+      let pg_conv =  append (s,rewrite_conv s rs) (t', rtconv) in
       (s,t), pg_conv
       )
     else (
