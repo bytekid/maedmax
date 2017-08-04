@@ -175,14 +175,15 @@ let solve (s,steps) (u,v) sigma =
            Format.printf "INSTANTIATE  %a TO %a\n%!" Rule.print oriented_rl Rule.print (s',t');
          let tau = Rule.instantiate_to oriented_rl (s',t') in
          assert ((Rule.substitute tau oriented_rl) = (s',t'));
-         let conv = rev_unless res (rl = (u,v)) in
+         assert (equation_of res = (s',t'));
+         let conv = rev_unless res (Rule.substitute tau (u,v) = (s',t')) in
          if !(S.do_proof_debug) then
            Format.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
          conv, tau)
  in
  let conv, tau = solve [] s steps in
  if !(S.do_proof_debug) then (
-   let uv' = Rule.substitute (Subst.after tau sigma) (u,v) in
+   let uv' = Rule.substitute tau (u,v) in
    assert (equation_of conv = uv');
    (Format.printf "RESULT: \n"; print conv));
  conv, tau
