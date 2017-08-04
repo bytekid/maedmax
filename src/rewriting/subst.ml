@@ -15,8 +15,8 @@ let add x t subst =
     [ y, substitute [x, t] term | (y, term) <- subst; not (x = y) ]
 
 let after mu sigma = 
-  let after1 sigma' (x,t) = add x t sigma' in 
-  List.fold_left after1 sigma mu
+  let mu' = [x,t | x,t <- mu; not (List.exists (fun (y, _) -> x = y) sigma) ] in
+  [x, substitute mu t | x,t <- sigma ] @ mu'
 ;;
 
 
