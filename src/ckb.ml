@@ -16,10 +16,10 @@ open Yicesx
 open Settings
 
 (*** TYPES *******************************************************************)
+type rewrite_steps = (Rule.t * Term.pos * Term.t) list
 type result = Completion of Rules.t
   | GroundCompletion of (Rules.t * Rules.t * Order.t)
-  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list) *
-              Subst.t)
+  | Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
 
 (*** EXCEPTIONS **************************************************************)
 exception Success of result
@@ -223,6 +223,16 @@ let saturated ctx (rr,ee) rewriter cc =
   Ground.all_joinable ctx str sys eqs xsig d
 ;;
 
+let rewrite_seq rew (s,t) (rss,rst) =
+  let rec seq u = function
+     [] -> []
+   | (rl,p) :: rs ->
+     let v = rew#rewrite_at_with u rl p in (rl,p,v) :: (seq v rs)
+  in
+  seq s rss, seq t rst
+;;
+
+
 let succeeds ctx (rr,ee) rewriter cc gs =
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
@@ -235,10 +245,14 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let g = L.find fixed (NS.to_list gs) in
     let s,t = Lit.terms g in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
-    if !(settings.d) then
+    if !(settings.d) then (
       F.printf "joined %a\n%!" (fun f g -> Lit.print f g) g;
-    if joinable (s,t) then Some (Proof ((s,t),(rss,rst),[]))
-    else Some (Proof ((s,t),(rss,rst),Subst.mgu s t)))
+      F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss] Rules.print [r | r,_ <- rst]);
+    if joinable (s,t) then
+      Some (Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
+    else
+      let s',t' = Rule.substitute (Subst.mgu s t) (s,t) in
+      Some (Proof ((s,t),rewrite_seq rewriter (s',t') (rss,rst),Subst.mgu s t)))
   else if rr @ ee = [] || (sat <> None &&
           (L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs))) then (
     if !(settings.unfailing) && !(Settings.inequalities) = [] then

@@ -107,6 +107,8 @@ end
 
 type term_cmp = Term.t -> Term.t -> bool
 
+exception Not_orientable
+
 class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
   object (self)
 
@@ -167,25 +169,28 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
    assert (Listset.subset rs rs')
   ;;
 
+  method rewrite_at_root_with t ((l, r), b) =
+    let lsub,rsub = Rule.substitute (Subst.pattern_match l t) (l,r) in
+    if b then Some (l,r), rsub
+    else
+      let rho = match order#bot with
+          None -> []
+        | Some c -> let vs = Listset.diff (T.variables r) (T.variables l) in
+          [ x, T.F(c,[]) | x <- vs ]
+      in
+      let rsub = Term.substitute rho rsub in
+      if order#gt lsub rsub then Some (l,r), rsub
+      else raise Not_orientable
+  ;;
+
   (* FIXME: so far only for equations with same variables on both sides *)
   method rewrite_at_root t = function
     | [] -> None, t
     | ((l, r), b) :: rules -> (
       if !(Settings.do_assertions) then
         assert (Rule.is_rule (l,r));
-      try
-        let lsub,rsub = Rule.substitute (Subst.pattern_match l t) (l,r) in
-        if b then Some (l,r), rsub
-        else
-          let rho = match order#bot with
-             None -> []
-           | Some c -> let vs = Listset.diff (T.variables r) (T.variables l) in
-              [ x, T.F(c,[]) | x <- vs ]
-          in
-          let rsub = Term.substitute rho rsub in
-          if order#gt lsub rsub then Some (l,r), rsub
-          else self#rewrite_at_root t rules
-      with Subst.Not_matched -> self#rewrite_at_root t rules)
+      try self#rewrite_at_root_with t ((l, r), b)
+      with _ -> self#rewrite_at_root t rules)
   ;;
 
   (* Tries to do a parallel step on argument. Returns tuple (s, rs) where either
@@ -211,5 +216,14 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
           | None -> u, []
           | Some rl -> u, [rl,[]]
         end
+  ;;
+
+  (* only to reconstruct rewrite sequences *)
+  method rewrite_at_with t rl p =
+    let t' = Term.subterm_at p t in
+    let _, ti' =
+      try self#rewrite_at_root_with t' (rl, false)
+      with Subst.Not_matched -> self#rewrite_at_root_with t' (rl, false)
+    in Term.replace t ti' p
   ;;
 end

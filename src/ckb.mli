@@ -1,7 +1,7 @@
+type rewrite_steps = (Rule.t * Term.pos * Term.t) list
 type result = Completion of Rules.t
   | GroundCompletion of (Rules.t * Rules.t * Order.t)
-  | Proof of (Rule.t * ((Rule.t * Term.pos) list * (Rule.t * Term.pos) list) *
-              Subst.t)
+  | Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
 
 val settings: Settings.t
 

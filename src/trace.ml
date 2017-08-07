@@ -219,6 +219,15 @@ let rewrite_conv t steps =
   in List.rev (snd (List.fold_left step_conv (t,[]) steps))
 ;;
 
+let rewrite_conv' t steps =
+  let step_conv (t,acc) (rl,p,u) =
+  try
+    let rl', d' = normalize rl LeftRight in
+    u, (p,rl',d',u) :: acc
+  with _ -> failwith "Trace.rewrite_conv: no match"
+  in List.rev (snd (List.fold_left step_conv (t,[]) steps))
+;;
+
 let rec last (s, ss) = match ss with
  | [] -> s 
  | [_,_,_,t] -> t 
@@ -351,9 +360,9 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
     if sigma = [] then (
       (*Format.printf "t: rewrite conv from %a:" Term.print t; print (t,rewrite_conv t rt);
       Format.printf "s: rewrite conv from %a:" Term.print t; print (s,rewrite_conv s rs);*)
-      let t', rtconv = rev (t,rewrite_conv t rt) in
+      let t', rtconv = rev (t,rewrite_conv' t rt) in
       (* conversion for the proven goal using the rules *)
-      let pg_conv =  append (s,rewrite_conv s rs) (t', rtconv) in
+      let pg_conv =  append (s,rewrite_conv' s rs) (t', rtconv) in
       equation_of pg_conv, pg_conv
       )
     else (
@@ -375,7 +384,7 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
     else
       [],[]
   in
-  let rls = Listx.unique (List.map fst (rs @ rt) @ grls) in
+  let rls = Listx.unique ([ r | r,_,_ <- rs @ rt] @ grls) in
   let t = trace_for rls @ [goal_conv] @ gconvs in
   if !(S.do_proof_debug) then (
     F.printf "\nFINAL CONVERSIONS: \n%!";
