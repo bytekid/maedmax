@@ -297,7 +297,7 @@ let rec goal_ancestors rule_acc gconv_acc g o =
         | ((v',w'),_) :: _ -> Rule.instantiate_to (v,w) (v',w')
     in
     if !(S.do_proof_debug) then
-      F.printf "TRACE BACK GOAL %a:\n%!" R.print (v,w);
+      F.printf "NEXT ATTACK THE GOAL %a:\n%!" R.print (v,w);
     match o with
      (* recursion stops if we reach an initial goal; need to reverse the list
         of subsequent goals encountered *)
@@ -358,7 +358,7 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
       let t', rtconv = rev (t,rewrite_conv t rt) in
       (* conversion for the proven goal using the rules *)
       let pg_conv =  append (s,rewrite_conv s rs) (t', rtconv) in
-      (s,t), pg_conv
+      equation_of pg_conv, pg_conv
       )
     else (
       failwith "substituted proof";
@@ -373,7 +373,6 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
      (s',t') might produce (s,t), now added into table, ...*)
   let grls, gconvs =
     if ((s,t) <> g_orig) then (
-      assert (snd (Variant.normalize_rule_dir (s,t)));
       let o = try fst (H.find goal_trace_table (s,t)) with _ -> Initial in
       H.add goal_trace_table g_orig (Initial, -1);
       goal_ancestors [] [goal_conv] (s,t) o)
