@@ -310,8 +310,8 @@ let rec goal_ancestors rule_acc gconv_acc g o =
          F.printf "DERIVED BY REWRITE FROM %a:\n%!" R.print (s,t);
        let conv = subst delta (conversion_for (v,w) o) in
        (* no substitution added by solve *)
-       let conv',_ = solve conv (s,t) (List.map fst gconv_acc) in
-       let gconv = Rule.substitute delta (s,t), conv' in
+       let conv', tau = solve conv (s,t) (List.map fst gconv_acc) in
+       let gconv = Rule.substitute tau (s,t), conv' in
        if !(S.do_proof_debug) then (
          F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv); print (snd gconv));
        let rls = Listx.unique (List.map fst (rs @ rt)) in
