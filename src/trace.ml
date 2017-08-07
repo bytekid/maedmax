@@ -187,9 +187,6 @@ let solve (s,steps) (u,v) goals =
          let tau = Rule.instantiate_to oriented_rl (s',t') in
          assert ((Rule.substitute tau oriented_rl) = (s',t'));
          assert (equation_of res = (s',t'));
-         if (!(S.do_proof_debug) && Rule.substitute tau (u,v) <> (s',t')) then (
-           Format.printf "SUBSTITUTED IS  %a\n%!" Rule.print (Rule.substitute tau (u,v));
-           assert (Rule.substitute tau (v,u) = (s',t')));
          let conv = rev_unless res (Rule.substitute tau (u,v) = (s',t')) in
          if !(S.do_proof_debug) then (
            Format.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
@@ -309,7 +306,6 @@ let rec goal_ancestors rule_acc gconv_acc g o =
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY REWRITE FROM %a:\n%!" R.print (s,t);
        let conv = subst delta (conversion_for (v,w) o) in
-       (* no substitution added by solve *)
        let conv', tau = solve conv (s,t) (List.map fst gconv_acc) in
        let gconv = Rule.substitute tau (s,t), conv' in
        if !(S.do_proof_debug) then (
