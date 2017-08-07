@@ -24,8 +24,8 @@ type cpf_conv = Term.t * (cpf_step list)
 
 (*** GLOBALS *****************************************************************)
 let trace_table : (R.t, origin) H.t = H.create 128
-let goal_trace_table : (R.t, origin) H.t = H.create 128
-
+let goal_trace_table : (R.t, origin * int) H.t = H.create 128
+let gcount = ref 0
 (*** FUNCTIONS ***************************************************************)
 let root = []
 
@@ -61,7 +61,13 @@ let rec print_steps = function
 (* keep first origin for equation to avoid cycles *)
 let add eq o = if not (H.mem trace_table eq) then H.add trace_table eq o
 
-let gadd g o = let t = goal_trace_table in if not (H.mem t g) then H.add t g o
+let gadd g o =
+  if not (H.mem goal_trace_table g) then (
+  let c = !gcount in
+  gcount := c + 1;
+       if !(S.do_proof_debug) then
+  F.printf "ADDING GOAL %i:%a\n" c Rule.print g;
+  let t = goal_trace_table in H.add t g (o,c))
 
 let add_initials eqs =
   (*if !(S.do_proof_debug) then
@@ -153,9 +159,12 @@ let subst sub (t,steps) =
   T.substitute sub t, ssteps
 ;;
 
+let subst_print = 
+  List.iter (fun (x,t) -> Format.printf "  %s -> %a\n" (Signature.get_var_name x) Term.print t)
+
 (* Given a conversion for s = t where u = v or v = u occurs produce a conversion
    for u = v using s = t or t = s. *)
-let solve (s,steps) (u,v) sigma =
+let solve (s,steps) (u,v) goals =
  if !(S.do_proof_debug) then
   (Format.printf "LOOK FOR %a IN: \n" Rule.print (u,v); print (s,steps));
  let t = last (s,steps) in
@@ -164,7 +173,9 @@ let solve (s,steps) (u,v) sigma =
    | (p,rl,d,t') :: steps_aft ->
      if rl <> (u,v) && rl <> (v,u) then
        solve ((p,rl,flip d,s') :: steps_bef) t' steps_aft
-     else
+     else (
+       if (!(S.do_proof_debug) && not (List.exists (fun g -> Rule.is_instance g (s,t)) goals)) then
+         Format.printf "no instance: %a\n %!" Rule.print (s,t);
        let st_step = root, (s,t), LeftRight, t in
        let res = s', steps_bef @ [st_step] @ (snd (rev (t',steps_aft))) in
        let oriented_rl = if d = LeftRight then rl else Rule.flip rl in
@@ -180,9 +191,11 @@ let solve (s,steps) (u,v) sigma =
            Format.printf "SUBSTITUTED IS  %a\n%!" Rule.print (Rule.substitute tau (u,v));
            assert (Rule.substitute tau (v,u) = (s',t')));
          let conv = rev_unless res (Rule.substitute tau (u,v) = (s',t')) in
-         if !(S.do_proof_debug) then
+         if !(S.do_proof_debug) then (
            Format.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
-         conv, tau)
+           subst_print tau;
+         );
+     conv, tau))
  in
  let conv, tau = solve [] s steps in
  if !(S.do_proof_debug) then (
@@ -275,9 +288,14 @@ let trace_for eqs =
    conversions for the encountered non-initial goals are collected in goal_conv
    while the used rules in rule_acc (for those ancestors have to be collected
    separately). *)
-let rec goal_ancestors rule_acc gconv_acc sigma g o =
+let rec goal_ancestors rule_acc gconv_acc g o =
   try
     let (v,w), keep_gdir = Variant.normalize_rule_dir g in
+    let delta =
+      match gconv_acc with
+          [] -> Subst.empty
+        | ((v',w'),_) :: _ -> Rule.instantiate_to (v,w) (v',w')
+    in
     if !(S.do_proof_debug) then
       F.printf "TRACE BACK GOAL %a:\n%!" R.print (v,w);
     match o with
@@ -290,30 +308,33 @@ let rec goal_ancestors rule_acc gconv_acc sigma g o =
        assert (snd (Variant.normalize_rule_dir (s,t)));
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY REWRITE FROM %a:\n%!" R.print (s,t);
-       let conv = subst sigma (conversion_for (v,w) o) in
+       let conv = subst delta (conversion_for (v,w) o) in
        (* no substitution added by solve *)
-       let conv',_ = solve conv (s,t) sigma in
-       let gconv = Rule.substitute sigma (s,t), conv' in
+       let conv',_ = solve conv (s,t) (List.map fst gconv_acc) in
+       let gconv = Rule.substitute delta (s,t), conv' in
        if !(S.do_proof_debug) then (
          F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv); print (snd gconv));
        let rls = Listx.unique (List.map fst (rs @ rt)) in
-       let o = H.find goal_trace_table (s,t) in
-       goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) sigma (s,t) o
+       let o,i = H.find goal_trace_table (s,t) in
+       if !(S.do_proof_debug) then
+           Format.printf "R-ADD GOAL %i:%a \n\n%!" i Rule.print (fst gconv);
+       goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) (s,t) o
      (* (v,w) was obtained from deduce with goal g0 using rule rl *)
      | Deduce (rl, p, g0) ->
        (*assert (snd (Variant.normalize_rule_dir g0));*)
        let g0 = Variant.normalize_rule g0 in
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY DEDUCE FROM %a:\n%!" R.print g0;
-       let conv = subst sigma (conversion_for (v,w) o) in
-       let conv', tau = solve conv g0 sigma in
-       let sigma' = Subst.after tau sigma in
+       let conv = subst delta (conversion_for (v,w) o) in
+       let conv', tau = solve conv g0 (List.map fst gconv_acc) in
        let gconv = Rule.substitute tau g0, conv' in
        if !(S.do_proof_debug) then (
          F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv); print (snd gconv));
        let rl',d_rl = normalize rl LeftRight in
-       let o = H.find goal_trace_table g0 in
-       goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) sigma' g0 o
+       let o,i = H.find goal_trace_table g0 in
+       if !(S.do_proof_debug) then
+           Format.printf "D-ADD GOAL %i:%a \n\n%!" i Rule.print (fst gconv);
+       goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) g0 o
   with Not_found -> (
     F.printf "no origin found for goal %a\n%!" R.print g;
     failwith "Trace.goal_ancestors: equation unknown")
@@ -353,9 +374,9 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
   let grls, gconvs =
     if ((s,t) <> g_orig) then (
       assert (snd (Variant.normalize_rule_dir (s,t)));
-      let o = try H.find goal_trace_table (s,t) with _ -> Initial in
-      H.add goal_trace_table g_orig Initial;
-      goal_ancestors [] [] sigma (s,t) o)
+      let o = try fst (H.find goal_trace_table (s,t)) with _ -> Initial in
+      H.add goal_trace_table g_orig (Initial, -1);
+      goal_ancestors [] [goal_conv] (s,t) o)
     else
       [],[]
   in
