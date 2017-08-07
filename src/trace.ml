@@ -355,20 +355,12 @@ let append (s,sconv) (t,tconv) =
 let goal_proof g_orig (s,t) (rs,rt) sigma =
   if !(S.do_proof_debug) then (
     F.printf "\n0. ORIGINAL GOAL %a\n%!" R.print g_orig;
-    F.printf "\n1. PROVEN GOAL %a\n%!" R.print (s,t));
+    F.printf "\n1. PROVEN GOAL %a\n%!" R.print (s,t);
+    if sigma <> [] then F.printf "(substituted)\n%!");
   let goal_conv =
-    if sigma = [] then (
-      (*Format.printf "t: rewrite conv from %a:" Term.print t; print (t,rewrite_conv t rt);
-      Format.printf "s: rewrite conv from %a:" Term.print t; print (s,rewrite_conv s rs);*)
-      let t', rtconv = rev (t,rewrite_conv' t rt) in
-      (* conversion for the proven goal using the rules *)
-      let pg_conv =  append (s,rewrite_conv' s rs) (t', rtconv) in
-      equation_of pg_conv, pg_conv
-      )
-    else (
-      failwith "substituted proof";
-      (*let s',t' = Rule.substitute sigma (s,t) in
-      (s',t'), (s',[])*))
+    let t', rtconv = rev (t,rewrite_conv' t rt) in
+    let pg_conv =  append (s,rewrite_conv' s rs) (t', rtconv) in
+    equation_of pg_conv, pg_conv
   in
   if !(S.do_proof_debug) then
     (F.printf "2. THE GOAL CONVERSION:\n%!"; print (snd goal_conv));
