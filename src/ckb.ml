@@ -246,13 +246,15 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let s,t = Lit.terms g in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if !(settings.d) then (
-      F.printf "joined %a\n%!" (fun f g -> Lit.print f g) g;
+      let str = if joinable (s,t) then "joinable" else "unifiable" in
+      F.printf "%s %a\n%!" str (fun f g -> Lit.print f g) g;
       F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss] Rules.print [r | r,_ <- rst]);
     if joinable (s,t) then
       Some (Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
     else
+      (* unifiable *)
       let s',t' = Rule.substitute (Subst.mgu s t) (s,t) in
-      Some (Proof ((s,t),rewrite_seq rewriter (s',t') (rss,rst),Subst.mgu s t)))
+      Some (Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]),Subst.mgu s t)))
   else if rr @ ee = [] || (sat <> None &&
           (L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs))) then (
     if !(settings.unfailing) && !(Settings.inequalities) = [] then

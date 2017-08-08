@@ -65,8 +65,8 @@ let gadd g o =
   if not (H.mem goal_trace_table g) then (
   let c = !gcount in
   gcount := c + 1;
-       if !(S.do_proof_debug) then
-  F.printf "ADDING GOAL %i:%a\n" c Rule.print g;
+  if !(S.do_proof_debug) then
+    F.printf "ADDING GOAL %i:%a\n" c Rule.print g;
   let t = goal_trace_table in H.add t g (o,c))
 
 let add_initials eqs =
@@ -346,6 +346,8 @@ let rec goal_ancestors rule_acc gconv_acc g o =
 ;;
 
 let append (s,sconv) (t,tconv) =
+  if !(S.do_proof_debug) then
+    assert (Subst.unifiable (last (s,sconv)) t);
   let sigma = Subst.mgu (last (s,sconv)) t in
   subst sigma  (s,sconv @ tconv)
 ;;
