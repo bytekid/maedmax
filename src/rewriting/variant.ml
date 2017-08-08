@@ -87,7 +87,12 @@ let union_es es1 es2 = unique ~eq:eq_variant (es1 @ es2)
 
 let normalize_rule_dir (s,t) =
  let s',t' =  Term.rename_canonical s, Term.rename_canonical t in
- let rule, dir = if s' < t' then (s,t), true else (t,s), false in
+ let rule, dir =
+   if s' < t' then (s,t), true
+   else if t' < s' then (t,s), false
+   else if rename_rule [] (s,t) < rename_rule [] (t,s) then (s,t), true
+   else (t,s), false
+ in
  rename_rule [] rule, dir
 ;;
 
