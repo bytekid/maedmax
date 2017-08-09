@@ -172,6 +172,7 @@ let no_order_check conds x y =
   is_var x && is_var y
 ;;
 
+(* extends given constraint c0 *)
 let ordered_ac_step sys ctx conds (l,r) (u,c0) =
   try
     let sub = Subst.pattern_match l u in
@@ -201,18 +202,17 @@ let ac_nf ctx sys conds f u =
     (*if u1 <> u0 then Format.printf "  R step from %a to %a \n%!" Term.print u0 Term.print u1;*)
     let u2, c2 = ordered_ac_step sys ctx conds (Ac.commutativity f) (u1,c) in
     (*if u1 <> u2 then Format.printf "  commutativity step from %a to %a \n%!" Term.print u1 Term.print u2;*)
-    let u3, c3 = ordered_ac_step sys ctx conds (Ac.cassociativity f) (u2,c <&&> c2) in
+    let u3, c3 = ordered_ac_step sys ctx conds (Ac.cassociativity f) (u2,c2) in
     (*if u3 <> u2 then Format.printf "  cassociativity step from %a to %a \n%!" Term.print u2 Term.print u3;*)
     if u0 = u3 then ac_nf c u ps
     else let u' = replace u u3 p in
-    ac_nf (c <&&> c2 <&&> c3) u' (positions u')
+    ac_nf c3 u' (positions u')
   in ac_nf True u (positions u)
 ;;
 
 (* reducts wrt ordered rewriting with special MN90 AC rules *)
 let ac_reducts ctx sys conds f (u,c) =
   let u = Rewriting.nf sys.trs u in
-  Format.printf "new term %a\n" Term.print u;
   let rec reducts acc = function
     | [] -> acc
     | p :: ps ->
@@ -331,8 +331,7 @@ and instance_joinable ctx sys p ac =
       let xs = List.map sub p.var_order in
       if s1 = t1 then True
       (* instantiation is not in normal form: kill TODO prove *)
-      else if List.exists (Rewriting.reducible_with sys.trs) xs then 
-       (if !debug then Format.printf "reducible, kill\n%!"; True) 
+      else if List.exists (Rewriting.reducible_with sys.trs) xs then True
       else (
         let id = p.id ^ Sig.get_fun_name f ^ "-" in
         let p' = { s = s1; t = t1; inst = p.inst-1; var_order = xs; id = id } in
