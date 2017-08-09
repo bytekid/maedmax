@@ -1,8 +1,10 @@
 type t = { ctx : Yices.context;
            expr: Yices.expr;
-           decl: Yices.var_decl option }
+           decl: Yices.var_decl option;
+           size: int }
 
 val ctx : t -> Yices.context
+val size : t -> int
 val mk_context : unit -> Yices.context
 val del_context : Yices.context -> unit
 val show : t -> unit
