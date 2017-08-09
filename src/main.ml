@@ -187,7 +187,11 @@ let proof_string ?(readable=true) (es,gs) = function
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ^ 
       "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n" ^
       ((if readable then Xml.to_string_fmt else Xml.to_string) p)
-  | _ -> failwith "Main.show_proof: not yet supported if no goal present"
+  | Ckb.Completion _ ->
+    failwith "Main.show_proof: not yet supported for Completion"
+  | Ckb.GroundCompletion _ ->
+    failwith "Main.show_proof: not yet supported for GroundCompletion"
+  | _ -> failwith "Main.show_proof: not yet supported for inequality axioms"
 ;;
 
 let show_proof (es,gs) res =
