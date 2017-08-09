@@ -398,7 +398,7 @@ let pos_to_xml p =
   X.Element("positionInTerm", [], List.map px p)
 ;;
 
-let equation_to_xml (l,r) = X.Element("equation",[],[T.to_xml l;T.to_xml r])
+let equation_to_xml (l,r) = X.Element("inequality",[],[T.to_xml l;T.to_xml r])
 
 let input_to_xml es g =
   let es0 = [ Variant.normalize_rule e | e <- es ] in
@@ -426,8 +426,8 @@ let rule_sub_to_xml ((s,t), (s',steps)) =
 ;;
 
 let eqproof_to_xml cs =
-  let xsub = X.Element("subsumptionProof", [], List.map rule_sub_to_xml cs) in
-  X.Element("equationalProof", [], [ xsub ])
+  let xsub = X.Element("convertibleInstantiation", [], List.map rule_sub_to_xml cs) in
+  X.Element("equationalDisproof", [], [ xsub ])
 ;;
 
 let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
