@@ -178,8 +178,8 @@ let ordered_ac_step sys ctx conds (l,r) (u,c0) =
     let sub = Subst.pattern_match l u in
     (* condition for these particular rules are instances of x and y *)
     let x', y' = substitute sub Ac.x, substitute sub Ac.y in
-    if gt_simp conds (x', y') then substitute sub r, True
-    else if no_order_check conds x' y' then u, True (* false/no step *)
+    if gt_simp conds (x', y') then substitute sub r, c0
+    else if no_order_check conds x' y' then u, c0 (* false/no step *)
     else ( 
     (*if !debug then Format.printf "   SAT check %a %!" Rule.print (x', y');*)
     let c = Strategy.cond_gt sys.strategy 1 ctx conds x' y' in
