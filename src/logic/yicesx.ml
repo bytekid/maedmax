@@ -4,20 +4,17 @@ open Yices
 (*** TYPES *******************************************************************)
 type t = { ctx : Yices.context;
            expr: Yices.expr;
-           decl: Yices.var_decl option;
-           size: int }
+           decl: Yices.var_decl option }
 
 (*** GLOBALS *****************************************************************)
 
 (*** FUNCTIONS ***************************************************************)
-let mk ?(s = 1) c e = { ctx = c; expr = e; decl = None; size = s }
-let mk_with_decl ?(s = 1) c e d = { ctx = c; expr = e; decl = Some d; size = s }
+let mk c e = { ctx = c; expr = e; decl = None }
+let mk_with_decl c e d = { ctx = c; expr = e; decl = Some d }
 
 let ctx yexpr = yexpr.ctx
 
 let expr yexpr = yexpr.expr
-
-let size yexpr = yexpr.size
 
 let is_true x = let r = (x.expr == mk_true x.ctx) in (if r then Format.printf "YES!!\n%!"; r)
 
@@ -52,19 +49,19 @@ let mk_int_var ctx name =
 let (!!) x =
   if is_true x then mk_false x.ctx else
   if is_false x then mk_true x.ctx else
-  mk ~s:(x.size + 1) x.ctx (mk_not x.ctx x.expr)
+  mk x.ctx (mk_not x.ctx x.expr)
 ;;
 
 let (<|>) x y =
   if is_true x || is_true y then mk_true x.ctx else
   if is_false x then y else if is_false y then x else
-  mk ~s:(x.size + y.size + 1) x.ctx (mk_or x.ctx [| x.expr; y.expr |])
+  mk x.ctx (mk_or x.ctx [| x.expr; y.expr |])
 ;;
 
 let (<&>) x y =
   if is_false x || is_false y then mk_false x.ctx else
   if is_true x then y else if is_true y then x else
-  mk ~s:(x.size + y.size + 1) x.ctx (mk_and x.ctx [| x.expr; y.expr |])
+  mk x.ctx (mk_and x.ctx [| x.expr; y.expr |])
 ;;
 
 let (<=>>) x y = !!x <|> y
@@ -76,9 +73,7 @@ let big_binop p_ann ann p_neut neut op ctx xs =
   else match List.filter (fun x -> not (p_neut x)) xs with
       []  -> neut ctx
     | [x] -> x
-    | xs  ->
-      let s = List.fold_left (fun s x -> s + x.size) 0 xs in
-      mk ~s:(s + 1) ctx (op ctx (Array.of_list (List.map expr xs)))
+    | xs  -> mk ctx (op ctx (Array.of_list (List.map expr xs)))
 ;;
 
 let big_binop1 big_binop = function
@@ -96,22 +91,22 @@ let big_or1 = big_binop1 big_or
 
 let (<+>) x y =
   if is_zero x then y else if is_zero y then x else
-  mk ~s:(x.size + y.size + 1) x.ctx (mk_sum x.ctx [| x.expr; y.expr |])
+  mk x.ctx (mk_sum x.ctx [| x.expr; y.expr |])
 ;;
 
 let sum = big_binop (fun _ -> false) mk_zero is_zero mk_zero mk_sum
 
 let sum1 = big_binop1 sum
 
-let (<>>) x y = mk ~s:(x.size + y.size + 1) x.ctx (mk_gt x.ctx x.expr y.expr)
+let (<>>) x y = mk x.ctx (mk_gt x.ctx x.expr y.expr)
 
-let (<>=>) x y = mk ~s:(x.size + y.size + 1) x.ctx (mk_ge x.ctx x.expr y.expr)
+let (<>=>) x y = mk x.ctx (mk_ge x.ctx x.expr y.expr)
 
-let (<=>) x y = mk ~s:(x.size + y.size + 1) x.ctx (mk_eq x.ctx x.expr y.expr)
+let (<=>) x y = mk x.ctx (mk_eq x.ctx x.expr y.expr)
 
-let (<!=>) x y = mk ~s:(x.size + y.size + 1) x.ctx (mk_diseq x.ctx x.expr y.expr)
+let (<!=>) x y = mk x.ctx (mk_diseq x.ctx x.expr y.expr)
 
-let ite c t f = mk ~s:(c.size + t.size + f.size + 1) c.ctx (mk_ite c.ctx c.expr t.expr f.expr)
+let ite c t f = mk c.ctx (mk_ite c.ctx c.expr t.expr f.expr)
 
 let max x y = ite (x <>> y) x y
 
