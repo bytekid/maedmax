@@ -426,8 +426,9 @@ let rule_sub_to_xml ((s,t), (s',steps)) =
 ;;
 
 let eqproof_to_xml cs =
-  let xsub = X.Element("convertibleInstantiation", [], List.map rule_sub_to_xml cs) in
-  X.Element("equationalDisproof", [], [ xsub ])
+  let xsub = X.Element("subsumptionProof", [], List.map rule_sub_to_xml cs) in
+  let xconv = X.Element("convertibleInstance", [], [ xsub ]) in
+  X.Element("equationalDisproof", [], [ xconv ])
 ;;
 
 let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
