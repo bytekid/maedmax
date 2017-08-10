@@ -42,7 +42,8 @@ decl:
   | INCLUDEAXIOMS LPAREN FILE RPAREN DOT decl { add_axioms $3 $6}
   | axiom decl { add_equation $1 $2 }
   | hypothesis decl { add_equation $1 $2 }
-  | conjecture decl { add_goal (fst $1) $2 }
+  | eq_conjecture decl { add_equation $1 $2 }
+  | ineq_conjecture decl { add_goal (fst $1) $2 }
   | COMMENT decl { $2 }
   | { [],[],[]}
   | error { syntax_error "Syntax error." }
@@ -54,13 +55,12 @@ axiom:
 hypothesis:
  | CNF LPAREN IDENT COMMA HYPOTHESIS COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
 
-conjecture:
- | CNF LPAREN IDENT COMMA conjecturetype COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
- | CNF LPAREN IDENT COMMA conjecturetype COMMA LPAREN inequality RPAREN RPAREN DOT { $8 }
+ineq_conjecture:
+ | CNF LPAREN IDENT COMMA CONJECTURE COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
+ | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN inequality RPAREN RPAREN DOT { $8 }
 
-conjecturetype:
- | CONJECTURE { () }
- | NCONJECTURE { () }
+eq_conjecture:
+ | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
 
 equation:
   | term EQ term { ($1, $3), true }
