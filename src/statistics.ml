@@ -29,6 +29,7 @@ let goals = ref 0;;
 let restarts = ref 0
 let time_diffs = ref []
 let mem_diffs = ref []
+let eq_counts = ref []
 
 (*** FUNCTIONS ***************************************************************)
 let take_time t f x =
@@ -42,13 +43,17 @@ let memory _ =
   s.Gc.heap_words * (Sys.word_size / 8 ) / (1024 * 1024)
 ;;
 
+let eq_count_str _ =
+ List.fold_left (fun s d -> s^" "^(string_of_int d)) "" (List.rev !eq_counts)
+;;
+
 let memory_diff_str _ =
- List.fold_left (fun s d -> s ^ " " ^ (string_of_int d)) "" !mem_diffs
+ List.fold_left (fun s d -> s^" "^(string_of_int d)) "" (List.rev !mem_diffs)
 ;;
 
 let time_diff_str _ =
  let str s d = s ^ " " ^ (string_of_int (int_of_float (d *. 100.))) in
- List.fold_left str "" !time_diffs
+ List.fold_left str "" (List.rev !time_diffs)
 ;;
 
 let print () =
@@ -58,8 +63,9 @@ let print () =
     printf "goals               %i@." !goals;
   printf "restarts            %i@." !restarts;
   printf "memory (MB)         %d@." (memory ());
-  (*printf "time diffs         %s@." (time_diff_str ());
-  printf "memory diffs       %s@." (memory_diff_str ());*)
+  printf "time diffs         %s@." (time_diff_str ());
+  printf "memory diffs       %s@." (memory_diff_str ());
+  printf "equation counts    %s@." (eq_count_str ());
   printf "times@.";
   printf " ground join checks %.3f@." !t_gjoin_check;
   printf " maxk               %.3f@." !t_maxk;

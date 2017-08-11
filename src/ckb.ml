@@ -488,6 +488,7 @@ let set_iteration_stats aa gs =
   last_time := Unix.gettimeofday ();
   St.time_diffs := time_diff :: !(St.time_diffs);
   St.mem_diffs := mem_diff :: !(St.mem_diffs);
+  St.eq_counts := NS.size aa :: !(St.eq_counts);
   let s = Strategy.to_string !(settings.strategy) in
   if !(settings.d) then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
@@ -630,4 +631,5 @@ let rec ckb fs (es, gs) =
   sizes := [];
   St.mem_diffs := [];
   St.time_diffs := [];
+  St.eq_counts := [];
   ckb fs ((if gs = [] then es0 else es_new @ es0), gs))

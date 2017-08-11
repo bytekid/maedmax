@@ -22,6 +22,7 @@ val restarts : int ref
 
 val time_diffs : float list ref
 val mem_diffs : int list ref
+val eq_counts : int list ref
 
 val memory : unit -> int
 
