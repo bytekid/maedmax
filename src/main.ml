@@ -77,8 +77,8 @@ let options = Arg.align
        else if s = "temp" then settings.strategy := S.strategy_temp*)
        else failwith "unsupported option for -M"),
     "<mode> strategy (olpo, okbo, olpokbo)");
-   ("--checksub", Arg.Set settings.check_subsumption,
-    " perform subsumption checks");
+   ("--checksub", Arg.Int (fun n -> settings.check_subsumption := n),
+    " perform subsumption checks (1,2)");
    ("-N", Arg.Int (fun n -> settings.n := n), 
     "<n> select <n> active equations from CPs of TRS");
    ("--term", Arg.Set only_termination,

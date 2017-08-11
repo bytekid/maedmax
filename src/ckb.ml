@@ -194,6 +194,7 @@ let cps n1 = St.take_time St.t_tmp1 (cps n1)
 
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
+ let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in
  let aa_for_ols = NS.to_list (eqs_for_overlaps aa) in
  if !(settings.d) then
    Format.printf "use equations for overlaps:\n%a\n%!" NS.print (eqs_for_overlaps aa);
@@ -205,6 +206,7 @@ let overlaps rr = St.take_time St.t_overlap (overlaps rr)
 
 (* goal only as outer rule *)
 let overlaps_on rr aa gs =
+ let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in
  let ns = rr @ (NS.to_list (eqs_for_overlaps aa)) in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps r g ]
@@ -520,11 +522,10 @@ let rec phi ctx aa gs =
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
   let aa =
-    if !(settings.check_subsumption) && !St.iterations mod 3 == 0 then
+    if !(settings.check_subsumption) == 2 && !St.iterations mod 3 == 0 then
       NS.subsumption_free aa
     else aa
   in
-  log_iteration (!St.iterations) aa;
   let process (j, aa, gs) (rr, c, order) =
     let trs_n = store_trs ctx j [ Lit.terms r | r <- rr ] c in
     let rr_red = C.redtrs_of_index trs_n in
