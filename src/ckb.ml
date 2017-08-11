@@ -194,11 +194,8 @@ let cps n1 = St.take_time St.t_tmp1 (cps n1)
 
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
- let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in
- let aa_for_ols = NS.to_list (eqs_for_overlaps aa) in
- if !(settings.d) then
-   Format.printf "use equations for overlaps:\n%a\n%!" NS.print (eqs_for_overlaps aa);
- let ns = if !(settings.unfailing) then rr @ aa_for_ols else rr in
+ (*let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in*)
+ let ns = if !(settings.unfailing) then rr @ aa else rr in
  NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
 ;;
 
@@ -206,8 +203,8 @@ let overlaps rr = St.take_time St.t_overlap (overlaps rr)
 
 (* goal only as outer rule *)
 let overlaps_on rr aa gs =
- let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in
- let ns = rr @ (NS.to_list (eqs_for_overlaps aa)) in
+ (*let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in*)
+ let ns = rr @ aa in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps r g ]
 ;;
@@ -536,13 +533,14 @@ let rec phi ctx aa gs =
     let gs = NS.add_all (reduced rew gs) gs in
     (*let irred = [ n | n <- NS.to_list(NS.symmetric irred); n#not_increasing ] in*)
     let irred = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    let cps = reduced rew (overlaps rr irred) in (* rewrite CPs *)
+    let aa_for_ols = NS.to_list (eqs_for_overlaps irred) in
+    let cps = reduced rew (overlaps rr aa_for_ols) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
     let sel, rest = select nn 200 in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then
       NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
-    let gcps = reduced rew (overlaps_on rr irred gs) in (* rewrite goal CPs *)
+    let gcps = reduced rew (overlaps_on rr aa_for_ols gs) in (* rewrite goal CPs *)
     let gg = fst (select ~k:2 gcps 30) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
