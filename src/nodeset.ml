@@ -78,4 +78,16 @@ module NL = Nodes.Make(N)
     let check_add h n = if H.exists (sub n) (stop n) h then h else add n h in
     H.fold check_add empty
   ;;
+
+  let add_unless_subsumed n ns =
+    let generalization n n' =
+      R.is_instance (N.rule n) (N.rule n') ||
+      R.is_instance (R.flip (N.rule n)) (N.rule n')
+    in
+    let stop n e = R.size (N.rule e) > R.size (N.rule n) in
+    if H.exists (generalization n) (stop n) ns then ns else add n ns 
+  ;;
+
+  let add_list_unless_subsumed l ns =
+    List.fold_left (fun ns n -> add_unless_subsumed n ns) ns l
 end

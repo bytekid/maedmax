@@ -67,12 +67,15 @@ let sort_smaller_than t ns =
   L.sort cmp small
 ;;
 
+let exists p ns = H.fold (fun n _ b -> b || p n) ns false
+
 let filter p ns =
-  let h = Hashtbl.create (H.length ns * 2) in
-  H.fold (fun n _ res -> if p n then add n res else res) ns h
+  (*let h = Hashtbl.create (H.length ns * 2) in
+  H.fold (fun n _ res -> if p n then add n res else res) ns h*)
+  H.fold (fun n _ ns' -> if not (p n) then H.remove ns' n; ns') ns (H.copy ns)
 ;;
 
-let exists p ns = H.fold (fun n _ b -> b || p n) ns false
+let find p ns = H.fold (fun n _ x -> if p n then Some n else x) ns None
 
 let for_all p ns = H.fold (fun n _ b -> b && p n) ns true
 
@@ -82,13 +85,12 @@ let variant_free ns =
   H.fold (fun n _ hr -> if not (exists (var n) hr) then add n hr else hr) ns h 
 ;;
 
-let subsumption_free ns =
-  let sub n n' =
-    let r, r' = Lit.terms n, Lit.terms n' in
-    R.is_proper_instance r r' || R.is_proper_instance (R.flip r) r'
-  in
-  filter (fun n -> not (exists (sub n) ns))
+let subsumed n n' =
+  let r, r' = Lit.terms n, Lit.terms n' in
+  R.is_proper_instance r r' || R.is_proper_instance (R.flip r) r'
 ;;
+
+let subsumption_free ns = filter (fun n -> not (exists (subsumed n) ns)) ns
 
 let diff ns d = H.fold (fun n _ nsr -> remove n nsr) d ns 
 
@@ -103,3 +105,15 @@ let print ppf ns =
 let iter f = H.iter (fun n _ -> f n)
 
 let fold f = H.fold (fun n _ -> f n)
+
+let rec add_unless_subsumed n ns =
+  if not (exists (subsumed n) ns) then
+    H.add ns n true
+  else
+    Format.printf "%a is subsumed by %a\n%!" Lit.print n Lit.print (match find (subsumed n) ns with Some x -> x | None -> failwith "boo");
+  ns
+;;
+
+let add_list_unless_subsumed l ns =
+  L.fold_left (fun h n -> add_unless_subsumed n h) ns l
+;;

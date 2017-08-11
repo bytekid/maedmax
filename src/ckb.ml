@@ -519,6 +519,12 @@ let rec phi ctx aa gs =
   if stuck_state aa gs then
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
+  let aa =
+    if !(settings.check_subsumption) && !St.iterations mod 3 == 0 then
+      NS.subsumption_free aa
+    else aa
+  in
+  log_iteration (!St.iterations) aa;
   let process (j, aa, gs) (rr, c, order) =
     let trs_n = store_trs ctx j [ Lit.terms r | r <- rr ] c in
     let rr_red = C.redtrs_of_index trs_n in
