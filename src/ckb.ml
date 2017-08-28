@@ -194,7 +194,6 @@ let cps n1 = St.take_time St.t_tmp1 (cps n1)
 
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rr aa =
- (*let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in*)
  let ns = if !(settings.unfailing) then rr @ aa else rr in
  NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
 ;;
@@ -203,7 +202,6 @@ let overlaps rr = St.take_time St.t_overlap (overlaps rr)
 
 (* goal only as outer rule *)
 let overlaps_on rr aa gs =
- (*let aa = if !(settings.check_subsumption) == 1 then NS.subsumption_free aa else aa in*)
  let ns = rr @ aa in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps r g ]
@@ -531,7 +529,6 @@ let rec phi ctx aa gs =
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in
-    (*let irred = [ n | n <- NS.to_list(NS.symmetric irred); n#not_increasing ] in*)
     let irred = NS.filter Lit.not_increasing (NS.symmetric irred) in
     let irred' =
       if !(settings.check_subsumption) == 1 then NS.subsumption_free irred
