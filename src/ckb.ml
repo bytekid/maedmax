@@ -533,7 +533,11 @@ let rec phi ctx aa gs =
     let gs = NS.add_all (reduced rew gs) gs in
     (*let irred = [ n | n <- NS.to_list(NS.symmetric irred); n#not_increasing ] in*)
     let irred = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    let aa_for_ols = NS.to_list (eqs_for_overlaps irred) in
+    let irred' =
+      if !(settings.check_subsumption) == 1 then NS.subsumption_free irred
+      else irred
+    in
+    let aa_for_ols = NS.to_list (eqs_for_overlaps irred') in
     let cps = reduced rew (overlaps rr aa_for_ols) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
     let sel, rest = select nn 200 in
