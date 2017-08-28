@@ -182,29 +182,32 @@ let eqs_for_overlaps ee =
 
 let cp_cache : (Lit.t * Lit.t, Lit.t list) Hashtbl.t = Hashtbl.create 256
 
-let cps n1 n2 =
+let cps rew n1 n2 =
+  (*
   try Hashtbl.find cp_cache (n1,n2)
   with Not_found -> (
     let cps = Lit.cps n1 n2 in
     Hashtbl.add cp_cache (n1,n2) cps;
-    cps)
+    cps)*)
+  let cp_fun = if !(settings.pcp) = 0 then Lit.cps else Lit.pcps rew in
+  cp_fun n1 n2
 ;;
 
 let cps n1 = St.take_time St.t_tmp1 (cps n1)
 
 (* get overlaps for rules rr and active nodes cc *)
-let overlaps rr aa =
+let overlaps rew rr aa =
  let ns = if !(settings.unfailing) then rr @ aa else rr in
- NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ]
+ NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ]
 ;;
 
-let overlaps rr = St.take_time St.t_overlap (overlaps rr)
+let overlaps rew rr = St.take_time St.t_overlap (overlaps rew rr)
 
 (* goal only as outer rule *)
-let overlaps_on rr aa gs =
+let overlaps_on rew rr aa gs =
  let ns = rr @ aa in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
-  NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps r g ]
+  NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps rew r g ]
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -535,13 +538,13 @@ let rec phi ctx aa gs =
       else irred
     in
     let aa_for_ols = NS.to_list (eqs_for_overlaps irred') in
-    let cps = reduced rew (overlaps rr aa_for_ols) in (* rewrite CPs *)
+    let cps = reduced rew (overlaps rew rr aa_for_ols) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
     let sel, rest = select nn 200 in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then
       NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
-    let gcps = reduced rew (overlaps_on rr aa_for_ols gs) in (* rewrite goal CPs *)
+    let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
     let gg = fst (select ~k:2 gcps 30) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with

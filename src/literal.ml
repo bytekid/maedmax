@@ -41,7 +41,24 @@ let cps l l' =
       let add ((s,t),o) =
         if s<>t then trace (Variant.normalize_rule (s,t)) o
       in List.iter add os);
-      [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+    [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+;;
+
+let pcps rew l l' =
+  let prime ((l,_),_,_,tau) = rew#is_nf_below_root (Term.substitute tau l) in
+  assert (not (l.is_goal && l'.is_goal));
+  if not l.is_equality && not l'.is_equality then []
+  else
+    let r1, r2 = l.terms, l'.terms in
+    let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2; prime o ] in
+    let is_eq = l.is_equality && l'.is_equality in
+    let is_goal = l.is_goal || l'.is_goal in
+    if !(Settings.do_proof) then (
+      let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
+      let add ((s,t),o) =
+        if s<>t then trace (Variant.normalize_rule (s,t)) o
+      in List.iter add os);
+    [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
 ;;
 
 let rewriter_nf_with l rewriter =
