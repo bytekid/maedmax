@@ -79,6 +79,8 @@ let options = Arg.align
     "<mode> strategy (olpo, okbo, olpokbo)");
    ("--checksub", Arg.Int (fun n -> settings.check_subsumption := n),
     " perform subsumption checks (1,2)");
+   ("--pcp", Arg.Int (fun n -> settings.pcp := n),
+    " only consider prime critical pairs (1,2)");
    ("-N", Arg.Int (fun n -> settings.n := n), 
     "<n> select <n> active equations from CPs of TRS");
    ("--term", Arg.Set only_termination,

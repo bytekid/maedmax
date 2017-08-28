@@ -31,6 +31,7 @@ type t = {
  tmp      : int ref; (* various purpose parameter *)
  output_tproof : bool ref;
  check_subsumption : int ref;
+ pcp : int ref;
  extended_signature: bool ref
 }
 
@@ -56,6 +57,7 @@ let default = {
  tmp       = ref 19;
  output_tproof = ref false;
  check_subsumption = ref 0;
+ pcp = ref 0;
  extended_signature = ref false
 }
 
