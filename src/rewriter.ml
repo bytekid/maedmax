@@ -226,4 +226,13 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
       with Subst.Not_matched -> self#rewrite_at_root_with t' (rl, false)
     in Term.replace t ti' p
   ;;
+
+  method is_nf t =
+    self#nf t = (t, [])
+  ;;
+
+  method is_nf_below_root = function
+      Term.V _ -> true
+    | Term.F (_, ts) -> List.for_all self#is_nf ts
+  ;;
 end
