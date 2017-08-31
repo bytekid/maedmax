@@ -183,14 +183,13 @@ let eqs_for_overlaps ee =
 let cp_cache : (Lit.t * Lit.t, Lit.t list) Hashtbl.t = Hashtbl.create 256
 
 let cps rew n1 n2 =
-  (*
-  try Hashtbl.find cp_cache (n1,n2)
-  with Not_found -> (
-    let cps = Lit.cps n1 n2 in
-    Hashtbl.add cp_cache (n1,n2) cps;
-    cps)*)
-  let cp_fun = if !(settings.pcp) = 0 then Lit.cps else Lit.pcps rew in
-  cp_fun n1 n2
+  if !(settings.pcp) > 0 then Lit.pcps rew n1 n2
+  else (
+    try Hashtbl.find cp_cache (n1,n2)
+    with Not_found -> (
+      let cps = Lit.cps n1 n2 in
+      Hashtbl.add cp_cache (n1,n2) cps;
+    cps))
 ;;
 
 let cps n1 = St.take_time St.t_tmp1 (cps n1)

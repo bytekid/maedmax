@@ -80,7 +80,7 @@ let options = Arg.align
    ("--checksub", Arg.Int (fun n -> settings.check_subsumption := n),
     " perform subsumption checks (1,2)");
    ("--pcp", Arg.Int (fun n -> settings.pcp := n),
-    " only consider prime critical pairs (1,2)");
+    " only consider prime critical pairs if set to 1 (but then no caching)");
    ("-N", Arg.Int (fun n -> settings.n := n), 
     "<n> select <n> active equations from CPs of TRS");
    ("--term", Arg.Set only_termination,
