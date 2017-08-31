@@ -56,7 +56,7 @@ let default = {
  strategy  = ref [];
  tmp       = ref 19;
  output_tproof = ref false;
- check_subsumption = ref 0;
+ check_subsumption = ref 1;
  pcp = ref 0;
  extended_signature = ref false
 }
