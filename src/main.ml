@@ -44,7 +44,7 @@ let options = Arg.align
    ("--cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
                                 Settings.do_proof_debug := true),
     " output CPF proof plus debug output");
-   ("-D", Arg.Set settings.d,
+   ("-D", Arg.Int (fun d -> settings.d := d),
     " print debugging output");
    ("--json", Arg.Set settings.json,
     " output result and stats in JSON format");

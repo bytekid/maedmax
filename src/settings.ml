@@ -20,7 +20,7 @@ type termination_strategy = t_setting list
 type t = {
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  signature: (Signature.sym * int) list ref;
- d        : bool ref ; (* debug mode *)
+ d        : int ref ; (* debug mode *)
  es       : Rules.t ref ;
  json     : bool ref; (* output json result and statistics *)
  gs       : Rules.t ref ;
@@ -46,7 +46,7 @@ let tmp = ref false
 let default = {
  ac_syms   = ref [];
  signature = ref [];
- d         = ref false;
+ d         = ref 0;
  es        = ref [] ;
  json      = ref false;
  gs        = ref [] ;

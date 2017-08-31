@@ -49,6 +49,7 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
   Hashtbl.create 512;;
 
 (*** FUNCTIONS ***************************************************************)
+(* shorthands for settings *)
 let termination_strategy _ = 
  match !(settings.strategy) with 
   | [] -> failwith "no termination strategy found"
@@ -77,8 +78,10 @@ let use_maxsat _ = max_constraints () <> []
 
 let has_comp () = L.mem S.Comp (constraints ())
 
+let debug _ = !(settings.d) >= 1
+
 let pop_strategy _ = 
- if !(settings.d) then F.printf "pop strategy\n%!";
+ if debug () then F.printf "pop strategy\n%!";
  match !(settings.strategy) with
   | [] -> failwith "no strategy left in pop"
   | [s] -> ()
@@ -158,7 +161,7 @@ let select k cc thresh =
  (*Format.printf "kill %a\n%!" Rules.print [ Lit.rule n | n <- rem];*)
  let aa,aa' = Listx.split_at_most k aa in 
  let pp = NS.diff_list cc aa in 
- if !(settings.d) then log_select cc aa;
+ if debug () then log_select cc aa;
  (* remember smallest terms for divergence estimate *)
  let m = L.fold_left (fun m n -> min m (R.size (Lit.terms n))) 20 aa in
  sizes := m :: !sizes;
@@ -244,7 +247,7 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let g = L.find fixed (NS.to_list gs) in
     let s,t = Lit.terms g in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
-    if !(settings.d) then (
+    if debug () then (
       let str = if joinable (s,t) then "joinable" else "unifiable" in
       F.printf "%s %a\n%!" str (fun f g -> Lit.print f g) g;
       F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss] Rules.print [r | r,_ <- rst]);
@@ -397,7 +400,7 @@ let search_constraints ctx cc gs =
 let max_k ctx cc gs =
   let k = !(settings.k) !(St.iterations) in
   let cc_symm = NS.to_list (NS.symmetric cc) in 
-  if !(settings.d) then F.printf "K = %i\n%!" k;
+  if debug () then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
   let rec max_k acc ctx cc n =
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
@@ -418,7 +421,7 @@ let max_k ctx cc gs =
         require (!! (big_and ctx [ C.find_rule (Lit.terms r) | r <- rr ]));
         max_k ((rr, c, order) :: acc) ctx cc (n-1))
      else (
-       if !(settings.d) then F.printf "no further TRS found\n%!"; 
+       if debug () then F.printf "no further TRS found\n%!"; 
        if (n = k && L.length !(settings.strategy) > 1) then
          raise (Restart (select_for_restart cc));
        acc))
@@ -461,7 +464,7 @@ let stuck_state es gs =
  hash_iteration := h :: !hash_iteration;
  if L.length (!hash_iteration) > 20 then
    hash_iteration := Listx.take 20 !hash_iteration;
- if rep && !(settings.d) then F.printf "Restart: repeated iteration state\n%!";
+ if rep && debug () then F.printf "Restart: repeated iteration state\n%!";
  (* iteration/size bound*)
  let running_time = (Unix.gettimeofday () -. !(start_time)) in
  let limit =
@@ -470,7 +473,7 @@ let stuck_state es gs =
     | TimeLimit l when running_time > l -> true
     | _ -> false
  in
- if limit && !(settings.d) then F.printf "Restart: limit reached\n";
+ if limit && debug () then F.printf "Restart: limit reached\n";
  rep || (limit && running_time > 3.)
 ;;
 
@@ -487,7 +490,7 @@ let set_iteration_stats aa gs =
   St.mem_diffs := mem_diff :: !(St.mem_diffs);
   St.eq_counts := NS.size aa :: !(St.eq_counts);
   let s = Strategy.to_string !(settings.strategy) in
-  if !(settings.d) then (
+  if debug () then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
      !St.iterations (NS.size aa) NS.print aa;
    if !St.goals > 0 then
@@ -507,7 +510,7 @@ let store_trs ctx j rr c =
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;
-  if !(settings.d) then log_max_trs j rr rr_reduced c;
+  if debug () then log_max_trs j rr rr_reduced c;
   rr_index
 ;;
 
@@ -576,7 +579,7 @@ let init_settings fs es gs =
  Settings.is_ordered := !(settings.unfailing);
  if !(Settings.do_proof) then
    Trace.add_initials es;
- if !(settings.d) then
+ if debug () then
    F.printf "AC syms: %s \n%!"
      (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
      (Ac.symbols es))
@@ -621,7 +624,7 @@ let rec ckb fs (es, gs) =
   del_context ctx;
   res
  with Restart es_new -> (
-  if !(settings.d) then Format.printf "restart\n%!";
+  if debug () then Format.printf "restart\n%!";
   pop_strategy ();
   Strategy.clear ();
   Cache.clear ();

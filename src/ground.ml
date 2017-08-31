@@ -30,7 +30,7 @@ exception No_var_order
 (*** GLOBALS *****************************************************************)
 let joinable_cache : (Rules.t * Rules.t * Rule.t) list ref = ref [];;
 
-let debug : bool ref = ref false
+let debug : int ref = ref 0
 
 let extended_signature : bool ref = ref false
 
@@ -228,7 +228,7 @@ let ac_reducts ctx sys conds f (u,c) =
 let ac_join ctx sys conds f s t =
   let s_nf, cs = ac_nf ctx sys conds f s in 
   let t_nf, ct = ac_nf ctx sys conds f t in
-  if !debug then 
+  if !debug > 1 then 
     Format.printf "AC normalization: %a = %a get %a = %a\n%!"
       Term.print s Term.print t Term.print s_nf Term.print t_nf;
   if s_nf=t_nf || Theory.Ac.equivalent [f] (s_nf,t_nf) then cs <&&>ct else False
@@ -274,7 +274,7 @@ and ac_joinable ctx sys p =
     List.fold_left jcheck False sys.acsyms
 
 and ac_joinable_for ctx sys p f =
-  if !debug then Format.printf "%s. check f joinability of %a wrt %!" p.id Rule.print (p.s,p.t);
+  if !debug > 1 then Format.printf "%s. check f joinability of %a wrt %!" p.id Rule.print (p.s,p.t);
   if not (List.exists (Rule.variant (Ac.associativity f)) sys.trs)  ||
     not (order_extensible p.var_order (p.s, p.t)) ||
     (Term.is_variable p.s && Term.is_variable p.t)
@@ -291,7 +291,7 @@ and ac_joinable_for ctx sys p f =
     List.fold_left jcheck True (Listx.index varords)
 
 and ac_joinable_for_ord ctx sys p f =
-  if !debug then (
+  if !debug > 1 then (
     Format.printf "%s. check AC joinability of %a wrt %!\n%!" p.id Rule.print (p.s,p.t);
     print_order p.var_order;
     Format.printf "\n%!");
@@ -299,13 +299,13 @@ and ac_joinable_for_ord ctx sys p f =
   let c = ac_join ctx sys (order_to_conditions p.var_order) f s t in
   (* TODO: reducts instead? *)
   if c <> False then (
-    if !debug then (
+    if !debug > 1 then (
       if c = True then Format.printf "   AC joined\n%!"
       else Format.printf "   maybe AC joined\n%!");
     c)
   else (
     let s', t' = Rewriting.nf sys.trs s, Rewriting.nf sys.trs t in
-    if !debug then 
+    if !debug > 1 then 
       Format.printf "  Eq is %a = %a going for instantiation\n%!" Term.print s' Term.print t';
     if contradictory_constraints sys ctx p then True 
     else
@@ -321,7 +321,7 @@ and instance_joinable ctx sys p ac =
   if p.inst <= 0 then False else
   match List.rev p.var_order with
    | (V x :: _) -> ( (* take smallest *)
-    if !debug then Format.printf "  instantiate %a \n" Term.print (V x);
+    if !debug > 1 then Format.printf "  instantiate %a \n" Term.print (V x);
     let rec vs a = if a=0 then [] else (V (Sig.fresh_var ())) :: (vs (a-1)) in 
     let sub (f, a) = substitute [(x, F(f, vs a))] in
     let instance_joinable (f,a) =
@@ -359,10 +359,10 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
   let check constr st =
     if constr = False then False
     else (
-      if d then Format.printf "START joinability check %a \n%!" Rule.print st;
+      if d > 0 then Format.printf "START joinability check %a \n%!" Rule.print st;
       let c = if lookup trs es st then constr (* st is joinable *)
        else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))
-      in if d then Format.printf "END \n%!";
+      in if d > 0 then Format.printf "END \n%!";
     c)
   in
   let j = match List.fold_left check True sts with
@@ -370,7 +370,7 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
     | False -> None 
     | Maybe c -> check_decode_constraints str trs c
   in 
-  if d then
-    Format.printf "END %s\n%!" (if j <> None then "YES" else "NO");
+  if d > 0 then
+    Format.printf "RESULT %s\n%!" (if j <> None then "YES" else "NO");
   j
 ;;
