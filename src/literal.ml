@@ -34,6 +34,7 @@ let cps l l' =
   else
     let r1, r2 = l.terms, l'.terms in
     let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2 ] in
+    let os = [ (s,t),o | (s,t),o <- os; s <> t ] in
     let is_eq = l.is_equality && l'.is_equality in
     let is_goal = l.is_goal || l'.is_goal in
     if !(Settings.do_proof) then (
