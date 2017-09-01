@@ -88,9 +88,9 @@ let options = Arg.align
    ("-T", Arg.Set_float timeout,
     "<t> timeout");
    (*("-termproof", Arg.Set settings.output_tproof,
-    " output termination proof");
-   ("-TMP", Arg.Set Settings.tmp,
-    " various purposes");*)
+    " output termination proof");*)
+   ("--tmp", Arg.Int (fun n -> settings.tmp := n),
+    "<n> various purposes");
    ("--xsig", Arg.Set settings.extended_signature,
     " consider signature plus infinitely many constants (ordered completion)")
  ]
