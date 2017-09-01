@@ -67,13 +67,13 @@ let rewriter_nf_with l rewriter =
   let s', rs = rewriter#nf (fst ts) in
   let t', rt = rewriter#nf (snd ts) in
   let rls = List.map fst (rs @ rt) in
-  if s' = t' then Some([], rls)
-  else if Rule.equal ts (s',t') then (
+  if s' = t' then (
     if !(Settings.do_proof) then (
       let st' = Variant.normalize_rule (s',t') in
       T.add_rewrite st' ts (rs,rt);
       T.add_delete st');
-    None)
+    Some([], rls))
+  else if Rule.equal ts (s',t') then None
   else (
     let st' = Variant.normalize_rule (s',t') in
     if !(Settings.do_proof) then
