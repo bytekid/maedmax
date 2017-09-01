@@ -25,7 +25,9 @@ type cpf_conv = Term.t * (cpf_step list)
 (*** GLOBALS *****************************************************************)
 let trace_table : (R.t, origin) H.t = H.create 128
 let goal_trace_table : (R.t, origin * int) H.t = H.create 128
+let deleted : R.t list ref = ref []
 let gcount = ref 0
+
 (*** FUNCTIONS ***************************************************************)
 let root = []
 
@@ -83,6 +85,11 @@ let add_rewrite eq eq0 steps =
   (*if !(S.do_proof_debug) then
     F.printf "rewrite: %a\n" R.print eq;*)
   add eq (Rewrite (eq0,steps))
+
+let add_delete eq =
+  (*if !(S.do_proof_debug) then
+    F.printf "rewrite: %a\n" R.print eq;*)
+  deleted := eq :: !deleted
 
 let add_initial_goal eqs =
   (*if !(S.do_proof_debug) then
@@ -389,6 +396,8 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
   t
 ;;
 
+let the_run _ = ()
+
 (*** XML REPRESENTATION  *****************************************************)
 let xml_str s = Xml.PCData s
 
@@ -431,12 +440,24 @@ let eqproof_to_xml cs =
   X.Element("equationalDisproof", [], [ xconv ])
 ;;
 
-let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
-  let g_orig = Variant.normalize_rule g_orig in
-  let rulesubs = goal_proof g_orig (s,t) (rs,rt) sigma in
-  let xinput = input_to_xml es0 g_orig in
+let run_to_xml _ = X.Element("run", [], [])
+
+let eqdisproof_to_xml (rr,ee) ((s,t), (rs,rt)) =
+  let xrun = X.Element("run", [], [ run_to_xml (the_run ()) ] ) in
+  let xrs = X.Element("rules", [], [ Rules.to_xml rr] ) in
+  let xes = X.Element("equations", [], [ Rules.to_xml ee ] ) in
+  let xres = X.Element("result", [], [ xrs; xes ]) in
+  let xconv_s = conversion_to_xml (s, rewrite_conv' s rs) in
+  let xconv_t = conversion_to_xml (t, rewrite_conv' t rt) in
+  let xnorm = X.Element("normalization", [], [xconv_s; xconv_t]) in
+  let xconv = X.Element("groundCompletionAndNormalization", [],
+    [ xrun; xres; xnorm ]) in
+  X.Element("equationalDisproof", [], [ xconv ])
+;;
+
+let xml_proof_wrapper es0 g xproof =
+  let xinput = input_to_xml es0 g in
   let xversion = X.Element("cpfVersion", [], [ xml_str "2.1" ]) in
-  let xproof = X.Element("proof", [], [ eqproof_to_xml rulesubs ]) in
   let xt = X.Element("tool", [], [
     X.Element("name", [], [ xml_str "madmax" ]);
     X.Element("version", [], [ xml_str "0.9" ]) ])
@@ -445,4 +466,17 @@ let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
   let attrs = [ "xmlns:xsi","http://www.w3.org/2001/XMLSchema-instance";
                 "xsi:noNamespaceSchemaLocation","../xml/cpf.xsd"] in
   X.Element("certificationProblem", attrs, [xinput; xversion; xproof; xo])
+;;
+
+let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
+  let g = Variant.normalize_rule g_orig in
+  let rulesubs = goal_proof g (s,t) (rs,rt) sigma in
+  let xproof = X.Element("proof", [], [ eqproof_to_xml rulesubs ]) in
+  xml_proof_wrapper es0 g xproof
+;;
+
+let xml_goal_disproof es0 g_orig (rs,es) g_norm =
+  let g = Variant.normalize_rule g_orig in
+  let xproof = X.Element("proof", [], [ eqdisproof_to_xml (rs,es) g_norm ]) in
+  xml_proof_wrapper es0 g xproof
 ;;
