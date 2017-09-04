@@ -162,25 +162,38 @@ let decode_term_gt k m =
 let eval k m =
   let prec f = try Hashtbl.find (eval_table k m precedence) f with _ -> 0 in
   let w f = try Hashtbl.find (eval_table k m weights) f with _ -> 0 in
-  List.sort (fun (_, p, _) (_,q, _) -> p - q) [ f, prec f, w f | f,_ <- !funs ]
+  List.sort (fun (_,p,_) (_,q,_) -> p - q) [ (f,a), prec f, w f | f,a <- !funs ]
 ;;
 
 let print = function
     [] -> ()
-  | (f,p,w) :: fpw ->
+  | ((f,_),p,w) :: fpw ->
     Format.printf "KBO \n %!";
     let name = Signature.get_fun_name in
     if fpw <> [] then (
       Format.printf " %s " (name f);
-      List.iter (fun (f,i,_) -> Format.printf "< %s %!" (name f)) fpw;
+      List.iter (fun ((f,_),i,_) -> Format.printf "< %s %!" (name f)) fpw;
       Format.printf "\n"
       );
     Format.printf "  w0 = 1, w(%s) = %d" (name f) w;
-    List.iter (fun (f,_,w) -> Format.printf ", w(%s) = %d" (name f) w) fpw;
+    List.iter (fun ((f,_),_,w) -> Format.printf ", w(%s) = %d" (name f) w) fpw;
     Format.printf "\n%!"
 ;;
 
 let decode_print k m = print (eval k m)
+
+let decode_xml fpws =
+  let prec_weight ((f,a),p,w) =
+    let name = Xml.Element("name", [], [Xml.PCData (name f)]) in
+    let arity = Xml.Element("arity", [], [Xml.PCData (string_of_int a)]) in
+    let prec = Xml.Element("precedence", [], [Xml.PCData (string_of_int p)]) in
+    let weight = Xml.Element("weight", [], [Xml.PCData (string_of_int w)]) in
+    Xml.Element("precedenceWeightEntry", [], [ name; arity; prec; weight] )
+  in
+  let w0 = Xml.Element("w0", [], [Xml.PCData "1"]) in
+  let pw = Xml.Element("precedenceWeight", [], [ prec_weight f | f <- fpws ]) in
+  Xml.Element("knuthBendixOrder", [], [ w0; pw ] )
+;;
 
 let decode k m =
   let gt = decode_term_gt k m in
@@ -193,6 +206,7 @@ let decode k m =
   object
     method bot = bot;;
     method gt = gt;;
-    method print = fun _ -> print fpw 
+    method print = fun _ -> print fpw;;
+    method to_xml = decode_xml fpw
   end
 ;;

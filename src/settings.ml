@@ -32,7 +32,8 @@ type t = {
  output_tproof : bool ref;
  check_subsumption : int ref;
  pcp : int ref;
- extended_signature: bool ref
+ extended_signature: bool ref;
+ keep_orientation: bool ref
 }
 
 (*** GLOBALS *****************************************************************)
@@ -58,7 +59,8 @@ let default = {
  output_tproof = ref false;
  check_subsumption = ref 1;
  pcp = ref 0;
- extended_signature = ref false
+ extended_signature = ref false;
+ keep_orientation = ref false
 }
 
 let do_assertions = ref false

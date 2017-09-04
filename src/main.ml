@@ -128,7 +128,8 @@ let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
 let print_json (es, gs) f res settings proof =
   let res_str = match res with
     | Ckb.Completion rr -> trs_string rr
-    | Ckb.GroundCompletion (rr,ee,_) ->
+    | Ckb.GroundCompletion (rr,ee,_) 
+    | Ckb.Disproof (rr,ee,_,_) -> (* TODO: show different normal forms? *)
       if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
     | Ckb.Proof _ -> "..."
   in
@@ -158,7 +159,8 @@ let print_res res =
   printf "# SZS status ";
   match res with
    | Ckb.Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
-   | Ckb.GroundCompletion (rr,ee,order) ->
+   | Ckb.GroundCompletion (rr,ee,order) 
+   | Ckb.Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
     (printf "Satisfiable\n\n%a@." print_trs rr;
     if ee <> [] then printf "%a@." print_es ee;
     order#print ();
@@ -171,28 +173,46 @@ let print_analysis es gs =
 ;;         
 
 let clean =
-  let reduce rr = Listx.unique (Variant.reduce rr) in function
- | Ckb.Completion trs -> Ckb.Completion (reduce trs)
- | Ckb.GroundCompletion (rr,ee,o) ->
-   let nf = Rewriting.nf rr in
-   let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
-   let ee'' = Rules.subsumption_free ee' in
-   Ckb.GroundCompletion (Variant.reduce_encomp rr, ee'',o)
- | Ckb.Proof p -> Ckb.Proof p
+  let reduce rr = Listx.unique (Variant.reduce rr) in
+  let clean rr ee =
+    let nf = Rewriting.nf rr in
+    let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
+    let ee'' = Rules.subsumption_free ee' in
+    (Variant.reduce_encomp rr, ee'')
+  in function
+    | Ckb.Completion trs -> Ckb.Completion (reduce trs)
+    | Ckb.GroundCompletion (rr,ee,o) ->
+      let rr',ee' = clean rr ee in
+      Ckb.GroundCompletion (rr',ee',o)
+    | Ckb.Disproof (rr,ee,o,(rs,rt)) ->
+      let rr',ee' = clean rr ee in
+      Ckb.Disproof (rr',ee',o,(rs,rt))
+    | Ckb.Proof p -> Ckb.Proof p
 ;;
 
-let proof_string ?(readable=true) (es,gs) = function
+let proof_string ?(readable=true) (es,gs) =
+  let result_string p =
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ^ 
+      "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n" ^
+      ((if readable then Xml.to_string_fmt else Xml.to_string) p)
+  in
+  function
     Ckb.Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
       let goal = Literal.terms (List.hd gs) in
       let es = List.map Literal.terms es in
       let p = Trace.xml_goal_proof es goal ((s,t),(rs, rt), sigma) in
-      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ^ 
-      "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n" ^
-      ((if readable then Xml.to_string_fmt else Xml.to_string) p)
+      result_string p
   | Ckb.Completion _ ->
     failwith "Main.show_proof: not yet supported for Completion"
-  | Ckb.GroundCompletion _ ->
-    failwith "Main.show_proof: not yet supported for GroundCompletion"
+  | Ckb.GroundCompletion (rr,ee,o) -> (* no goal exists *)
+      let es = List.map Literal.terms es in
+      let p = Trace.xml_ground_completion es (rr,ee,o) in
+      result_string p
+  | Ckb.Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
+      let g = Literal.terms (List.hd gs) in
+      let es = List.map Literal.terms es in
+      let p = Trace.xml_goal_disproof es g (rr,ee,o) rst in
+      result_string p
   | _ -> failwith "Main.show_proof: not yet supported for inequality axioms"
 ;;
 

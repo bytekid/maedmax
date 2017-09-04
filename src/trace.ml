@@ -14,7 +14,7 @@ type step = R.t * pos
 
 type origin = Initial 
   | Rewrite of R.t * (step list * step list)
-  | Deduce of R.t * int list * R.t
+  | CP of R.t * int list * R.t
 
 type direction = LeftRight | RightLeft
 
@@ -22,11 +22,22 @@ type cpf_step = pos * R.t * direction * Term.t
 
 type cpf_conv = Term.t * (cpf_step list)
 
+type rule = R.t * direction
+
+type inference = Deduce of rule * int list * rule
+  | Delete of R.t
+  | SimplifyL of R.t * int list * rule
+  | SimplifyR of R.t * int list * rule
+  | OrientL of R.t
+  | OrientR of R.t
+  | Compose of R.t * int list * rule
+  | Collapse of R.t * int list * rule
+
 (*** GLOBALS *****************************************************************)
-let trace_table : (R.t, origin) H.t = H.create 128
+let trace_table : (R.t, origin * int) H.t = H.create 128
 let goal_trace_table : (R.t, origin * int) H.t = H.create 128
 let deleted : R.t list ref = ref []
-let gcount = ref 0
+let count = ref 0
 
 (*** FUNCTIONS ***************************************************************)
 let root = []
@@ -34,7 +45,7 @@ let root = []
 let parents = function
    Initial-> []
  | Rewrite (p, (lsteps, rsteps)) -> p :: (List.map fst (lsteps @ rsteps))
- | Deduce (rl1, _, rl2) -> [rl1; rl2]
+ | CP (rl1, _, rl2) -> [rl1; rl2]
 ;;
 
 let dir = function false -> RightLeft | _ -> LeftRight
@@ -61,15 +72,18 @@ let rec print_steps = function
 ;;
 
 (* keep first origin for equation to avoid cycles *)
-let add eq o = if not (H.mem trace_table eq) then H.add trace_table eq o
+let add eq o = if not (H.mem trace_table eq) then (
+  let c = !count in
+  count := c + 1;
+  H.add trace_table eq (o,c))
 
 let gadd g o =
   if not (H.mem goal_trace_table g) then (
-  let c = !gcount in
-  gcount := c + 1;
+  let c = !count in
+  count := c + 1;
   if !(S.do_proof_debug) then
     F.printf "ADDING GOAL %i:%a\n" c Rule.print g;
-  let t = goal_trace_table in H.add t g (o,c))
+  H.add goal_trace_table g (o,c))
 
 let add_initials eqs =
   (*if !(S.do_proof_debug) then
@@ -79,7 +93,7 @@ let add_initials eqs =
 let add_overlap eq (rl1,p,rl2,_) =
   (*if !(S.do_proof_debug) then
     F.printf "overlap: %a\n" R.print eq;*)
-  add eq (Deduce (rl1,p,rl2))
+  add eq (CP (rl1,p,rl2))
 
 let add_rewrite eq eq0 steps =
   (*if !(S.do_proof_debug) then
@@ -99,7 +113,7 @@ let add_initial_goal eqs =
 let add_overlap_goal eq (rl1,p,rl2,_) =
   (*if !(S.do_proof_debug) then
     F.printf "overlap: %a\n" R.print eq;*)
-  gadd eq (Deduce (rl1,p,rl2))
+  gadd eq (CP (rl1,p,rl2))
 
 let add_rewrite_goal eq eq0 steps =
   (*if !(S.do_proof_debug) then
@@ -115,7 +129,7 @@ let ancestors eqs =
         if List.mem eq (List.map fst acc) then
           ancestors acc eqs
         else
-          let o = H.find trace_table eq in
+          let o,_ = H.find trace_table eq in
           let ps = parents o in
           let acc' = ancestors acc (Listset.diff ps [eq | eq,_ <- acc]) in
           let xs = List.map fst acc' in
@@ -253,7 +267,7 @@ let conversion_for (s,t) o =
     F.printf "\n CONVERSION FOR %a\n%!" R.print (s,t);
   match o with
  | Initial -> s,[]
- | Deduce (r1, p, r2) -> (* r1 is inside, r2 outside *)
+ | CP (r1, p, r2) -> (* r1 is inside, r2 outside *)
    let ((r1,p,r2,mgu) as o) = the_overlap r1 r2 p in
    let s',t' = O.cp_of_overlap o in
    let ren, keep_dir = rename_to (s',t') (s,t) in
@@ -332,7 +346,7 @@ let rec goal_ancestors rule_acc gconv_acc g o =
            Format.printf "R-ADD GOAL %i:%a \n\n%!" i Rule.print (fst gconv);
        goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) (s,t) o
      (* (v,w) was obtained from deduce with goal g0 using rule rl *)
-     | Deduce (rl, p, g0) ->
+     | CP (rl, p, g0) ->
        (*assert (snd (Variant.normalize_rule_dir g0));*)
        let g0 = Variant.normalize_rule g0 in
        if !(S.do_proof_debug) then
@@ -396,7 +410,47 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
   t
 ;;
 
-let the_run _ = ()
+let rec to_simplifyl (l,r) rs =
+  let steps = rewrite_conv l rs in
+  let rec collect acc u = function
+      [] -> []
+    | (p,rl,d,v) :: ss ->
+      collect (Deduce ((rl,d),p,((u,r), LeftRight)) :: acc) v ss
+  in 
+  last (l,steps), collect [] l steps
+;;
+
+let rec to_simplifyr (l,r) rs =
+  let steps = rewrite_conv r rs in
+  let rec collect acc u = function
+      [] -> []
+    | (p,rl,d,v) :: ss ->
+    collect (Deduce ((rl,d),p,((l,u),RightLeft)) :: acc) v ss
+  in 
+  last (r,steps), collect [] r steps
+;;
+
+let rec to_origins acc = function
+    [] -> List.rev acc
+  | (e,o) :: es -> (match o with
+    | Initial -> to_origins acc es
+    | CP (r1, p, r2) ->
+      let rd1 = normalize r1 RightLeft in
+      let rd2 = normalize r2 LeftRight in
+      to_origins (Deduce (rd1, p, rd2) :: acc) es
+    | Rewrite ((s0,t0), (ss, ts)) ->
+      let s,os = to_simplifyl (s0,t0) ss in
+      let _,os' = to_simplifyr (s,t0) ts in
+      to_origins (os' @ os @ acc) es
+    )
+;;
+
+let the_run ee rr =
+  let es = H.fold (fun e (o,i) es' -> (i,e,o) :: es') trace_table [] in
+  let es = [ e,o | (_,e,o) <- List.sort (fun (i,_,_) (j,_,_) -> i-j) es ] in
+  let orient rl = if List.mem rl ee then OrientL rl else OrientR rl in
+  to_origins [] es @ [ Delete e | e <- !deleted ] @ [ orient r | r <- rr ]
+;;
 
 (*** XML REPRESENTATION  *****************************************************)
 let xml_str s = Xml.PCData s
@@ -409,10 +463,10 @@ let pos_to_xml p =
 
 let equation_to_xml (l,r) = X.Element("inequality",[],[T.to_xml l;T.to_xml r])
 
-let input_to_xml es g =
+let input_to_xml es g_opt =
   let es0 = [ Variant.normalize_rule e | e <- es ] in
   let xes = X.Element("equations",[], [ Rules.to_xml es0 ] ) in
-  let xgs = [ equation_to_xml g ] in
+  let xgs = match g_opt with None -> [] | Some g -> [ equation_to_xml g ] in
   let input = X.Element("equationalReasoningInput",[],xes :: xgs) in
   X.Element("input",[],[input])
 ;;
@@ -442,17 +496,27 @@ let eqproof_to_xml cs =
 
 let run_to_xml _ = X.Element("run", [], [])
 
-let eqdisproof_to_xml (rr,ee) ((s,t), (rs,rt)) =
-  let xrun = X.Element("run", [], [ run_to_xml (the_run ()) ] ) in
+let ground_completion_to_xml' (rr,ee, ord) =
+  let xrun = X.Element("run", [], [ run_to_xml (the_run rr ee) ] ) in
   let xrs = X.Element("rules", [], [ Rules.to_xml rr] ) in
   let xes = X.Element("equations", [], [ Rules.to_xml ee ] ) in
-  let xres = X.Element("result", [], [ xrs; xes ]) in
+  let xord = X.Element("terminationProof", [], [ ord#to_xml ] ) in
+  let xres = X.Element("result", [], [ xrs; xes; xord ]) in
+  [ xrun; xres ]
+;;
+
+let eqdisproof_to_xml (rr,ee, ord) ((s,t), (rs,rt)) =
   let xconv_s = conversion_to_xml (s, rewrite_conv' s rs) in
   let xconv_t = conversion_to_xml (t, rewrite_conv' t rt) in
   let xnorm = X.Element("normalization", [], [xconv_s; xconv_t]) in
-  let xconv = X.Element("groundCompletionAndNormalization", [],
-    [ xrun; xres; xnorm ]) in
+  let comps = ground_completion_to_xml' (rr,ee, ord) @ [xnorm ] in
+  let xconv = X.Element("groundCompletionAndNormalization", [], comps) in
   X.Element("equationalDisproof", [], [ xconv ])
+;;
+
+let ground_completion_to_xml (rr,ee, ord) =
+  let comps = ground_completion_to_xml' (rr,ee, ord) in
+  X.Element("groundCompletionProof", [], comps)
 ;;
 
 let xml_proof_wrapper es0 g xproof =
@@ -472,11 +536,16 @@ let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
   let g = Variant.normalize_rule g_orig in
   let rulesubs = goal_proof g (s,t) (rs,rt) sigma in
   let xproof = X.Element("proof", [], [ eqproof_to_xml rulesubs ]) in
-  xml_proof_wrapper es0 g xproof
+  xml_proof_wrapper es0 (Some g) xproof
 ;;
 
-let xml_goal_disproof es0 g_orig (rs,es) g_norm =
+let xml_goal_disproof es0 g_orig ((rr,ee,ord) as result) rst =
   let g = Variant.normalize_rule g_orig in
-  let xproof = X.Element("proof", [], [ eqdisproof_to_xml (rs,es) g_norm ]) in
-  xml_proof_wrapper es0 g xproof
+  let xproof = X.Element("proof", [], [ eqdisproof_to_xml result (g,rst) ]) in
+  xml_proof_wrapper es0 (Some g) xproof
+;;
+
+let xml_ground_completion es0 ((rr,ee,ord) as result) =
+  let xproof = X.Element("proof", [], [ ground_completion_to_xml result ]) in
+  xml_proof_wrapper es0 None xproof
 ;;

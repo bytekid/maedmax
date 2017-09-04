@@ -34,6 +34,8 @@ let ge_encodings : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 512
 let eq_encodings : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 512
 
 (*** FUNCTIONS ***************************************************************)
+let name = Sig.get_fun_name
+
 let set_af _ = flags.af := true
 
 let (<.>) f g x = f (g x)
@@ -60,7 +62,7 @@ let emb_gt s t = s <> t && emb_geq s t
 
 let prec i f = 
  try Hashtbl.find precedence (i,f) with
- Not_found -> failwith ("Lpo.prec: unknown symbol "^(Sig.get_fun_name f))
+ Not_found -> failwith ("Lpo.prec: unknown symbol " ^ (name f))
 ;;
 
 let gt (ctx,i) s t =
@@ -179,9 +181,8 @@ let ge_af (ctx,k) s t = ylpo_af false (ctx,k) s t
 
 let make_fun_vars ctx k fs =
  let add f =
-   let fn = Sig.get_fun_name f in
    let ki = string_of_int k in
-   Hashtbl.add precedence (k,f) (mk_int_var ctx ("lpo" ^ fn ^ "-" ^ ki))
+   Hashtbl.add precedence (k,f) (mk_int_var ctx ("lpo" ^ (name f) ^ "-" ^ ki))
  in L.iter add fs
 ;;
 
@@ -224,18 +225,17 @@ let decode_prec_aux k m =
 
 let eval_prec k m =
  let prec = Hashtbl.find (decode_prec_aux k m) in
- List.sort (fun (_, p) (_,q) -> p - q) [ f, prec f | f,_ <- !funs ]
+ List.sort (fun (_, p) (_,q) -> p - q) [ (f,a), prec f | f,a <- !funs ]
 ;;
 
 
 let print_prec = function
     [] -> ()
-  | (f,p) :: fp ->
+  | ((f,_),p) :: fp ->
     Format.printf "LPO \n %!";
-    let name = Signature.get_fun_name in
     if fp <> [] then (
       Format.printf " %s " (name f);
-      List.iter (fun (f,_) -> Format.printf "< %s %!" (name f)) fp;
+      List.iter (fun ((f,_),_) -> Format.printf "< %s %!" (name f)) fp;
       Format.printf "\n"
       );
 ;;
@@ -249,7 +249,7 @@ let decode_print_af k m =
  decode_print k m;
  let dec (f,a) =
   try
-  F.printf " pi(%s)=" (Signature.get_fun_name f); 
+  F.printf " pi(%s)=" (name f); 
   let af_p f i = Hashtbl.find af_arg ((k,f),i) in
   let args = [ i | i <- Listx.interval 0 (a-1); eval m (af_p f i) ] in
   if eval m (Hashtbl.find af_is_list (k,f)) then (
@@ -283,6 +283,19 @@ let decode_term_gt k m =
   in gt
 ;;
 
+let decode_xml prec =
+  let status_prec ((f,a),p) =
+    let name = Xml.Element("name", [], [Xml.PCData (name f)]) in
+    let arity = Xml.Element("arity", [], [Xml.PCData (string_of_int a)]) in
+    let prec = Xml.Element("precedence", [], [Xml.PCData (string_of_int p)]) in
+    let lex = Xml.Element("lex", [], []) in
+    Xml.Element("statusPrecedenceEntry", [], [ name; arity; prec; lex] )
+  in
+  let w0 = Xml.Element("w0", [], [Xml.PCData "1"]) in
+  let pw = Xml.Element("statusPrecedence", [], [ status_prec f | f <- prec ]) in
+  Xml.Element("pathOrder", [], [ w0; pw ] )
+;;
+
 let decode k m =
   let gt = decode_term_gt k m in
   let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
@@ -294,7 +307,8 @@ let decode k m =
   object
     method bot = bot;;
     method gt = gt;;
-    method print = fun _ -> print_prec prec
+    method print = fun _ -> print_prec prec;;
+    method to_xml = decode_xml prec
   end
 ;;
 
