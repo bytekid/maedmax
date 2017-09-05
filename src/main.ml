@@ -81,6 +81,8 @@ let options = Arg.align
     " perform subsumption checks (1,2)");
    ("--pcp", Arg.Int (fun n -> settings.pcp := n),
     " only consider prime critical pairs if set to 1 (but then no caching)");
+   ("--keep-oriented", Arg.Set settings.keep_orientation,
+    " preserve orientation of input axioms");
    ("-N", Arg.Int (fun n -> settings.n := n), 
     "<n> select <n> active equations from CPs of TRS");
    ("--term", Arg.Set only_termination,
@@ -128,7 +130,7 @@ let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
 let print_json (es, gs) f res settings proof =
   let res_str = match res with
     | Ckb.Completion rr -> trs_string rr
-    | Ckb.GroundCompletion (rr,ee,_) 
+    | Ckb.GroundCompletion (rr,ee,_)
     | Ckb.Disproof (rr,ee,_,_) -> (* TODO: show different normal forms? *)
       if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
     | Ckb.Proof _ -> "..."
@@ -159,7 +161,7 @@ let print_res res =
   printf "# SZS status ";
   match res with
    | Ckb.Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
-   | Ckb.GroundCompletion (rr,ee,order) 
+   | Ckb.GroundCompletion (rr,ee,order)
    | Ckb.Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
     (printf "Satisfiable\n\n%a@." print_trs rr;
     if ee <> [] then printf "%a@." print_es ee;

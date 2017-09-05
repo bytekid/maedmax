@@ -621,6 +621,8 @@ let rec ckb fs (es, gs) =
   let ns0 = NS.of_list es0 in
   let ss = Listx.unique (t_strategies ()) in
   L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms n | n <- gs0@es0 ]) ss;
+  if !(settings.keep_orientation) then
+    require (big_and ctx [ !! (C.rule_var ctx (R.flip (Lit.terms r))) | r <- es0 ]);
   let res = phi ctx ns0 (NS.of_list gs0) in
   del_context ctx;
   res
