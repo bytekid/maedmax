@@ -621,8 +621,12 @@ let rec ckb fs (es, gs) =
   let ns0 = NS.of_list es0 in
   let ss = Listx.unique (t_strategies ()) in
   L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms n | n <- gs0@es0 ]) ss;
-  if !(settings.keep_orientation) then
-    require (big_and ctx [ !! (C.rule_var ctx (R.flip (Lit.terms r))) | r <- es0 ]);
+  (if !(settings.keep_orientation) then
+    let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
+    let es' = [ if d then e else R.flip e | e,d <- es ] in
+    require (big_and ctx [ !! (C.rule_var ctx (R.flip r)) | r <- es' ]);
+    List.iter (fun r -> assert_weighted (C.rule_var ctx r) 27) es'
+    );
   let res = phi ctx ns0 (NS.of_list gs0) in
   del_context ctx;
   res

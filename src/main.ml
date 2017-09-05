@@ -174,13 +174,18 @@ let print_analysis es gs =
  F.printf "%s\n%!" (pretty_to_string (Statistics.analyze es gs))
 ;;         
 
-let clean =
+let clean es0 =
   let reduce rr = Listx.unique (Variant.reduce rr) in
+  let es0n = [Lit.terms (Lit.normalize e) | e <- es0 ] in
   let clean rr ee =
     let nf = Rewriting.nf rr in
     let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
     let ee'' = Rules.subsumption_free ee' in
-    (Variant.reduce_encomp rr, ee'')
+    let rr_pre =
+      if not !(settings.keep_orientation) then []
+      else [ r | r <- rr; List.mem (Variant.normalize_rule r) es0n ]
+    in
+    (Variant.reduce_encomp rr @ rr_pre, ee'')
   in function
     | Ckb.Completion trs -> Ckb.Completion (reduce trs)
     | Ckb.GroundCompletion (rr,ee,o) ->
@@ -243,12 +248,12 @@ let () =
              Some (proof_string ~readable:false input res)
            else None
          in
-         print_json (es,gs) secs (clean res) settings proof
+         print_json (es,gs) secs (clean es res) settings proof
         ) else (
          if !(Settings.do_proof) then
            show_proof input res
          else (
-           print_res (clean res);
+           print_res (clean es res);
 	         Timer.stop timer;
            let secs = Timer.length ~res:Timer.Seconds timer in
            printf "%s %.2f %s@." "Search time:" secs "seconds";
