@@ -458,7 +458,9 @@ let log_max_trs j rr rr' c =
 
 
 (* towards main control loop *)
-let stuck_state es gs =
+(* Heuristic to determine whether the state is stuck in that no progress was
+   made in the last n iterations. *)
+let do_restart es gs =
  (* no progress measure *)
  let h = Hashtbl.hash (NS.size es, es, gs) in
  let rep = L.for_all ((=) h) !hash_iteration in
@@ -475,7 +477,7 @@ let stuck_state es gs =
     | _ -> false
  in
  if limit && debug () then F.printf "Restart: limit reached\n";
- rep || (limit && running_time > 3.)
+ rep || limit
 ;;
 
 let set_iteration_stats aa gs =
@@ -520,7 +522,7 @@ let non_gjoinable ctx ns rr = NS.subsumption_free ns
 let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
 
 let rec phi ctx aa gs =
-  if stuck_state aa gs then
+  if do_restart aa gs then
     raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
   let aa =
