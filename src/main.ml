@@ -181,11 +181,12 @@ let clean es0 =
     let nf = Rewriting.nf rr in
     let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
     let ee'' = Rules.subsumption_free ee' in
+    let rr' = Variant.reduce_encomp rr in
     let rr_pre =
       if not !(settings.keep_orientation) then []
-      else [ r | r <- rr; List.mem (Variant.normalize_rule r) es0n ]
+      else Listset.diff [ r | r <- rr; List.mem (Variant.normalize_rule r) es0n ] rr'
     in
-    (Variant.reduce_encomp rr @ rr_pre, ee'')
+    (rr' @ rr_pre, ee'')
   in function
     | Ckb.Completion trs -> Ckb.Completion (reduce trs)
     | Ckb.GroundCompletion (rr,ee,o) ->
