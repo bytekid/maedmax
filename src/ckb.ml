@@ -465,8 +465,7 @@ let do_restart es gs =
  let h = Hashtbl.hash (NS.size es, es, gs) in
  let rep = L.for_all ((=) h) !hash_iteration in
  hash_iteration := h :: !hash_iteration;
- if L.length (!hash_iteration) > 20 then
-   hash_iteration := Listx.take 20 !hash_iteration;
+ hash_iteration := Listx.take_at_most 20 !hash_iteration;
  if rep && debug () then F.printf "Restart: repeated iteration state\n%!";
  (* iteration/size bound*)
  let running_time = (Unix.gettimeofday () -. !(start_time)) in
