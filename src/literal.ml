@@ -1,15 +1,9 @@
 module O = Overlap
 module T = Trace
 
-let count = ref 0
+type t = { terms: Rule.t; is_goal: bool; is_equality: bool }
 
-type t = { terms: Rule.t; is_goal: bool; is_equality: bool; age: int }
-
-let make ts e g =
-  let c = !count in
-  count := c + 1;
-  { terms = ts; is_goal = g; is_equality = e; age = c }
-;;
+let make ts e g = {terms = ts; is_goal = g; is_equality = e }
 
 let terms l = l.terms
 
@@ -18,8 +12,6 @@ let is_goal l = l.is_goal
 let is_equality l = l.is_equality
 
 let is_inequality l = not l.is_equality
-
-let age l = l.age
 
 let is_equal l l' = compare l l' = 0
 

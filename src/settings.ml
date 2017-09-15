@@ -33,8 +33,7 @@ type t = {
  check_subsumption : int ref;
  pcp : int ref;
  extended_signature: bool ref;
- keep_orientation: bool ref;
- size_age_ratio: float ref
+ keep_orientation: bool ref
 }
 
 (*** GLOBALS *****************************************************************)
@@ -61,8 +60,7 @@ let default = {
  check_subsumption = ref 1;
  pcp = ref 0;
  extended_signature = ref false;
- keep_orientation = ref false;
- size_age_ratio = ref 100.
+ keep_orientation = ref false
 }
 
 let do_assertions = ref false

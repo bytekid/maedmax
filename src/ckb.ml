@@ -156,8 +156,7 @@ let keep acs n =
 (* selection of small new nodes *)
 let select k cc thresh =
  let k = if k = 0 then select_count !(St.iterations) else k in
- let small = NS.smaller_than thresh cc in
- let aa = NS.sort_size small in
+ let aa = NS.sort_smaller_than thresh cc in
  let acs = !(settings.ac_syms) in
  let aa,_ = L.partition (keep acs) aa in
  (*Format.printf "kill %a\n%!" Rules.print [ Lit.rule n | n <- rem];*)
