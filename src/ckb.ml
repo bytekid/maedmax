@@ -476,7 +476,7 @@ let do_restart es gs =
     | _ -> false
  in
  (* estimate exponential blowup *)
- let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in 
+ let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
  let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
  let eqcounts = Listx.take_at_most 6 !(Statistics.eq_counts) in
  let blowup = !(St.iterations) > 6 && is_exp eqcounts in
@@ -505,7 +505,7 @@ let set_iteration_stats aa gs =
      let gnd = Rules.is_ground [ Lit.terms g | g <- NS.to_list gs ] in
      F.printf "\nand %i goals:\n%a %i%!\n" !St.goals NS.print gs
        (if gnd then 1 else 0);
-   let json = St.json settings s (!(settings.k) i) in
+   let json = St.json () in
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string json))
 ;;
 

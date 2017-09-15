@@ -123,11 +123,8 @@ let analyze es gs =
           ac; mon; group; agroup; ring; lattice; distrib ]
 ;;
 
-let json settings s k =
+let json () =
  let trunc f = `Float ((float_of_int (truncate (f *. 1000.))) /. 1000.) in
- let s = "strategy", `String s in
- let k = "k", `String (if k  < 0 then "if i < 3 then 6 else 2" else string_of_int k) in
- let n = "n", `Int !(settings.n) in
  let it = "iterations", `Int !iterations in
  let ea = "equalities", `Int !ces in
  let mem = "memory", `Int (memory ()) in
@@ -145,7 +142,7 @@ let json settings s k =
  let t_sat = "time/sat", trunc !t_sat in
  let t_cache = "time/cache", trunc !t_cache in
  let res = "restarts", `Int !restarts in
- let t = `Assoc [s; k; n; it; ea; res; mem; t_ccpred; t_ccomp; t_cred; t_select;
+ let t = `Assoc [it; ea; res; mem; t_ccpred; t_ccomp; t_cred; t_select;
   t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process; t_sat;
   t_cache]
  in t

@@ -127,6 +127,14 @@ let call () =
 
 let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
 
+let json_settings settings s k =
+ let trunc f = `Float ((float_of_int (truncate (f *. 1000.))) /. 1000.) in
+ let s = "strategy", `String s in
+ let k = "k", `String (if k  < 0 then "if i < 3 then 6 else 2" else string_of_int k) in
+ let n = "n", `Int !(settings.n) in
+ `Assoc [s; k; n]
+;;
+
 let print_json (es, gs) f res settings proof =
   let res_str = match res with
     | Ckb.Completion rr -> trs_string rr
@@ -141,8 +149,9 @@ let print_json (es, gs) f res settings proof =
     "result",`String (success_code res);
     "time", f;
     "trs", `String res_str;
-    "statistics", Statistics.json settings (Strategy.to_string strat) !k;
-    "chracteristics", Statistics.analyze es gs;
+    "statistics", Statistics.json ();
+    "settings", json_settings settings (Strategy.to_string strat) !k;
+    "characteristics", Statistics.analyze es gs;
     "proof", `String (match proof with Some s -> s | _ -> "")
   ] in
   F.printf "%s\n%!" (pretty_to_string t)

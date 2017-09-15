@@ -31,5 +31,5 @@ val is_duplicating : Rules.t -> bool
 val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 
 val print : unit -> unit
-val json : Settings.t -> string -> int -> Yojson.Basic.json
+val json : unit -> Yojson.Basic.json
 val analyze : Literal.t list -> Literal.t list -> Yojson.Basic.json
