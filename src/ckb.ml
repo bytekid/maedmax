@@ -513,7 +513,6 @@ let set_iteration_stats aa gs =
   St.time_diffs := time_diff :: !(St.time_diffs);
   St.mem_diffs := mem_diff :: !(St.mem_diffs);
   St.eq_counts := NS.size aa :: !(St.eq_counts);
-  let s = Strategy.to_string !(settings.strategy) in
   if debug () then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
      !St.iterations (NS.size aa) NS.print aa;

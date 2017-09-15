@@ -130,7 +130,6 @@ let call () =
 let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
 
 let json_settings settings s k =
- let trunc f = `Float ((float_of_int (truncate (f *. 1000.))) /. 1000.) in
  let s = "strategy", `String s in
  let k = "k", `String (if k  < 0 then "if i < 3 then 6 else 2" else string_of_int k) in
  let n = "n", `Int !(settings.n) in
