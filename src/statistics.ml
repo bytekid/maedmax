@@ -109,6 +109,7 @@ let analyze es gs =
   let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
   let rmax (l,r) = max (Term.depth l) (Term.depth r) in
   let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
+  let symcount = "symbol count", `Int (L.length fs) in
   let gc = "goal count", `Int (L.length gs) in
   let app = "is applicative", `Bool (is_applicative all) in
   let es = List.map Literal.terms es in
@@ -121,7 +122,7 @@ let analyze es gs =
   let ring = "ring", `Int (Theory.Ring.count es) in
   let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
-  `Assoc [eqc; ieqc; eqs; mar; mts; mtd; gc; app; dup;
+  `Assoc [eqc; ieqc; eqs; mar; symcount; mts; mtd; gc; app; dup;
           ac; mon; group; agroup; ring; lattice; distrib ]
 ;;
 
