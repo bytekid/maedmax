@@ -99,10 +99,12 @@ let is_duplicating es =
 let analyze es gs =
   let es, ies = List.partition Literal.is_equality es in
   let all = List.map Literal.terms (es @ ies) in
+  let fs = Rules.signature all in
   (* some counting *)
   let eqc = "equality count", `Int (L.length es) in
   let ieqc = "inequality count", `Int (L.length ies) in
   let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <-all]) in
+  let mar = "max arity", `Int (L.fold_left max 0 [ a | _,a <- fs ]) in
   let rmax (l,r) = max (Term.size l) (Term.size r) in
   let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
   let rmax (l,r) = max (Term.depth l) (Term.depth r) in
@@ -119,7 +121,7 @@ let analyze es gs =
   let ring = "ring", `Int (Theory.Ring.count es) in
   let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
-  `Assoc [eqc; ieqc; eqs; mts; mtd; gc; app; dup;
+  `Assoc [eqc; ieqc; eqs; mar; mts; mtd; gc; app; dup;
           ac; mon; group; agroup; ring; lattice; distrib ]
 ;;
 
