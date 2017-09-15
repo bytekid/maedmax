@@ -85,6 +85,8 @@ let options = Arg.align
     " preserve orientation of input axioms");
    ("-N", Arg.Int (fun n -> settings.n := n), 
     "<n> select <n> active equations from CPs of TRS");
+   ("--sizeage", Arg.Float (fun f -> settings.size_age_ratio := f), 
+    "<f> ratio size:age for selections");
    ("--term", Arg.Set only_termination,
     " perform termination check");
    ("-T", Arg.Set_float timeout,
@@ -132,7 +134,8 @@ let json_settings settings s k =
  let s = "strategy", `String s in
  let k = "k", `String (if k  < 0 then "if i < 3 then 6 else 2" else string_of_int k) in
  let n = "n", `Int !(settings.n) in
- `Assoc [s; k; n]
+ let sa = "size_age", `Float !(settings.size_age_ratio) in
+ `Assoc [s; k; n; sa]
 ;;
 
 let print_json (es, gs) f res settings proof =

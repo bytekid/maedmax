@@ -42,7 +42,9 @@ let cmp n1 n2 =
     let minsize (l,r) = min (Term.size l) (Term.size r) in
     minsize (Lit.terms n1) - (minsize (Lit.terms n2)) (* prefer equal size *)
 
-let cmp n1 n2 = Rule.size (Lit.terms n1) - Rule.size (Lit.terms n2)
+let cmp_size n1 n2 = Rule.size (Lit.terms n1) - Rule.size (Lit.terms n2)
+
+let cmp_age n1 n2 = (Lit.age n1) - (Lit.age n2)
 
 let mul_gt gt ts1 ts2 =
   let ts1' = Listset.diff ts1 ts2 in
@@ -61,11 +63,13 @@ let cmp_gt gt n1 n2 =
     r)
 ;;
 
-let sort_smaller_than t ns = 
-  let l = to_list ns in
-  let small = L.filter (fun n -> Rule.size (Lit.terms n) < t) l in
-  L.sort cmp small
+let smaller_than t ns =
+  L.filter (fun n -> Rule.size (Lit.terms n) < t) (to_list ns)
 ;;
+
+let sort_size= L.sort cmp_size
+
+let sort_age = L.sort cmp_age
 
 let exists p ns = H.fold (fun n _ b -> b || p n) ns false
 
