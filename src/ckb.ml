@@ -475,8 +475,14 @@ let do_restart es gs =
     | TimeLimit l when running_time > l -> true
     | _ -> false
  in
+ (* estimate exponential blowup *)
+ let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in 
+ let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
+ let eqcounts = Listx.take_at_most 6 !(Statistics.eq_counts) in
+ let blowup = !(St.iterations) > 6 && is_exp eqcounts in
+ if blowup && debug () then F.printf "Blowup!\n%!";
  if limit && debug () then F.printf "Restart: limit reached\n";
- rep || limit
+ rep || limit || blowup
 ;;
 
 let set_iteration_stats aa gs =
