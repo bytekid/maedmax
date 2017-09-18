@@ -34,6 +34,10 @@ let weak_vars : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 128
 (* remember whether termination constraint was already added to context *)
 let ht_rlycs : (Rule.t, bool) Hashtbl.t = Hashtbl.create 100;;
 
+(* remember age of rule *)
+let age_count = ref 0
+let ht_age : (Rule.t, int) Hashtbl.t = Hashtbl.create 100;;
+
 let wc = ref 0
 
 (*** FUNCTIONS ***************************************************************)
@@ -47,7 +51,9 @@ let clear _ =
   rule_vars := [];
   Hashtbl.clear strict_vars;
   Hashtbl.clear weak_vars;
-  Hashtbl.clear ht_rlycs
+  Hashtbl.clear ht_rlycs;
+  Hashtbl.clear ht_age;
+  age_count := 0
 ;;
 
 let trs_of_index n =
@@ -186,3 +192,14 @@ let decode_print m i =
  Format.printf "Strict %i: \n@[ %a@]\n" i Rules.print s';
  Format.printf "Weak %i: \n@[ %a@]\n" i Rules.print w'
 ;;
+
+let age eq =
+  try Hashtbl.find ht_age eq with
+  Not_found ->
+    (*let c = !age_count in
+    age_count := c + 1;*)
+    let c = 1 in
+    Hashtbl.add ht_age eq c;
+    c
+;;
+    

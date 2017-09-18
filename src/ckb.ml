@@ -152,15 +152,36 @@ let keep acs n =
   L.mem (Lit.terms n) (ac_eqs ()) || not (Lit.is_ac_equivalent n acs)
 ;;
 
+let rec select size_sorted age_sorted acc n =
+  if n <= 0 then L.rev acc
+  else
+    if Random.int 100 < !(settings.size_age_ratio) then
+      match size_sorted with
+          [] -> L.rev acc
+        | b::bs -> select bs age_sorted (b::acc) (n-1)
+    else
+      match age_sorted with
+          [] -> L.rev acc
+        | b::bs -> select size_sorted bs (b::acc) (n-1)
+;;
 
 (* selection of small new nodes *)
 let select k cc thresh =
  let k = if k = 0 then select_count !(St.iterations) else k in
- let aa = NS.sort_smaller_than thresh cc in
  let acs = !(settings.ac_syms) in
+ (*let aa = NS.sort_smaller_than thresh cc in
  let aa,_ = L.partition (keep acs) aa in
- (*Format.printf "kill %a\n%!" Rules.print [ Lit.rule n | n <- rem];*)
- let aa,aa' = Listx.split_at_most k aa in 
+ let aa,aa' = Listx.split_at_most k aa in*)
+ let small = NS.smaller_than thresh cc in
+ let small,_ = L.partition (keep acs) small in
+ let t = Unix.gettimeofday () in
+ let size_sorted = NS.sort_size small in
+ let t' = Unix.gettimeofday () in
+ let age_sorted = NS.sort_age small in
+ St.t_tmp2 := !St.t_tmp2 +. (Unix.gettimeofday () -. t');
+ St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. t);
+ Random.self_init();
+ let aa = select size_sorted age_sorted [] k in
  let pp = NS.diff_list cc aa in 
  if debug () then log_select cc aa;
  (* remember smallest terms for divergence estimate *)
@@ -195,8 +216,6 @@ let cps rew n1 n2 =
       Hashtbl.add cp_cache (n1,n2) cps;
     cps))
 ;;
-
-let cps n1 = St.take_time St.t_tmp1 (cps n1)
 
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rew rr aa =

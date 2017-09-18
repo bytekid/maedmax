@@ -85,6 +85,8 @@ let options = Arg.align
     " preserve orientation of input axioms");
    ("-N", Arg.Int (fun n -> settings.n := n), 
     "<n> select <n> active equations from CPs of TRS");
+   ("--sizeage", Arg.Int (fun n -> settings.size_age_ratio := n), 
+    "<r> percentage of size (vs age) decisions");
    ("--term", Arg.Set only_termination,
     " perform termination check");
    ("-T", Arg.Set_float timeout,
