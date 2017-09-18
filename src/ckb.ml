@@ -206,10 +206,13 @@ let select_for_restart cc =
   fst (select' k (NS.diff_list cc (axs ())) 30)
 
 let select cc =
-  St.take_time St.t_select (select' ~only_size:false 0 cc)
+  let thresh = !(settings.size_bound_equations) in
+  St.take_time St.t_select (select' ~only_size:false 0 cc) thresh
+;;
 
 let select_goals k cc =
-  St.take_time St.t_select (select' k cc)
+  St.take_time St.t_select (select' k cc) !(settings.size_bound_goals)
+;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let eqs_for_overlaps ee =
@@ -580,12 +583,12 @@ let rec phi ctx aa gs =
     let aa_for_ols = NS.to_list (eqs_for_overlaps irred') in
     let cps = reduced rew (overlaps rew rr aa_for_ols) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
-    let sel, rest = select nn 200 in
+    let sel, rest = select nn in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then
       NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
-    let gg = fst (select_goals 2 gcps 30) in
+    let gg = fst (select_goals 2 gcps) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
     add_nodes (Listset.unique sel);
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with

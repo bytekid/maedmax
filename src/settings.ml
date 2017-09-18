@@ -34,7 +34,9 @@ type t = {
  pcp : int ref;
  extended_signature: bool ref;
  keep_orientation: bool ref;
- size_age_ratio: int ref
+ size_age_ratio: int ref;
+ size_bound_equations: int ref;
+ size_bound_goals: int ref
 }
 
 (*** GLOBALS *****************************************************************)
@@ -62,7 +64,9 @@ let default = {
  pcp = ref 0;
  extended_signature = ref false;
  keep_orientation = ref false;
- size_age_ratio = ref 100
+ size_age_ratio = ref 100;
+ size_bound_equations = ref 200;
+ size_bound_goals = ref 30
 }
 
 let do_assertions = ref false

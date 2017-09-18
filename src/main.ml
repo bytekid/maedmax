@@ -87,6 +87,10 @@ let options = Arg.align
     "<n> select <n> active equations from CPs of TRS");
    ("--sizeage", Arg.Int (fun n -> settings.size_age_ratio := n), 
     "<r> percentage of size (vs age) decisions");
+   ("--size-bound", Arg.Int (fun n -> settings.size_bound_equations := n),
+    "<b> upper bound for size of active equations");
+   ("--size-bound-goals", Arg.Int (fun n -> settings.size_bound_goals := n),
+    "<b> upper bound for size of active goals");
    ("--term", Arg.Set only_termination,
     " perform termination check");
    ("-T", Arg.Set_float timeout,
