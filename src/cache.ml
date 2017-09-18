@@ -38,7 +38,7 @@ let ht_rlycs : (Rule.t, bool) Hashtbl.t = Hashtbl.create 100;;
 let age_count = ref 0
 let ht_age : (Rule.t, int) Hashtbl.t = Hashtbl.create 100;;
 
-let wc = ref 0
+let equation_count = ref 0
 
 (*** FUNCTIONS ***************************************************************)
 let clear _ =
@@ -90,8 +90,8 @@ let store_rule_vars ctx rls = List.iter (ignore <.> store_rule_var ctx) rls
 
 let store_eq_var ctx lr =
   let v = mk_fresh_bool_var ctx in
-  let vi = mk_int_var ctx ("eqw"^(string_of_int !wc)) in
-  wc := !wc + 1;
+  let vi = mk_int_var ctx ("eqw"^(string_of_int !equation_count)) in
+  equation_count := !equation_count + 1;
   eq_vars := (lr, (v, vi)) :: !eq_vars;
   (v, vi) 
 ;;
