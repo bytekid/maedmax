@@ -196,8 +196,8 @@ let decode_print m i =
 let age eq =
   try Hashtbl.find ht_age eq with
   Not_found ->
-    (*let c = !age_count in
-    age_count := c + 1;*)
+    let c = !age_count in
+    age_count := c + 1;
     let c = 1 in
     Hashtbl.add ht_age eq c;
     c
