@@ -44,23 +44,6 @@ let cmp n1 n2 =
 
 let cmp_size n1 n2 = Rule.size (Lit.terms n1) - Rule.size (Lit.terms n2)
 
-let mul_gt gt ts1 ts2 =
-  let ts1' = Listset.diff ts1 ts2 in
-  let ts2' = Listset.diff ts2 ts1 in
-  List.for_all (fun t -> List.exists (fun s -> gt s t) ts1') ts2'
-;;
-
-let cmp_gt gt n1 n2 =
-  let s1, s2 = Rule.size (Lit.terms n1), Rule.size (Lit.terms n2) in
-  if s1 <> s2 then s1 - s2
-  else(
-    let (l1,r1),(l2,r2) = (Lit.terms n1), (Lit.terms n2) in
-    let lr,rl = mul_gt gt [l2;r2] [l1;r1], mul_gt gt [l1;r1] [l2;r2] in
-    let r = if lr then -1 else if rl then 1 else 0 in
-    Format.printf "%a > %a: %d\n%!" Rule.print (l1,r1) Rule.print (l2,r2) r;
-    r)
-;;
-
 let smaller_than t ns =
   L.filter (fun n -> Rule.size (Lit.terms n) < t) (to_list ns)
 ;;
@@ -70,8 +53,6 @@ let sort_size= L.sort cmp_size
 let exists p ns = H.fold (fun n _ b -> b || p n) ns false
 
 let filter p ns =
-  (*let h = Hashtbl.create (H.length ns * 2) in
-  H.fold (fun n _ res -> if p n then add n res else res) ns h*)
   H.fold (fun n _ ns' -> if not (p n) then H.remove ns' n; ns') ns (H.copy ns)
 ;;
 
