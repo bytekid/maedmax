@@ -193,7 +193,7 @@ let select' ?(only_size=true) k cc thresh =
  in
  let pp = NS.diff_list cc aa in 
  if debug () then log_select cc aa;
- (* remember smallest terms for divergence estimate *)
+ (* remember smallest terms for divergence estimate, 20 is heuristic value *)
  let m = L.fold_left (fun m n -> min m (R.size (Lit.terms n))) 20 aa in
  sizes := m :: !sizes;
  (aa,pp)
