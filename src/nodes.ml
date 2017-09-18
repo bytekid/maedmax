@@ -44,8 +44,6 @@ let cmp n1 n2 =
 
 let cmp_size n1 n2 = Rule.size (Lit.terms n1) - Rule.size (Lit.terms n2)
 
-let cmp_age n1 n2 = Cache.age (Lit.terms n1) - (Cache.age (Lit.terms n2))
-
 let mul_gt gt ts1 ts2 =
   let ts1' = Listset.diff ts1 ts2 in
   let ts2' = Listset.diff ts2 ts1 in
@@ -68,8 +66,6 @@ let smaller_than t ns =
 ;;
  
 let sort_size= L.sort cmp_size
-
-let sort_age = L.sort cmp_age
 
 let exists p ns = H.fold (fun n _ b -> b || p n) ns false
 

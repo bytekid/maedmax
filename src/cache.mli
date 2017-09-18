@@ -51,5 +51,3 @@ val was_oriented : Rule.t -> bool
 val clear : unit -> unit
 
 val decode_print : Yices.model -> int -> unit
-
-val age : Rule.t -> int
