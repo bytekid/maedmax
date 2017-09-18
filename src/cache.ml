@@ -52,8 +52,7 @@ let clear _ =
   Hashtbl.clear strict_vars;
   Hashtbl.clear weak_vars;
   Hashtbl.clear ht_rlycs;
-  Hashtbl.clear ht_age;
-  age_count := 0
+  Hashtbl.clear ht_age
 ;;
 
 let trs_of_index n =
@@ -202,4 +201,3 @@ let age eq =
     Hashtbl.add ht_age eq c;
     c
 ;;
-    

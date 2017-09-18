@@ -49,6 +49,9 @@ let hash_iteration = ref [0];;
 let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
   Hashtbl.create 512;;
 
+(* maintain list of created nodes to speed up selection by age *)
+let all_nodes = ref []
+
 (*** FUNCTIONS ***************************************************************)
 (* shorthands for settings *)
 let termination_strategy _ = 
@@ -95,6 +98,13 @@ let normalize = Variant.normalize_rule
 
 let ac_eqs () = [ normalize e | e <- Ac.eqs !(settings.ac_syms) ]
 
+let add_nodes ns = all_nodes := !all_nodes @ ns 
+
+let get_oldest_node _ =
+  match !all_nodes with
+     [] -> failwith "Cache.get_oldest_node: no nodes there"
+   | n :: ns -> all_nodes := ns; n 
+;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
@@ -152,36 +162,35 @@ let keep acs n =
   L.mem (Lit.terms n) (ac_eqs ()) || not (Lit.is_ac_equivalent n acs)
 ;;
 
-let rec select size_sorted age_sorted acc n =
+let rec select size_sorted acc n =
   if n <= 0 then L.rev acc
   else
     if Random.int 100 < !(settings.size_age_ratio) then
       match size_sorted with
           [] -> L.rev acc
-        | b::bs -> select bs age_sorted (b::acc) (n-1)
+        | b::bs -> select bs (b::acc) (n-1)
+    else if !all_nodes = [] then acc
     else
-      match age_sorted with
-          [] -> L.rev acc
-        | b::bs -> select size_sorted bs (b::acc) (n-1)
+      let b = get_oldest_node () in
+      select size_sorted (b::acc) (n-1)
 ;;
 
 (* selection of small new nodes *)
-let select k cc thresh =
+let select' ?(only_size=true) k cc thresh =
  let k = if k = 0 then select_count !(St.iterations) else k in
  let acs = !(settings.ac_syms) in
- (*let aa = NS.sort_smaller_than thresh cc in
- let aa,_ = L.partition (keep acs) aa in
- let aa,aa' = Listx.split_at_most k aa in*)
  let small = NS.smaller_than thresh cc in
- let small,_ = L.partition (keep acs) small in
- let t = Unix.gettimeofday () in
- let size_sorted = NS.sort_size small in
- let t' = Unix.gettimeofday () in
- let age_sorted = NS.sort_age small in
- St.t_tmp2 := !St.t_tmp2 +. (Unix.gettimeofday () -. t');
- St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. t);
- Random.self_init();
- let aa = select size_sorted age_sorted [] k in
+ let aa = 
+   if only_size then
+     let aa,_ = L.partition (keep acs) small in
+     let aa = NS.sort_size aa in
+     fst (Listx.split_at_most k aa)
+   else
+     let small,_ = L.partition (keep acs) small in
+     let size_sorted = NS.sort_size small in
+     Random.self_init();
+     select size_sorted [] k
+ in
  let pp = NS.diff_list cc aa in 
  if debug () then log_select cc aa;
  (* remember smallest terms for divergence estimate *)
@@ -194,10 +203,13 @@ let axs _ = [ Lit.make_axiom e | e <- !(settings.es) ]
 
 let select_for_restart cc =
   let k = !(St.restarts) * 2 in
-  fst (select k (NS.diff_list cc (axs ())) 30)
+  fst (select' k (NS.diff_list cc (axs ())) 30)
 
-let select ?(k=0) cc =
-  St.take_time St.t_select (select k cc)
+let select cc =
+  St.take_time St.t_select (select' ~only_size:false 0 cc)
+
+let select_goals k cc =
+  St.take_time St.t_select (select' k cc)
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let eqs_for_overlaps ee =
@@ -573,8 +585,9 @@ let rec phi ctx aa gs =
     if has_comp () then
       NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
-    let gg = fst (select ~k:2 gcps 30) in
+    let gg = fst (select_goals 2 gcps 30) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
+    add_nodes (Listset.unique sel);
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
        Some r -> raise (Success r)
      | None ->
@@ -638,6 +651,7 @@ let rec ckb fs (es, gs) =
  let ctx = mk_context () in
  let es0 = L.map Lit.normalize es in
  let gs0 = L.map Lit.normalize gs in
+ all_nodes := es0;
  try
   init_settings fs [ Lit.terms e | e <- es0] [ Lit.terms g | g <- gs0 ];
   let cas = [ Ac.cassociativity f | f <- !(settings.ac_syms)] in
