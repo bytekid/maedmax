@@ -137,7 +137,8 @@ let json_settings settings s k =
  let s = "strategy", `String s in
  let k = "k", `String (if k  < 0 then "if i < 3 then 6 else 2" else string_of_int k) in
  let n = "n", `Int !(settings.n) in
- `Assoc [s; k; n]
+ let sa = "sizeage", `Int !(settings.size_age_ratio) in
+ `Assoc [s; k; n; sa]
 ;;
 
 let print_json (es, gs) f res settings proof =
