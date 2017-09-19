@@ -28,6 +28,8 @@ val memory : unit -> int
 
 val is_duplicating : Rules.t -> bool
 
+val is_applicative : Rules.t -> bool
+
 val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 
 val print : unit -> unit

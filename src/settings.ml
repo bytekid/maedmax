@@ -17,6 +17,9 @@ type limit = IterationLimit of int | TimeLimit of float
 type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * limit
 type termination_strategy = t_setting list
 
+(* heuristically detected problem shape *)
+type shape = None | Carbonio | Elio | Ossigeno | Piombo | Xeno | Zolfo
+
 type t = {
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  signature: (Signature.sym * int) list ref;
@@ -36,7 +39,8 @@ type t = {
  keep_orientation: bool ref;
  size_age_ratio: int ref;
  size_bound_equations: int ref;
- size_bound_goals: int ref
+ size_bound_goals: int ref;
+ shape: shape ref
 }
 
 (*** GLOBALS *****************************************************************)
@@ -58,7 +62,7 @@ let default = {
  n         = ref 10;
  unfailing = ref false;
  strategy  = ref [];
- tmp       = ref 19;
+ tmp       = ref 0;
  output_tproof = ref false;
  check_subsumption = ref 1;
  pcp = ref 0;
@@ -66,7 +70,8 @@ let default = {
  keep_orientation = ref false;
  size_age_ratio = ref 100;
  size_bound_equations = ref 200;
- size_bound_goals = ref 30
+ size_bound_goals = ref 30;
+ shape = ref None
 }
 
 let do_assertions = ref false
@@ -77,3 +82,13 @@ let is_ordered = ref false
 
 let inequalities : Rules.t ref = ref []
 let inst_depth : int ref = ref 2
+
+let shape_to_string = function
+    None -> "none"
+  | Carbonio -> "carbonio"
+  | Elio -> "elio"
+  | Ossigeno -> "ossigeno"
+  | Piombo -> "piombo"
+  | Xeno -> "xeno"
+  | Zolfo -> "zolfo"
+;;

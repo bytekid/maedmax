@@ -605,6 +605,39 @@ let rec phi ctx aa gs =
   with Success r -> r
 ;;
 
+
+let detect_shape es gs =
+  let rmax (l,r) = Pervasives.max (Term.size l) (Term.size r) in
+  let max_term_size = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
+  let rmax (l,r) = Pervasives.max (Term.depth l) (Term.depth r) in
+  let max_term_depth = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
+  let app = St.is_applicative es in
+  let dup = St.is_duplicating es in
+  let mon = Theory.Monoid.count es > 0 in
+  let acs = Theory.Ac.count es > 0 in
+  (*let group = Theory.Group.count es > 0 in*)
+  let distrib = Theory.Ring.has_distrib es in
+  if (max_term_size > 65 && max_term_depth > 10) then (
+    settings.shape := Piombo; (* large terms like in lattices *)
+    settings.n := 10)
+  else if (acs && dup && distrib && mon && not app) then (
+    settings.shape := Xeno; (* relation problems *)
+    settings.n := 10)
+  else if (app && not dup && not distrib && not acs) then (
+    settings.shape := Zolfo; (* some groups; LPO? currently restart *)
+    settings.n := 10)
+  else if (app && dup && not distrib && not acs) then (
+    settings.shape := Carbonio; (* COLs *)
+    settings.n := 6)
+  else if (not app && not dup && not distrib && not acs && not mon) then (
+    settings.shape := Elio; (* no structure detected *)
+    settings.n := 6)
+  else
+    settings.n := 6;
+  if debug () then
+    Format.printf "shape: %s%!" (Settings.shape_to_string !(settings.shape))
+;;
+
 let init_settings fs es gs =
  settings.ac_syms := Ac.symbols es;
  settings.signature := Rules.signature (es @ gs);
@@ -624,7 +657,8 @@ let init_settings fs es gs =
  if debug () then
    F.printf "AC syms: %s \n%!"
      (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
-     (Ac.symbols es))
+     (Ac.symbols es));
+ if !(fs.tmp) > 0 then detect_shape es gs
 ;;
 
 let remember_state es gs =
@@ -632,7 +666,6 @@ let remember_state es gs =
  if h = !hash_initial then raise Fail;
  hash_initial := h
 ;;
-
 
 (* main ckb function *)
 let rec ckb fs (es, gs) =
