@@ -106,19 +106,21 @@ let problem_shape es gs =
   let mon = Theory.Monoid.count es > 0 in
   let group = Theory.Group.count es > 0 in
   let lat = Theory.Lattice.count es > 0 in
-  let acs = Theory.Ac.count es > 0 in
+  let acs = Theory.Ac.count es in
   let distrib = Theory.Ring.has_distrib es in
   if (max_term_size > 65 && max_term_depth > 10) then
     Piombo (* large terms like in lattices, LAT084-1, LAT392-1, ... *)
-  else if (acs && dup && distrib && group && lat) then
+  else if (acs > 0 && dup && distrib && group && lat) then
     Ossigeno (* GRP166-1, GRP185-3, GRP193-2, GRP184-4 *)
-  else if (acs && dup && distrib && mon && not app) then
+  else if (acs > 0 && dup && distrib && mon && not app) then
     Xeno (* relation problems like REL011-2 *)
-  else if (app && not dup && not distrib && not acs) then
+  else if (app && not dup && not distrib && acs = 0) then
     Zolfo (* some groups like GRP119-1 - GRP122-1 *)
-  else if (app && dup && not distrib && not acs) then
+  else if (app && dup && not distrib && acs = 0) then
     Carbonio (* COL003-* *)
-  else if (not app && not dup && not distrib && not acs && not mon) then
+  else if (not app && not distrib && acs > 1 && lat && not mon) then
+    Silicio (* lattice *)
+  else if (not app && not dup && not distrib && acs = 0 && not mon) then
     Elio (* no structure detected *)
   else
     None

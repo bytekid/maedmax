@@ -627,11 +627,15 @@ let detect_shape es gs =
     | Piombo
     | Xeno
     | Zolfo -> settings.n := 10
-    | Ossigeno -> settings.n := 12
     | Elio when fs_count > 3 -> settings.n := 10
+    | Silicio ->
+      settings.n := 10;
+      settings.size_age_ratio := 85;
+      settings.strategy := Strategy.strategy_ordered_lpo
+    | Ossigeno -> settings.n := 12
     | Carbonio
-    | Elio
-    | None -> settings.n := 6;
+    | None -> settings.n := 6
+    | Elio -> settings.n := 6;
   if debug () then
     Format.printf "shape: %s%!" (Settings.shape_to_string shape)
 ;;

@@ -18,7 +18,7 @@ type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * limit
 type termination_strategy = t_setting list
 
 (* heuristically detected problem shape *)
-type shape = None | Carbonio | Elio | Ossigeno | Piombo | Xeno | Zolfo
+type shape = None | Carbonio | Elio | Silicio | Ossigeno | Piombo | Xeno | Zolfo
 
 type t = {
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
@@ -87,6 +87,7 @@ let shape_to_string = function
     None -> "none"
   | Carbonio -> "carbonio"
   | Elio -> "elio"
+  | Silicio -> "silicio"
   | Ossigeno -> "ossigeno"
   | Piombo -> "piombo"
   | Xeno -> "xeno"
