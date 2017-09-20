@@ -111,3 +111,5 @@ let make_neg_axiom ts = make ts false false
 let make_goal ts = make ts true true
 
 let make_neg_goal ts = make ts false true
+
+let is_unifiable l = let u,v = l.terms in Subst.unifiable u v

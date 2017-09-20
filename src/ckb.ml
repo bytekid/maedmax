@@ -213,8 +213,20 @@ let select cc =
   St.take_time St.t_select (select' ~only_size:false 0 cc) thresh
 ;;
 
+let select_goals' k gg thresh =
+ let acs = !(settings.ac_syms) in
+ let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
+ let t = Unix.gettimeofday () in
+ let sorted = NS.sort_size_unif small in
+ St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. t);
+ let gg_a = fst (Listx.split_at_most k sorted) in
+ let gg_p = NS.diff_list gg gg_a in 
+ if debug () then log_select gg gg_a;
+ (gg_a, gg_p)
+;;
+
 let select_goals k cc =
-  St.take_time St.t_select (select' k cc) !(settings.size_bound_goals)
+  St.take_time St.t_select (select_goals' k cc) !(settings.size_bound_goals)
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -616,9 +628,7 @@ let detect_shape es gs =
     | Piombo
     | Xeno
     | Zolfo -> settings.n := 10
-    | Ossigeno -> settings.n := 12;
-                  settings.check_subsumption := 2(*;
-                  settings.strategy := Strategy.strategy_ordered_lpo*)
+    | Ossigeno -> settings.n := 12
     | Elio when fs_count > 3 -> settings.n := 10
     | Carbonio
     | Elio

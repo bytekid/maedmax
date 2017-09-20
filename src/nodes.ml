@@ -48,7 +48,13 @@ let smaller_than t ns =
   L.filter (fun n -> Rule.size (Lit.terms n) < t) (to_list ns)
 ;;
  
-let sort_size= L.sort cmp_size
+let sort_size = L.sort cmp_size
+ 
+let sort_size_unif ns =
+  let sorted = L.sort cmp_size ns in
+  let unif,rest = L.partition Lit.is_unifiable sorted in
+  unif @ rest
+;;
 
 let exists p ns = H.fold (fun n _ b -> b || p n) ns false
 
