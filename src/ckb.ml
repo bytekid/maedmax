@@ -591,7 +591,7 @@ let rec phi ctx aa gs =
     if has_comp () then
       NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
-    let gg = fst (select_goals 2 gcps) in
+    let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
     add_nodes (Listset.unique sel);
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
