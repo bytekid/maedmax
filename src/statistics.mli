@@ -14,12 +14,10 @@ val t_select : float ref
 val t_success_check : float ref
 val t_tmp1 : float ref
 val t_tmp2 : float ref
-
 val ces : int ref
 val goals : int ref
 val iterations : int ref
 val restarts : int ref
-
 val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref
@@ -28,10 +26,12 @@ val memory : unit -> int
 
 val is_duplicating : Rules.t -> bool
 
-val is_applicative : Rules.t -> bool
-
 val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 
-val print : unit -> unit
-val json : unit -> Yojson.Basic.json
 val analyze : Literal.t list -> Literal.t list -> Yojson.Basic.json
+
+val problem_shape : Rules.t-> Rules.t -> Settings.shape
+
+val json : unit -> Yojson.Basic.json
+
+val print : unit -> unit

@@ -152,7 +152,10 @@ let interreduce rr =
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc ss =
   let plist = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
-  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (NS.size cc) plist ss
+  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (NS.size cc) plist ss;
+  F.printf "all:\n%a\n%!" plist (NS.sort_size (NS.to_list cc))
+;;
+
 
 let select_count i = !(settings.n)
 
@@ -607,35 +610,21 @@ let rec phi ctx aa gs =
 
 
 let detect_shape es gs =
-  let rmax (l,r) = Pervasives.max (Term.size l) (Term.size r) in
-  let max_term_size = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
-  let rmax (l,r) = Pervasives.max (Term.depth l) (Term.depth r) in
-  let max_term_depth = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
-  let app = St.is_applicative es in
-  let dup = St.is_duplicating es in
-  let mon = Theory.Monoid.count es > 0 in
-  let acs = Theory.Ac.count es > 0 in
-  (*let group = Theory.Group.count es > 0 in*)
-  let distrib = Theory.Ring.has_distrib es in
-  if (max_term_size > 65 && max_term_depth > 10) then (
-    settings.shape := Piombo; (* large terms like in lattices *)
-    settings.n := 10)
-  else if (acs && dup && distrib && mon && not app) then (
-    settings.shape := Xeno; (* relation problems *)
-    settings.n := 10)
-  else if (app && not dup && not distrib && not acs) then (
-    settings.shape := Zolfo; (* some groups; LPO? currently restart *)
-    settings.n := 10)
-  else if (app && dup && not distrib && not acs) then (
-    settings.shape := Carbonio; (* COLs *)
-    settings.n := 6)
-  else if (not app && not dup && not distrib && not acs && not mon) then (
-    settings.shape := Elio; (* no structure detected *)
-    settings.n := 6)
-  else
-    settings.n := 6;
+  let shape = St.problem_shape es gs in
+  let fs_count = List.length (Rules.signature es) in
+  match shape with
+    | Piombo
+    | Xeno
+    | Zolfo -> settings.n := 10
+    | Ossigeno -> settings.n := 12;
+                  settings.check_subsumption := 2(*;
+                  settings.strategy := Strategy.strategy_ordered_lpo*)
+    | Elio when fs_count > 3 -> settings.n := 10
+    | Carbonio
+    | Elio
+    | None -> settings.n := 6;
   if debug () then
-    Format.printf "shape: %s%!" (Settings.shape_to_string !(settings.shape))
+    Format.printf "shape: %s%!" (Settings.shape_to_string shape)
 ;;
 
 let init_settings fs es gs =

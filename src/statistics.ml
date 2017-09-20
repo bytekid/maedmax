@@ -96,6 +96,34 @@ let is_duplicating es =
   List.exists dup (es @ [Rule.flip e | e <- es ])
 ;;
 
+let problem_shape es gs =
+  let rmax (l,r) = Pervasives.max (Term.size l) (Term.size r) in
+  let max_term_size = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
+  let rmax (l,r) = Pervasives.max (Term.depth l) (Term.depth r) in
+  let max_term_depth = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
+  let app = is_applicative es in
+  let dup = is_duplicating es in
+  let mon = Theory.Monoid.count es > 0 in
+  let group = Theory.Group.count es > 0 in
+  let lat = Theory.Lattice.count es > 0 in
+  let acs = Theory.Ac.count es > 0 in
+  let distrib = Theory.Ring.has_distrib es in
+  if (max_term_size > 65 && max_term_depth > 10) then
+    Piombo (* large terms like in lattices, LAT084-1, LAT392-1, ... *)
+  else if (acs && dup && distrib && group && lat) then
+    Ossigeno (* GRP166-1, GRP185-3, GRP193-2, GRP184-4 *)
+  else if (acs && dup && distrib && mon && not app) then
+    Xeno (* relation problems like REL011-2 *)
+  else if (app && not dup && not distrib && not acs) then
+    Zolfo (* some groups like GRP119-1 - GRP122-1 *)
+  else if (app && dup && not distrib && not acs) then
+    Carbonio (* COL003-* *)
+  else if (not app && not dup && not distrib && not acs && not mon) then
+    Elio (* no structure detected *)
+  else
+    None
+;;
+
 let analyze es gs =
   let es, ies = List.partition Literal.is_equality es in
   let all = List.map Literal.terms (es @ ies) in
@@ -122,8 +150,9 @@ let analyze es gs =
   let ring = "ring", `Int (Theory.Ring.count es) in
   let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
+  let shp = "shape", `String (Settings.shape_to_string (problem_shape es gs)) in
   `Assoc [eqc; ieqc; eqs; mar; symcount; mts; mtd; gc; app; dup;
-          ac; mon; group; agroup; ring; lattice; distrib ]
+          ac; mon; group; agroup; ring; lattice; distrib; shp ]
 ;;
 
 let json () =
