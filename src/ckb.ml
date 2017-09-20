@@ -152,8 +152,7 @@ let interreduce rr =
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc ss =
   let plist = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
-  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (NS.size cc) plist ss;
-  F.printf "all:\n%a\n%!" plist (NS.sort_size (NS.to_list cc))
+  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (NS.size cc) plist ss
 ;;
 
 
@@ -605,7 +604,7 @@ let rec phi ctx aa gs =
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
-    add_nodes (Listset.unique sel);
+    add_nodes (NS.sort_size (NS.smaller_than 100 rest));
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
        Some r -> raise (Success r)
      | None ->
