@@ -2,6 +2,29 @@
 open Term
 
 (*** MODULES ******************************************************************)
+module Commutativity = struct
+  (*** FUNCTIONS **************************************************************)
+  let x = V (-1)
+  let y = V (-2)
+
+  let commutativity f = (F(f, [x; y]), F(f, [y; x]))
+
+  let symbols es =
+    let is_c f (l,r) = Variant.eq_variant (l,r) (commutativity f)  in
+    let binary_root = function F(_, [_;_]) -> true | _ -> false in
+    let fs = [ root l | l,_ <- es@[ r,l | l,r <- es ]; binary_root l ] in
+    let f = [f | f <- fs; List.exists (is_c f) es] in
+    Listx.unique f
+
+  let is_for es f = List.mem f (symbols es)
+
+  let eqs fs = [ commutativity f | f <- fs ]
+
+  let count es = List.length (symbols es)
+
+  let equivalent cs (s, t) = Term.args_sort cs s = Term.args_sort cs t
+end
+
 module Ac = struct
   (*** FUNCTIONS **************************************************************)
   let x = V (-1)
