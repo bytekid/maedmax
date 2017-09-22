@@ -64,6 +64,8 @@ val linear : t -> bool
 
 val flatten : Signature.sym list -> t -> t
 
+val args_sort : Signature.sym list -> t -> t
+
 val unflatten : Signature.sym list -> t -> t
 
 val size :  t -> int

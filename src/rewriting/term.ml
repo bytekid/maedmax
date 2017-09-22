@@ -58,6 +58,10 @@ let root = function
   | V x -> invalid_arg "Term.root"
   | F (f, _) -> f
 
+let args = function
+  | V x -> invalid_arg "Term.args"
+  | F (_, args) -> args
+
 let is_subterm s t = List.mem s (subterms t)
 
 let is_proper_subterm s t = List.mem s (proper_subterms t)
@@ -80,18 +84,7 @@ let rename_canonical t =
   let subst = [x,V i | i,x <- Listx.index (variables t)] in
   substitute subst t
 ;;
-(*
-let rec rename' sub i = function
- | V x -> (try V (List.assoc x sub), sub, i
-           with Not_found -> V i, (x,i)::sub, i+1)
- | F (f, ts) ->
-   let ren (ts,s,j) ti = let (ti',s',j') = rename' s j ti in ts@[ti'], s', j' in
-   let ts', sub', i' = List.fold_left ren ([],sub,i) ts in
-   F (f, ts'), sub', i'
-;;
 
-let rename_canonical t = let (u, _, _) = rename' [] 0 t in u
-*)
 let rename_table : (t,t) Hashtbl.t = Hashtbl.create 256
 
 let rename_canonical t =
@@ -163,54 +156,25 @@ and make_args f = function
 	F(f,[h1; (make_args f (h2 :: tt))])
   | _ -> invalid_arg "Term.make_args"
 
-(*
-let rec flatten ac = function
-  | V _ as v -> v
-  | F(f,ts) ->
-      let ts_flat = List.map (flatten ac) ts in 
-      if not (List.mem f ac) then F(f, ts_flat)
-      else
-	if List.exists (head f) ts 
-	then flatten ac (F(f, iter f ts_flat))
-	else F(f,ts_flat)
-and iter f = function
-  | [] -> []
-  | (F(g,gs)) :: tt when f=g -> gs @ (iter f tt)
-  | h :: tt -> h :: (iter f tt)
-*)
-
-(* sorts list of terms such that constants come before compound
-   terms where the root has positive arity come before variables *)
-let rec lex = function
-  | [],[] -> 0
-  | [],_ -> -1
-  |_, [] -> 1
-  | x::xs,y::ys -> let c = my_compare x y in if c=0 then lex (xs,ys) else c
-and my_compare t t' =
- match t, t' with
-  | V x, V y -> compare x y
-  | F _, V _ -> -1
-  | V _, F _ -> 1
-  | F (_,[]), F(_,_::_) -> -1
-  | F(_,_::_), F(_,[]) -> 1
-  | F(f,fs), F(g,gs) when f=g -> lex (fs,gs)
-  | F(f,_), F(g,_) -> compare f g
+let rec flatten' acs = function
+ | V _ as v -> v
+ | F (f, ts) ->
+  let ts' = List.map (flatten' acs) ts in
+  if not (List.mem f acs) then F(f, ts')
+  else
+   let frooted = function V _ -> false | F(g,_) -> f = g in 
+   let (tsf, tsr) = List.partition frooted ts' in
+   F (f, (List.concat [ args ti | ti <- tsf ]) @ tsr)
 ;;
 
 
-let rec flatten ac = function
- | V x -> V x
- | F (f,ts) when List.mem f ac ->
-  (match find_arg f [] ts with
-    | None -> F (f, List.sort my_compare (List.map (flatten ac) ts))
-    | Some (t, ts') -> flatten ac (F(f,direct_subterms t @ ts')))
- | F (f,ts) -> F (f, List.sort my_compare (List.map (flatten ac) ts))
- and
- find_arg f acc = function
-  | [] -> None
-  | (F(f',_) as t) :: ts' when f=f' -> Some (t, acc@ts')
-  | t :: ts' -> find_arg f (t::acc) ts'
-;;
+let rec args_sort syms = function
+  | F (f, ts) ->
+  let ts' =  List.map (args_sort syms) ts in
+  F (f, if List.mem f syms then List.sort compare ts' else ts')
+  | v -> v
+
+let flatten acs t = args_sort acs (flatten' acs t)
 
 let rec size = function
   | V _ -> 1
