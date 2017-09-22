@@ -523,28 +523,32 @@ let log_max_trs j rr rr' c =
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
 let do_restart es gs =
- (* no progress measure *)
- let h = Hashtbl.hash (NS.size es, es, gs) in
- let rep = L.for_all ((=) h) !hash_iteration in
- hash_iteration := h :: !hash_iteration;
- hash_iteration := Listx.take_at_most 20 !hash_iteration;
- if rep && debug () then F.printf "Restart: repeated iteration state\n%!";
- (* iteration/size bound*)
- let running_time = (Unix.gettimeofday () -. !(start_time)) in
- let limit =
-   match strategy_limit () with
-    | IterationLimit i when !(St.iterations) > i -> true
-    | TimeLimit l when running_time > l -> true
-    | _ -> false
- in
- (* estimate exponential blowup *)
- let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
- let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
- let eqcounts = Listx.take_at_most 6 !(Statistics.eq_counts) in
- let blowup = !(St.iterations) > 6 && is_exp eqcounts in
- if blowup && debug () then F.printf "Blowup!\n%!";
- if limit && debug () then F.printf "Restart: limit reached\n";
- rep || limit || blowup
+ if St.memory () > 6000 then (
+   if debug () then F.printf "Memory limit of 6GB reached!\n%!";
+   true)
+ else
+  (* no progress measure *)
+  let h = Hashtbl.hash (NS.size es, es, gs) in
+  let rep = L.for_all ((=) h) !hash_iteration in
+  hash_iteration := h :: !hash_iteration;
+  hash_iteration := Listx.take_at_most 20 !hash_iteration;
+  if rep && debug () then F.printf "Restart: repeated iteration state\n%!";
+  (* iteration/size bound*)
+  let running_time = (Unix.gettimeofday () -. !(start_time)) in
+  let limit =
+    match strategy_limit () with
+      | IterationLimit i when !(St.iterations) > i -> true
+      | TimeLimit l when running_time > l -> true
+      | _ -> false
+  in
+  (* estimate exponential blowup *)
+  let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
+  let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
+  let eqcounts = Listx.take_at_most 6 !(Statistics.eq_counts) in
+  let blowup = !(St.iterations) > 6 && is_exp eqcounts in
+  if blowup && debug () then F.printf "Blowup!\n%!";
+  if limit && debug () then F.printf "Restart: limit reached\n";
+  rep || limit || blowup
 ;;
 
 let set_iteration_stats aa gs =
