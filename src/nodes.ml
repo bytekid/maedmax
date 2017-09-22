@@ -104,3 +104,23 @@ let rec add_unless_subsumed n ns =
 let add_list_unless_subsumed l ns =
   L.fold_left (fun h n -> add_unless_subsumed n h) ns l
 ;;
+
+let ac_equivalence_free acs ns =
+  if acs = [] then ns
+  else
+    let has_ac_eq l = L.exists (Lit.are_ac_equivalent acs l) in
+    let rec eq_free = function
+      | [] -> []
+      | l :: ls -> if has_ac_eq l ls then eq_free ls else l :: (eq_free ls)
+    in eq_free ns
+;;
+
+let c_equivalence_free acs ns =
+  if acs = [] then ns
+  else
+    let has_ac_eq l = L.exists (Lit.are_c_equivalent acs l) in
+    let rec eq_free = function
+      | [] -> []
+      | l :: ls -> if has_ac_eq l ls then eq_free ls else l :: (eq_free ls)
+    in eq_free ns
+;;

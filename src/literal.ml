@@ -102,6 +102,32 @@ let print ppf l =
 
 let is_ac_equivalent l fs = Theory.Ac.equivalent fs l.terms
 
+let equiv_table : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256
+
+let are_ac_equivalent acs l l' =
+  try Hashtbl.find equiv_table (l.terms, l'.terms)
+  with Not_found ->
+    let (s,t),(s',t') = l.terms, l'.terms in
+    let eq = Theory.Ac.equivalent acs (s,s') &&
+             Theory.Ac.equivalent acs (t,t') in
+    Hashtbl.add equiv_table (l.terms, l'.terms) eq;
+    Hashtbl.add equiv_table (l'.terms, l.terms) eq;
+    eq
+;;
+
+let cequiv_table : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256
+
+let are_c_equivalent cs l l' =
+  try Hashtbl.find cequiv_table (l.terms, l'.terms)
+  with Not_found ->
+    let (s,t),(s',t') = l.terms, l'.terms in
+    let eq = Theory.Commutativity.equivalent cs (s,s') &&
+             Theory.Commutativity.equivalent cs (t,t') in
+    Hashtbl.add cequiv_table (l.terms, l'.terms) eq;
+    Hashtbl.add cequiv_table (l'.terms, l.terms) eq;
+    eq
+;;
+
 let is_ground l = Rule.is_ground l.terms
 
 let make_axiom ts = make ts true false

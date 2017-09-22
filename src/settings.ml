@@ -22,6 +22,7 @@ type shape = None | Carbonio | Elio | Silicio | Ossigeno | Piombo | Xeno | Zolfo
 
 type t = {
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
+ only_c_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  signature: (Signature.sym * int) list ref;
  d        : int ref ; (* debug mode *)
  es       : Rules.t ref ;
@@ -53,6 +54,7 @@ let tmp = ref false
 (* settings *)
 let default = {
  ac_syms   = ref [];
+ only_c_syms   = ref [];
  signature = ref [];
  d         = ref 0;
  es        = ref [] ;

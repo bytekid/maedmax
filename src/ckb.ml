@@ -7,6 +7,7 @@ module R = Rule
 module St = Statistics
 module S = Settings
 module Ac = Theory.Ac
+module Commutativity = Theory.Commutativity
 module Lit = Literal
 module NS = Nodes
 
@@ -642,6 +643,12 @@ let detect_shape es gs =
 
 let init_settings fs es gs =
  settings.ac_syms := Ac.symbols es;
+ let cs = Commutativity.symbols es in
+ settings.only_c_syms := Listset.diff cs !(settings.ac_syms);
+ if !(settings.only_c_syms) <> [] then
+   Format.printf "only C symbols: %s\n%!"
+     (List.fold_left (fun s f -> s ^ " " ^ (Signature.get_fun_name f)) ""
+      !(settings.only_c_syms));
  settings.signature := Rules.signature (es @ gs);
  settings.d := !(fs.d);
  St.iterations := 0;

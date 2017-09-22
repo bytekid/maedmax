@@ -145,6 +145,7 @@ let analyze es gs =
   let es = List.map Literal.terms es in
   let dup = "is duplicating", `Bool (is_duplicating es) in
   (* some theory characteristics *)
+  let cs = "commutative syms", `Int (Theory.Commutativity.count es) in
   let ac = "acs", `Int (Theory.Ac.count es) in
   let mon = "monoids", `Int (Theory.Monoid.count es) in
   let group = "groups", `Int (Theory.Group.count es) in
@@ -154,7 +155,7 @@ let analyze es gs =
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
   let shp = "shape", `String (Settings.shape_to_string (problem_shape es gs)) in
   `Assoc [eqc; ieqc; eqs; mar; symcount; mts; mtd; gc; app; dup;
-          ac; mon; group; agroup; ring; lattice; distrib; shp ]
+          cs; ac; mon; group; agroup; ring; lattice; distrib; shp ]
 ;;
 
 let json () =
