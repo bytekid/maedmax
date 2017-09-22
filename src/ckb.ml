@@ -99,7 +99,10 @@ let normalize = Variant.normalize_rule
 
 let ac_eqs () = [ normalize e | e <- Ac.eqs !(settings.ac_syms) ]
 
-let add_nodes ns = all_nodes := !all_nodes @ ns 
+let add_nodes ns =
+  if !(settings.size_age_ratio) < 100 then
+    all_nodes := L.rev_append (L.rev !all_nodes) ns
+;;
 
 let get_oldest_node _ =
   match !all_nodes with
