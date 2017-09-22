@@ -249,7 +249,17 @@ let cps rew n1 n2 =
 
 (* get overlaps for rules rr and active nodes cc *)
 let overlaps rew rr aa =
- let ns = if !(settings.unfailing) then rr @ aa else rr in
+ let ns =
+   if not !(settings.unfailing) then rr
+   else 
+     let t = Unix.gettimeofday () in
+     let aa' = NS.ac_equivalence_free !(settings.ac_syms) aa in
+     let rr' = NS.ac_equivalence_free !(settings.ac_syms) rr in
+     let aa' = NS.c_equivalence_free !(settings.only_c_syms) aa' in
+     let rr' = NS.c_equivalence_free !(settings.only_c_syms) rr' in
+     St.t_tmp2 := !St.t_tmp2 +. (Unix.gettimeofday () -. t);
+     rr' @ aa'
+ in
  NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ]
 ;;
 
