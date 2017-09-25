@@ -667,6 +667,7 @@ let init_settings fs es gs =
  St.iterations := 0;
  settings.n := !(fs.n);
  settings.strategy := !(fs.strategy);
+ settings.auto := !(fs.auto);
  settings.tmp := !(fs.tmp);
  settings.es := es;
  settings.gs := gs;
@@ -680,7 +681,7 @@ let init_settings fs es gs =
    F.printf "AC syms: %s \n%!"
      (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
      (Ac.symbols es));
- if !(fs.tmp) > 0 then detect_shape es gs
+ if !(fs.auto) then detect_shape es gs
 ;;
 
 let remember_state es gs =

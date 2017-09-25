@@ -21,6 +21,7 @@ type termination_strategy = t_setting list
 type shape = None | Carbonio | Elio | Silicio | Ossigeno | Piombo | Xeno | Zolfo
 
 type t = {
+ auto     : bool ref; (* automatic mode *)
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  only_c_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  signature: (Signature.sym * int) list ref;
@@ -53,6 +54,7 @@ let tmp = ref false
 
 (* settings *)
 let default = {
+ auto      = ref false;
  ac_syms   = ref [];
  only_c_syms   = ref [];
  signature = ref [];

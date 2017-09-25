@@ -37,6 +37,8 @@ let do_unordered _ =
 let options = Arg.align 
   [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");*)
+   ("--auto", Arg.Set settings.auto,
+    " use heuristic settings (automatic mode)");
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
     " print problem characteristics");
    ("--cpf", Arg.Set Settings.do_proof,
