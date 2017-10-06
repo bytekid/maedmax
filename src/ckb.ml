@@ -53,6 +53,8 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
 (* maintain list of created nodes to speed up selection by age *)
 let all_nodes = ref []
 
+let acx_rules = ref []
+
 (*** FUNCTIONS ***************************************************************)
 (* shorthands for settings *)
 let termination_strategy _ = 
@@ -156,7 +158,8 @@ let interreduce rr =
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc ss =
   let plist = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
-  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (NS.size cc) plist ss
+  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (NS.size cc) plist ss;
+  F.printf "all:\n%a\n%!" plist (NS.sort_size (NS.to_list cc))
 ;;
 
 
@@ -254,12 +257,13 @@ let cps rew n1 n2 =
 let overlaps rew rr aa =
  let ns =
    if not !(settings.unfailing) then rr
-   else 
+   else
      let t = Unix.gettimeofday () in
-     let aa' = NS.ac_equivalence_free !(settings.ac_syms) aa in
+     let acs, cs = !(settings.ac_syms), !(settings.only_c_syms) in
+     let aa' = NS.ac_equivalence_free acs (Listset.diff aa !acx_rules) in
      let rr' = NS.ac_equivalence_free !(settings.ac_syms) rr in
-     let aa' = NS.c_equivalence_free !(settings.only_c_syms) aa' in
-     let rr' = NS.c_equivalence_free !(settings.only_c_syms) rr' in
+     let aa' = NS.c_equivalence_free cs aa' in
+     let rr' = NS.c_equivalence_free cs rr' in
      St.t_tmp2 := !St.t_tmp2 +. (Unix.gettimeofday () -. t);
      rr' @ aa'
  in
@@ -659,9 +663,10 @@ let detect_shape es gs =
 ;;
 
 let init_settings fs es gs =
- settings.ac_syms := Ac.symbols es;
+ let acs = Ac.symbols es in
+ settings.ac_syms := acs;
  let cs = Commutativity.symbols es in
- settings.only_c_syms := Listset.diff cs !(settings.ac_syms);
+ settings.only_c_syms := Listset.diff cs acs;
  settings.signature := Rules.signature (es @ gs);
  settings.d := !(fs.d);
  St.iterations := 0;
@@ -681,6 +686,8 @@ let init_settings fs es gs =
    F.printf "AC syms: %s \n%!"
      (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
      (Ac.symbols es));
+ let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
+ acx_rules := [ Lit.flip r | r <- acxs ] @ acxs;
  if !(fs.auto) then detect_shape es gs
 ;;
 
