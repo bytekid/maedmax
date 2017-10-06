@@ -686,8 +686,9 @@ let init_settings fs es gs =
    F.printf "AC syms: %s \n%!"
      (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
      (Ac.symbols es));
- let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
- acx_rules := [ Lit.flip r | r <- acxs ] @ acxs;
+ if !(settings.reduce_AC_equations_for_CPs) then (
+   let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
+   acx_rules := [ Lit.flip r | r <- acxs ] @ acxs);
  if !(fs.auto) then detect_shape es gs
 ;;
 

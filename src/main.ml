@@ -87,6 +87,8 @@ let options = Arg.align
     " preserve orientation of input axioms");
    ("-N", Arg.Int (fun n -> settings.n := n), 
     "<n> select <n> active equations from CPs of TRS");
+   ("--reduceAC-CPs", Arg.Set settings.reduce_AC_equations_for_CPs,
+    " do not use ACx equations for CPs");
    ("--sizeage", Arg.Int (fun n -> settings.size_age_ratio := n), 
     "<r> percentage of size (vs age) decisions");
    ("--size-bound", Arg.Int (fun n -> settings.size_bound_equations := n),
