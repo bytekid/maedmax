@@ -18,7 +18,8 @@ type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * limit
 type termination_strategy = t_setting list
 
 (* heuristically detected problem shape *)
-type shape = NoShape | Carbonio | Elio | Silicio | Ossigeno | Piombo | Xeno | Zolfo
+type shape = NoShape | Boro | Carbonio | Elio | Silicio | Ossigeno | Piombo |
+             Xeno | Zolfo
 
 type t = {
  auto     : bool ref; (* automatic mode *)
@@ -91,6 +92,7 @@ let inst_depth : int ref = ref 2
 
 let shape_to_string = function
     NoShape -> "none"
+  | Boro -> "boro"
   | Carbonio -> "carbonio"
   | Elio -> "elio"
   | Silicio -> "silicio"

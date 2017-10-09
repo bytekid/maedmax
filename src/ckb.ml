@@ -183,6 +183,7 @@ let keep acs n =
   L.mem (Lit.terms n) (ac_eqs ()) || not (Lit.is_ac_equivalent n acs)
 ;;
 
+
 (* ns is assumed to be size sorted *)
 let rec select_size_age aarew ns n =
   let rec select ns acc n =
@@ -194,8 +195,9 @@ let rec select_size_age aarew ns n =
       else (
         match get_oldest_node aarew with
         | Some b ->
-          Format.printf "age selected: %a  (%i) (%i)\n%!"
-          Lit.print b (Nodes.age b) (Lit.size b);
+          if debug () then
+            Format.printf "age selected: %a  (%i) (%i)\n%!"
+              Lit.print b (Nodes.age b) (Lit.size b);
           select ns (b::acc) (n-1)
         | None -> select (List.tl ns) (List.hd ns :: acc) (n-1))
    in select ns [] n
@@ -693,7 +695,11 @@ let detect_shape es gs =
     | Ossigeno -> settings.n := 12
     | Carbonio
     | NoShape -> settings.n := 6
-    | Elio -> settings.n := 6;
+    | Elio -> settings.n := 6
+    | Boro -> (
+      settings.n := 14;
+      settings.size_age_ratio := 80;
+      settings.strategy := Strategy.strategy_ordered_kbo);
   if debug () then
     Format.printf "shape: %s%!" (Settings.shape_to_string shape)
 ;;

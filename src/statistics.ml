@@ -107,6 +107,7 @@ let problem_shape es gs =
   let group = Theory.Group.count es > 0 in
   let lat = Theory.Lattice.count es > 0 in
   let acs = Theory.Ac.count es in
+  let cs = Theory.Commutativity.count es - acs in
   let distrib = Theory.Ring.has_distrib es in
   if (max_term_size > 65 && max_term_depth > 10) then
     Piombo (* large terms like in lattices, LAT084-1, LAT392-1, ... *)
@@ -122,6 +123,8 @@ let problem_shape es gs =
     Silicio (* lattice *)
   else if (not app && not dup && not distrib && acs = 0 && not mon) then
     Elio (* no structure detected *)
+  else if (dup && not app && acs = 0 && cs > 1 && not mon) then
+    Boro (* commutative symbols, duplication *)
   else
     NoShape
 ;;
