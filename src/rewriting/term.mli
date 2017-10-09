@@ -77,3 +77,5 @@ val is_sharped : t -> bool
 val is_embedded : t -> t -> bool
 
 val to_xml : t -> Xml.xml
+
+val similarity : Signature.sym list -> Signature.sym list -> t -> t -> float

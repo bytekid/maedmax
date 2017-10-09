@@ -183,15 +183,51 @@ let keep acs n =
   L.mem (Lit.terms n) (ac_eqs ()) || not (Lit.is_ac_equivalent n acs)
 ;;
 
+let select_different (aa,_) ns =
+  let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
+  let rsim (s,t) (s',t') = sim s s' +. sim t t' in
+  let msim r = NS.fold (fun r' m -> Pervasives.max m (rsim r (Lit.terms r'))) aa 0. in
+  let ns' = [ n, msim (Lit.terms n) | n <- ns ] in
+  let cmp m k = if m -. k < 0. then -1 else  if m -. k > 0. then 1 else 0 in
+  let ns' = List.sort (fun (_,m) (_,k) -> cmp m k) ns' in
+  let pnode f (n,d) =
+    F.fprintf f "%a  (%i) (%.3f)" Lit.print n (Lit.size n) d
+  in
+  let plist = Formatx.print_list pnode "\n " in
+  F.printf "most different:\n%a\n%!" plist (fst (Listx.split_at_most 10 ns'));
+
+  fst (List.hd ns')
+;;
+
+let select_goal_similar (_,_) ns =
+  let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
+  let rsim (s,t) (s',t') = sim s s' +. sim t t' in
+  let gs = !(settings.gs) in
+  let msim r = List.fold_left (fun m r' -> m +. (rsim r r')) 0. gs in
+  let ns' = [ n, msim (Lit.terms n) | n <- ns ] in
+  let cmp m k = if m -. k < 0. then 1 else if m -. k > 0. then -1 else 0 in
+  let ns' = List.sort (fun (_,m) (_,k) -> cmp m k) ns' in
+  (*let pnode f (n,d) =
+    F.fprintf f "%a  (%i) (%.3f)" Lit.print n (Lit.size n) d
+  in
+  let plist = Formatx.print_list pnode "\n " in
+  F.printf "most similar:\n%a\n%!" plist (fst (Listx.split_at_most 10 ns'));
+*)
+  fst (List.hd ns')
+;;
 
 (* ns is assumed to be size sorted *)
-let rec select_size_age aarew ns n =
+let select_size_age aarew ns_sorted all n =
   let rec select ns acc n =
     (* if ns is empty then there is also no interesting old node*)
     if n <= 0 || ns = [] then L.rev acc
     else
-      if Random.int 100 < !(settings.size_age_ratio) then
+      let rand = Random.int 100 in
+      if rand < !(settings.size_age_ratio) then
         select (List.tl ns) (List.hd ns :: acc) (n-1)
+      else if rand > 96 then
+        let b = select_goal_similar aarew all in
+        select ns (b::acc) (n-1)
       else (
         match get_oldest_node aarew with
         | Some b ->
@@ -200,9 +236,9 @@ let rec select_size_age aarew ns n =
               Lit.print b (Nodes.age b) (Lit.size b);
           select ns (b::acc) (n-1)
         | None -> select (List.tl ns) (List.hd ns :: acc) (n-1))
-   in select ns [] n
+   in select ns_sorted [] n
 ;;
-(*
+
 let split k ns =
   let rec split acc k size = function
     [] -> List.rev acc,[]
@@ -212,14 +248,14 @@ let split k ns =
       else List.rev acc,ns
   in
   let about_k, rest = split [] k 0 ns in
-  let plist = Formatx.print_list (fun f n -> F.fprintf f "%a  (%i)" Lit.print n (Nodes.age n)) "\n " in
-  (*F.printf "preselected:\n%a\n%!" plist about_k;*)
+  (*let plist = Formatx.print_list (fun f n -> F.fprintf f "%a  (%i)" Lit.print n (Nodes.age n)) "\n " in
+  F.printf "preselected:\n%a\n%!" plist about_k;*)
   let aa,pp = Listx.split_at_most k (NS.sort_size_age about_k) in
   (*F.printf "taken:\n%a\n%!" plist aa;
   let better a p = Lit.size a < Lit.size p || (Lit.size a = Lit.size p && NS.age a < NS.age p) in
   assert (List.for_all (fun a -> List.for_all (fun p -> better a p ) (pp@rest)) aa);*)
   aa
-;;*)
+;;
 
 (* selection of small new nodes *)
 let select' ?(only_size=true) aarew k cc thresh =
@@ -234,8 +270,9 @@ let select' ?(only_size=true) aarew k cc thresh =
    else
      let small,_ = L.partition (keep acs) small in
      let size_sorted = NS.sort_size small in
+     let size_sorted' = split k size_sorted in
      Random.self_init();
-     select_size_age aarew size_sorted k
+     select_size_age aarew size_sorted' (NS.smaller_than 16 cc) k
  in
  let pp = NS.diff_list cc aa in 
  if debug () then log_select cc aa;
@@ -287,6 +324,7 @@ let cps rew n1 n2 =
     try Hashtbl.find cp_cache (n1,n2)
     with Not_found -> (
       let cps = Lit.cps n1 n2 in
+      let cps = List.filter (fun l -> Lit.size l < !(settings.size_bound_equations)) cps in
       Hashtbl.add cp_cache (n1,n2) cps;
     cps))
 ;;
@@ -664,7 +702,7 @@ let rec phi ctx aa gs =
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
-    add_nodes (NS.sort_size (NS.smaller_than 100 rest));
+    add_nodes (NS.sort_size (NS.smaller_than 20 rest));
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
        Some r -> raise (Success r)
      | None ->
@@ -698,7 +736,8 @@ let detect_shape es gs =
     | Elio -> settings.n := 6
     | Boro -> (
       settings.n := 14;
-      settings.size_age_ratio := 80;
+      settings.size_age_ratio := 70;
+      settings.size_bound_equations := 16;
       settings.strategy := Strategy.strategy_ordered_kbo);
   if debug () then
     Format.printf "shape: %s%!" (Settings.shape_to_string shape)
