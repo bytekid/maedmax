@@ -7,6 +7,8 @@ let make ts e g = {terms = ts; is_goal = g; is_equality = e }
 
 let terms l = l.terms
 
+let size l = Rule.size (l.terms)
+
 let is_goal l = l.is_goal
 
 let is_equality l = l.is_equality

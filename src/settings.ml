@@ -18,7 +18,7 @@ type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * limit
 type termination_strategy = t_setting list
 
 (* heuristically detected problem shape *)
-type shape = None | Carbonio | Elio | Silicio | Ossigeno | Piombo | Xeno | Zolfo
+type shape = NoShape | Carbonio | Elio | Silicio | Ossigeno | Piombo | Xeno | Zolfo
 
 type t = {
  auto     : bool ref; (* automatic mode *)
@@ -76,7 +76,7 @@ let default = {
  size_age_ratio = ref 100;
  size_bound_equations = ref 200;
  size_bound_goals = ref 30;
- shape = ref None;
+ shape = ref NoShape;
  reduce_AC_equations_for_CPs = ref false
 }
 
@@ -90,7 +90,7 @@ let inequalities : Rules.t ref = ref []
 let inst_depth : int ref = ref 2
 
 let shape_to_string = function
-    None -> "none"
+    NoShape -> "none"
   | Carbonio -> "carbonio"
   | Elio -> "elio"
   | Silicio -> "silicio"

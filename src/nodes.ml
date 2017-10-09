@@ -13,6 +13,8 @@ let is_empty ns = H.length ns = 0
 
 let size = H.length
 
+let mem = H.mem
+
 let rec add n ns = if not (H.mem ns n) then H.add ns n true; ns
 
 let rec remove n ns = H.remove ns n; ns
@@ -55,6 +57,22 @@ let sort_size_unif ns =
   let unif,rest = L.partition Lit.is_unifiable sorted in
   unif @ rest
 ;;
+
+let ages = ref 0
+let age_table : (Rule.t,int) Hashtbl.t = Hashtbl.create 256
+
+let age n =
+  try Hashtbl.find age_table (Lit.terms n)
+  with Not_found ->
+    let a = !ages in
+    ages := a + 1;
+    Hashtbl.add age_table (Lit.terms n) a;
+    a
+;;
+
+let sort_size_age = L.sort (fun n1 n2 ->
+  let d = Rule.size (Lit.terms n1) - Rule.size (Lit.terms n2) in
+  if d <> 0 then d else age n1 - age n2)
 
 let exists p ns = H.fold (fun n _ b -> b || p n) ns false
 

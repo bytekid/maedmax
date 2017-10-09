@@ -123,7 +123,7 @@ let problem_shape es gs =
   else if (not app && not dup && not distrib && acs = 0 && not mon) then
     Elio (* no structure detected *)
   else
-    None
+    NoShape
 ;;
 
 let analyze es gs =

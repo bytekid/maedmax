@@ -106,10 +106,19 @@ let add_nodes ns =
     all_nodes := L.rev_append (L.rev !all_nodes) ns
 ;;
 
-let get_oldest_node _ =
+let rec get_oldest_node (aa,rew) =
   match !all_nodes with
-     [] -> failwith "Cache.get_oldest_node: no nodes there"
-   | n :: ns -> all_nodes := ns; n 
+     [] -> None
+   | n :: ns ->
+     all_nodes := ns;
+     let s,t = Lit.terms n in
+     if fst (rew#nf s) = fst (rew#nf t) || NS.mem aa n then (
+       (*if fst (rew#nf s) = fst (rew#nf t) then
+         Format.printf " ... discard/joinable %a \n" Lit.print n
+       else
+         Format.printf " ... discard/present %a \n" Lit.print n;*)
+       get_oldest_node (aa,rew))
+     else Some n
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -157,7 +166,10 @@ let interreduce rr =
 
 (* * SELECTION * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let log_select cc ss =
-  let plist = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
+  let pnode f n =
+    F.fprintf f "%a  (%i) (%i)" Lit.print n (Nodes.age n) (Lit.size n)
+  in
+  let plist = Formatx.print_list pnode "\n " in
   F.printf "select %i from %i:\n%a\n%!" (L.length ss) (NS.size cc) plist ss;
   F.printf "all:\n%a\n%!" plist (NS.sort_size (NS.to_list cc))
 ;;
@@ -171,21 +183,44 @@ let keep acs n =
   L.mem (Lit.terms n) (ac_eqs ()) || not (Lit.is_ac_equivalent n acs)
 ;;
 
-let rec select size_sorted acc n =
-  if n <= 0 then L.rev acc
-  else
-    if Random.int 100 < !(settings.size_age_ratio) then
-      match size_sorted with
-          [] -> L.rev acc
-        | b::bs -> select bs (b::acc) (n-1)
-    else if !all_nodes = [] then acc
+(* ns is assumed to be size sorted *)
+let rec select_size_age aarew ns n =
+  let rec select ns acc n =
+    (* if ns is empty then there is also no interesting old node*)
+    if n <= 0 || ns = [] then L.rev acc
     else
-      let b = get_oldest_node () in
-      select size_sorted (b::acc) (n-1)
+      if Random.int 100 < !(settings.size_age_ratio) then
+        select (List.tl ns) (List.hd ns :: acc) (n-1)
+      else (
+        match get_oldest_node aarew with
+        | Some b ->
+          Format.printf "age selected: %a  (%i) (%i)\n%!"
+          Lit.print b (Nodes.age b) (Lit.size b);
+          select ns (b::acc) (n-1)
+        | None -> select (List.tl ns) (List.hd ns :: acc) (n-1))
+   in select ns [] n
 ;;
+(*
+let split k ns =
+  let rec split acc k size = function
+    [] -> List.rev acc,[]
+    | n :: ns ->
+      let s = Lit.size n in
+      if k > 0 || s = size then (split (n::acc) (Pervasives.max 0 (k - 1)) s ns)
+      else List.rev acc,ns
+  in
+  let about_k, rest = split [] k 0 ns in
+  let plist = Formatx.print_list (fun f n -> F.fprintf f "%a  (%i)" Lit.print n (Nodes.age n)) "\n " in
+  (*F.printf "preselected:\n%a\n%!" plist about_k;*)
+  let aa,pp = Listx.split_at_most k (NS.sort_size_age about_k) in
+  (*F.printf "taken:\n%a\n%!" plist aa;
+  let better a p = Lit.size a < Lit.size p || (Lit.size a = Lit.size p && NS.age a < NS.age p) in
+  assert (List.for_all (fun a -> List.for_all (fun p -> better a p ) (pp@rest)) aa);*)
+  aa
+;;*)
 
 (* selection of small new nodes *)
-let select' ?(only_size=true) k cc thresh =
+let select' ?(only_size=true) aarew k cc thresh =
  let k = if k = 0 then select_count !(St.iterations) else k in
  let acs = !(settings.ac_syms) in
  let small = NS.smaller_than thresh cc in
@@ -198,7 +233,7 @@ let select' ?(only_size=true) k cc thresh =
      let small,_ = L.partition (keep acs) small in
      let size_sorted = NS.sort_size small in
      Random.self_init();
-     select size_sorted [] k
+     select_size_age aarew size_sorted k
  in
  let pp = NS.diff_list cc aa in 
  if debug () then log_select cc aa;
@@ -212,11 +247,12 @@ let axs _ = [ Lit.make_axiom e | e <- !(settings.es) ]
 
 let select_for_restart cc =
   let k = !(St.restarts) * 2 in
-  fst (select' k (NS.diff_list cc (axs ())) 30)
+  let rew = new Rewriter.rewriter [] [] Order.default in
+  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs ())) 30)
 
-let select cc =
+let select rew cc =
   let thresh = !(settings.size_bound_equations) in
-  St.take_time St.t_select (select' ~only_size:false 0 cc) thresh
+  St.take_time St.t_select (select' ~only_size:false rew 0 cc) thresh
 ;;
 
 let select_goals' k gg thresh =
@@ -263,7 +299,7 @@ let overlaps rew rr aa =
      let aa' = NS.ac_equivalence_free acs (Listset.diff aa !acx_rules) in
      let rr' = NS.ac_equivalence_free !(settings.ac_syms) rr in
      let aa' = NS.c_equivalence_free cs aa' in
-     let rr' = NS.c_equivalence_free cs rr' in
+     (*let rr' = NS.c_equivalence_free cs rr' in*)
      St.t_tmp2 := !St.t_tmp2 +. (Unix.gettimeofday () -. t);
      rr' @ aa'
  in
@@ -619,7 +655,7 @@ let rec phi ctx aa gs =
     let aa_for_ols = NS.to_list (eqs_for_overlaps irred') in
     let cps = reduced rew (overlaps rew rr aa_for_ols) in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
-    let sel, rest = select nn in
+    let sel, rest = select (aa,rew) nn in
     (* FIXME where to move this variable registration stuff? *)
     if has_comp () then
       NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
@@ -656,7 +692,7 @@ let detect_shape es gs =
       settings.strategy := Strategy.strategy_ordered_lpo
     | Ossigeno -> settings.n := 12
     | Carbonio
-    | None -> settings.n := 6
+    | NoShape -> settings.n := 6
     | Elio -> settings.n := 6;
   if debug () then
     Format.printf "shape: %s%!" (Settings.shape_to_string shape)
