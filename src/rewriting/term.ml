@@ -213,23 +213,7 @@ let rec to_xml = function
     Xml.Element("funapp", [], name :: xs)
 ;;
 
-let rec similarity r = function
-| V _, V _ -> r
-| F(f,_), F(g,_) when f <> g -> 0.0
-| F(f,[]), F(_,[]) -> r (* equal constants *) 
-| F(f,ts), F(_,ss) ->
-  let rhalf = r /. 2. in
-  let rarg = rhalf /. (float_of_int (List.length ss)) in
-  List.fold_left2 (fun a s t -> a +. similarity rarg (s,t)) rhalf ts ss 
-| _ -> 0.
-;;
-
-let similarity acs cs s t =
-  let s',t' = flatten acs s, flatten acs t in
-  similarity 1.0 (args_sort cs s',args_sort cs t')
-;;
-
-let similarity_in s t =
+let similarity_wrt s t =
   let exists p s = try let _ = subterm_at p s in true with _ -> false in
   let same p s t = 
     match subterm_at p s, subterm_at p t with
@@ -242,4 +226,4 @@ let similarity_in s t =
   float_of_int l /. (float_of_int (List.length pos))
 ;;
 
-let similarity _ _ s t = similarity_in s t +. similarity_in t s
+let similarity acs cs s t = (similarity_wrt s t +. similarity_wrt t s) /. 2.
