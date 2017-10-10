@@ -183,49 +183,28 @@ let keep acs n =
   L.mem (Lit.terms n) (ac_eqs ()) || not (Lit.is_ac_equivalent n acs)
 ;;
 
-let select_different (aa,_) ns =
-  let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
-  let rsim (s,t) (s',t') = sim s s' +. sim t t' in
-  let msim r = NS.fold (fun r' m -> Pervasives.max m (rsim r (Lit.terms r'))) aa 0. in
-  let ns' = [ n, msim (Lit.terms n) | n <- ns ] in
-  let cmp m k = if m -. k < 0. then -1 else  if m -. k > 0. then 1 else 0 in
-  let ns' = List.sort (fun (_,m) (_,k) -> cmp m k) ns' in
-  let pnode f (n,d) =
-    F.fprintf f "%a  (%i) (%.3f)" Lit.print n (Lit.size n) d
-  in
-  let plist = Formatx.print_list pnode "\n " in
-  F.printf "most different:\n%a\n%!" plist (fst (Listx.split_at_most 10 ns'));
-
-  fst (List.hd ns')
-;;
-
 let select_goal_similar (_,_) ns =
   let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
   let rsim (s,t) (s',t') = sim s s' +. sim t t' in
-  let gs = !(settings.gs) in
-  let msim r = List.fold_left (fun m r' -> m +. (rsim r r')) 0. gs in
+  let msim r = List.fold_left (fun m q -> m +. (rsim r q)) 0. !(settings.gs) in
   let ns' = [ n, msim (Lit.terms n) | n <- ns ] in
   let cmp m k = if m -. k < 0. then 1 else if m -. k > 0. then -1 else 0 in
   let ns' = List.sort (fun (_,m) (_,k) -> cmp m k) ns' in
-  (*let pnode f (n,d) =
-    F.fprintf f "%a  (%i) (%.3f)" Lit.print n (Lit.size n) d
-  in
-  let plist = Formatx.print_list pnode "\n " in
-  F.printf "most similar:\n%a\n%!" plist (fst (Listx.split_at_most 10 ns'));
-*)
   fst (List.hd ns')
 ;;
+
+let selections = ref 0
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
   let rec select ns acc n =
     (* if ns is empty then there is also no interesting old node*)
     if n <= 0 || ns = [] then L.rev acc
-    else
-      let rand = Random.int 100 in
-      if rand < !(settings.size_age_ratio) then
+    else (
+      selections := !selections + 1;
+      if !selections mod (!(settings.size_age_ratio) / 10) <> 0 then
         select (List.tl ns) (List.hd ns :: acc) (n-1)
-      else if rand > 96 then
+      else if !selections mod 26 = 0 then
         let b = select_goal_similar aarew all in
         select ns (b::acc) (n-1)
       else (
@@ -235,7 +214,7 @@ let select_size_age aarew ns_sorted all n =
             Format.printf "age selected: %a  (%i) (%i)\n%!"
               Lit.print b (Nodes.age b) (Lit.size b);
           select ns (b::acc) (n-1)
-        | None -> select (List.tl ns) (List.hd ns :: acc) (n-1))
+        | None -> select (List.tl ns) (List.hd ns :: acc) (n-1)))
    in select ns_sorted [] n
 ;;
 
@@ -324,7 +303,6 @@ let cps rew n1 n2 =
     try Hashtbl.find cp_cache (n1,n2)
     with Not_found -> (
       let cps = Lit.cps n1 n2 in
-      let cps = List.filter (fun l -> Lit.size l < !(settings.size_bound_equations)) cps in
       Hashtbl.add cp_cache (n1,n2) cps;
     cps))
 ;;
