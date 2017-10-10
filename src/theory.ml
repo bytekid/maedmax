@@ -95,12 +95,13 @@ module Monoid = struct
 
   let is_for es (f, id) = is_right_for es (f, id) || is_left_for es (f, id)
 
-  let count es =
+  let symbols es =
     let fs = Rules.signature es in
     let bs = [ f | f,a <- fs; a = 2 ] in
     let cs = [ f | f,a <- fs; a = 0 ] in
-    let fs = List.filter (is_for es) [ f,id | f <- bs; id <- cs ] in
-    List.length fs
+    List.filter (is_for es) [ f,id | f <- bs; id <- cs ]
+
+  let count es = List.length (symbols es)
 
   let is_contained es = count es > 0
 
@@ -124,13 +125,14 @@ module Group = struct
 
   let is_for es fs = is_right_for es fs || is_left_for es fs
 
-  let count es =
+  let symbols es =
     let fs = Rules.signature es in
     let bs = [ f | f,a <- fs; a = 2 ] in
     let us = [ f | f,a <- fs; a = 1 ] in
     let cs = [ f | f,a <- fs; a = 0 ] in
-    let fs = List.filter (is_for es) [ f,i,id | f <- bs; i <- us; id <- cs ] in
-    List.length fs
+    List.filter (is_for es) [ f,i,id | f <- bs; i <- us; id <- cs ]
+
+  let count es = List.length (symbols es)
 
   let is_contained es = count es > 0
 end
@@ -139,15 +141,15 @@ module AbelianGroup = struct
   (*** FUNCTIONS **************************************************************)
   let is_for es (f,i,id) = Group.is_for es (f,i,id) && Ac.is_for es f
 
-  let count es =
+  let symbols es =
     let fs = Rules.signature es in
     let bs = [ f | f,a <- fs; a = 2 ] in
     let us = [ f | f,a <- fs; a = 1 ] in
     let cs = [ f | f,a <- fs; a = 0 ] in
-    let fs = List.filter (is_for es) [ f,i,id | f <- bs; i <- us; id <- cs ] in
-    List.length fs
+    List.filter (is_for es) [ f,i,id | f <- bs; i <- us; id <- cs ]
 
-  let is_contained es = count es > 0
+  let count es = List.length (symbols es)
+
 end
 
 module Ring = struct
@@ -181,15 +183,16 @@ module Ring = struct
     AbelianGroup.is_for es (a,i,z) && ex (var (associativity m)) es
   ;;
 
-  let count es =
+  let symbols es =
     let fs = Rules.signature es in
     let bs = [ f | f,a <- fs; a = 2 ] in
     let us = [ f | f,a <- fs; a = 1 ] in
     let cs = [ f | f,a <- fs; a = 0 ] in
     let syms = [ m,a,i,z | m <- bs; a <- bs; i <- us; z <- cs] in
-    let fs = List.filter (is_for es) syms in
-    List.length fs
+    List.filter (is_for es) syms
   ;;
+
+  let count es = List.length (symbols es)
 
   let is_contained es = count es > 0
 end
@@ -208,11 +211,12 @@ module Lattice = struct
     Ac.is_for es f && Ac.is_for es g
   ;;
 
-  let count es =
+  let symbols es =
     let fs = Rules.signature es in
     let bs = [ f | f,a <- fs; a = 2 ] in
-    let fs = List.filter (is_for es) [ j,m | j <- bs; m <- bs ] in
-    List.length fs / 2 (* account for symmetry *)
+    List.filter (is_for es) [ j,m | j <- bs; m <- bs ]
+
+  let count es = List.length (symbols es) / 2 (* account for symmetry *)
 
   let is_contained es = count es > 0
 end
