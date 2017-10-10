@@ -114,9 +114,9 @@ let rec get_oldest_node (aa,rew) =
      let s,t = Lit.terms n in
      if fst (rew#nf s) = fst (rew#nf t) || NS.mem aa n then (
        (*if fst (rew#nf s) = fst (rew#nf t) then
-         Format.printf " ... discard/joinable %a \n" Lit.print n
+         F.printf " ... discard/joinable %a \n" Lit.print n
        else
-         Format.printf " ... discard/present %a \n" Lit.print n;*)
+         F.printf " ... discard/present %a \n" Lit.print n;*)
        get_oldest_node (aa,rew))
      else Some n
 ;;
@@ -186,13 +186,13 @@ let keep acs n =
 let select_goal_similar (_,_) ns =
   let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
   let rsim (s,t) (s',t') = sim s s' +. sim t t' in
-  let msim r = List.fold_left (fun m q -> m +. (rsim r q)) 0. !(settings.gs) in
+  let msim r = L.fold_left (fun m q -> m +. (rsim r q)) 0. !(settings.gs) in
   let ns' = [ n, msim (Lit.terms n) | n <- ns ] in
   let cmp m k = if m -. k < 0. then 1 else if m -. k > 0. then -1 else 0 in
-  let ns' = List.sort (fun (_,m) (_,k) -> cmp m k) ns' in
-  let n,d = List.hd ns' in
+  let ns' = L.sort (fun (_,m) (_,k) -> cmp m k) ns' in
+  let n,d = L.hd ns' in
   if debug () then
-    Format.printf "selected for goal similarity: %a  (%i) %.3f\n%!"
+    F.printf "selected for goal similarity: %a  (%i) %.3f\n%!"
       Lit.print n (Nodes.age n) d;
   n
 ;;
@@ -207,7 +207,7 @@ let select_size_age aarew ns_sorted all n =
     else (
       selections := !selections + 1;
       if !selections mod (!(settings.size_age_ratio) / 10) <> 0 then
-        select (List.tl ns) (List.hd ns :: acc) (n-1)
+        select (L.tl ns) (L.hd ns :: acc) (n-1)
       else if !selections mod 26 = 0 then
         let b = select_goal_similar aarew all in
         select ns (b::acc) (n-1)
@@ -215,29 +215,23 @@ let select_size_age aarew ns_sorted all n =
         match get_oldest_node aarew with
         | Some b ->
           if debug () then
-            Format.printf "age selected: %a  (%i) (%i)\n%!"
+            F.printf "age selected: %a  (%i) (%i)\n%!"
               Lit.print b (Nodes.age b) (Lit.size b);
           select ns (b::acc) (n-1)
-        | None -> select (List.tl ns) (List.hd ns :: acc) (n-1)))
+        | None -> select (L.tl ns) (L.hd ns :: acc) (n-1)))
    in select ns_sorted [] n
 ;;
 
 let split k ns =
   let rec split acc k size = function
-    [] -> List.rev acc,[]
+    [] -> L.rev acc,[]
     | n :: ns ->
       let s = Lit.size n in
       if k > 0 || s = size then (split (n::acc) (Pervasives.max 0 (k - 1)) s ns)
-      else List.rev acc,ns
+      else L.rev acc,ns
   in
-  let about_k, rest = split [] k 0 ns in
-  (*let plist = Formatx.print_list (fun f n -> F.fprintf f "%a  (%i)" Lit.print n (Nodes.age n)) "\n " in
-  F.printf "preselected:\n%a\n%!" plist about_k;*)
-  let aa,pp = Listx.split_at_most k (NS.sort_size_age about_k) in
-  (*F.printf "taken:\n%a\n%!" plist aa;
-  let better a p = Lit.size a < Lit.size p || (Lit.size a = Lit.size p && NS.age a < NS.age p) in
-  assert (List.for_all (fun a -> List.for_all (fun p -> better a p ) (pp@rest)) aa);*)
-  aa
+  let about_k, _ = split [] k 0 ns in
+  fst (Listx.split_at_most k (NS.sort_size_age about_k))
 ;;
 
 (* selection of small new nodes *)
@@ -703,8 +697,8 @@ let rec phi ctx aa gs =
 let detect_shape es gs =
   let shape = St.problem_shape es gs in
   if debug () then
-    Format.printf "shape: %s%!" (Settings.shape_to_string shape);
-  let fs_count = List.length (Rules.signature es) in
+    F.printf "shape: %s%!" (Settings.shape_to_string shape);
+  let fs_count = L.length (Rules.signature es) in
   match shape with
     | Piombo
     | Xeno
@@ -794,13 +788,13 @@ let rec ckb fs (es, gs) =
     let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
     let es' = [ if d then e else R.flip e | e,d <- es ] in
     require (big_and ctx [ !! (C.rule_var ctx (R.flip r)) | r <- es' ]);
-    List.iter (fun r -> assert_weighted (C.rule_var ctx r) 27) es'
+    L.iter (fun r -> assert_weighted (C.rule_var ctx r) 27) es'
     );
   let res = phi ctx ns0 (NS.of_list gs0) in
   del_context ctx;
   res
  with Restart es_new -> (
-  if debug () then Format.printf "restart\n%!";
+  if debug () then F.printf "restart\n%!";
   pop_strategy ();
   Strategy.clear ();
   Cache.clear ();
