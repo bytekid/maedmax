@@ -263,7 +263,7 @@ let select' ?(only_size=true) aarew k cc thresh =
  let acs = !(settings.ac_syms) in
  let small = NS.smaller_than thresh cc in
  let aa = 
-   if only_size then
+   if only_size || !(settings.size_age_ratio) = 100 then
      let aa,_ = L.partition (keep acs) small in
      let aa = NS.sort_size aa in
      fst (Listx.split_at_most k aa)
