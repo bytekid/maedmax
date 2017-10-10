@@ -190,7 +190,11 @@ let select_goal_similar (_,_) ns =
   let ns' = [ n, msim (Lit.terms n) | n <- ns ] in
   let cmp m k = if m -. k < 0. then 1 else if m -. k > 0. then -1 else 0 in
   let ns' = List.sort (fun (_,m) (_,k) -> cmp m k) ns' in
-  fst (List.hd ns')
+  let n,d = List.hd ns' in
+  if debug () then
+    Format.printf "selected for goal similarity: %a  (%i) %.3f\n%!"
+      Lit.print n (Nodes.age n) d;
+  n
 ;;
 
 let selections = ref 0
@@ -698,6 +702,8 @@ let rec phi ctx aa gs =
 
 let detect_shape es gs =
   let shape = St.problem_shape es gs in
+  if debug () then
+    Format.printf "shape: %s%!" (Settings.shape_to_string shape);
   let fs_count = List.length (Rules.signature es) in
   match shape with
     | Piombo
@@ -716,9 +722,7 @@ let detect_shape es gs =
       settings.n := 14;
       settings.size_age_ratio := 70;
       settings.size_bound_equations := 16;
-      settings.strategy := Strategy.strategy_ordered_kbo);
-  if debug () then
-    Format.printf "shape: %s%!" (Settings.shape_to_string shape)
+      settings.strategy := Strategy.strategy_ordered_kbo)
 ;;
 
 let init_settings fs es gs =
