@@ -91,11 +91,15 @@ let is_applicative es =
  List.length bs = 1 && List.for_all (fun (_,a) -> a = 0) rest
 ;;
 
+let duplicating_rule (l,r) =
+  Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
+
 let is_duplicating es =
-  let dup (l,r) =
-    Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
-  in
-  List.exists dup (es @ [Rule.flip e | e <- es ])
+  List.exists duplicating_rule (es @ [Rule.flip e | e <- es ])
+;;
+
+let find_duplicating es =
+  List.find duplicating_rule (es @ [Rule.flip e | e <- es ])
 ;;
 
 let problem_shape es gs =
@@ -123,7 +127,7 @@ let problem_shape es gs =
     Carbonio (* COL003-* *)
   else if (not app && not distrib && acs > 1 && lat && not mon) then
     Silicio (* lattice *)
-  else if (not app && not dup && not distrib && acs = 0 && not mon) then
+  else if (not app && not dup && not distrib && acs = 0 && cs = 0 && not mon) then
     Elio (* no structure detected *)
   else if (dup && not app && acs = 0 && cs > 1 && not mon) then
     Boro (* commutative symbols, duplication *)
@@ -138,7 +142,10 @@ let theory_equations es =
     Theory.Monoid.is_axiom eq || Theory.Group.is_axiom eq ||
     Theory.Lattice.is_axiom eq || Theory.Ring.is_distributivity eq
   in
-  List.filter theory_relevant es
+  let ths = List.filter theory_relevant es in
+  let esl = [ Literal.terms e | e <- es] in
+  if not (is_duplicating esl) then ths
+  else Literal.make_axiom (find_duplicating esl) :: ths
 ;;
 
 let analyze es gs =
