@@ -585,7 +585,7 @@ let do_restart es gs =
    true)
  else
    let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
-   let shape = St.problem_shape (to_eqs es) (to_eqs gs) in
+   let shape = St.problem_shape (to_eqs es) in
    if shape <> !(St.shape) && shape <> NoShape then (
      if debug () then
        Format.printf "restart (new shape %s detected)\n%!" (Settings.shape_to_string shape);
@@ -616,8 +616,8 @@ let do_restart es gs =
 ;;
 
 
-let detect_shape es gs =
-  let shape = St.problem_shape es gs in
+let detect_shape es =
+  let shape = St.problem_shape es in
   St.shape := shape;
   if debug () then
     F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
@@ -760,7 +760,7 @@ let init_settings fs es gs =
  if !(settings.reduce_AC_equations_for_CPs) then (
    let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
    acx_rules := [ Lit.flip r | r <- acxs ] @ acxs);
- if !(fs.auto) then detect_shape es gs
+ if !(fs.auto) then detect_shape es
 ;;
 
 let remember_state es gs =

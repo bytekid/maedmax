@@ -102,7 +102,7 @@ let find_duplicating es =
   List.find duplicating_rule (es @ [Rule.flip e | e <- es ])
 ;;
 
-let problem_shape es gs =
+let problem_shape es =
   let rmax (l,r) = Pervasives.max (Term.size l) (Term.size r) in
   let max_term_size = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
   let rmax (l,r) = Pervasives.max (Term.depth l) (Term.depth r) in
@@ -175,7 +175,7 @@ let analyze es gs =
   let ring = "ring", `Int (Theory.Ring.count es) in
   let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
-  let shp = "shape", `String (Settings.shape_to_string (problem_shape es gs)) in
+  let shp = "shape", `String (Settings.shape_to_string (problem_shape es)) in
   `Assoc [eqc; ieqc; eqs; mar; symcount; mts; mtd; gc; app; dup;
           cs; ac; mon; group; agroup; ring; lattice; distrib; shp ]
 ;;
