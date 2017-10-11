@@ -626,8 +626,11 @@ let detect_shape es =
   let fs_count = L.length (Rules.signature es) in
   match shape with
     | Piombo
-    | Xeno
     | Zolfo -> settings.n := 10
+    | Xeno -> (
+      settings.reduce_AC_equations_for_CPs := true;
+      settings.n := 10
+    )
     | Elio when fs_count > 3 -> settings.n := 10
     | Silicio ->
       settings.n := 10;
