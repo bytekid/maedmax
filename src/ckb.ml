@@ -581,14 +581,14 @@ let log_max_trs j rr rr' c =
    made in the last n iterations. *)
 let do_restart es gs =
  if St.memory () > 6000 then (
-   if debug () then F.printf "Memory limit of 6GB reached!\n%!";
+   if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
    true)
  else
    let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
    let shape = St.problem_shape (to_eqs es) (to_eqs gs) in
-   if shape <> !(St.shape) then (
+   if shape <> !(St.shape) && shape <> NoShape then (
      if debug () then
-       Format.printf "new shape %s\n%!" (Settings.shape_to_string shape);
+       Format.printf "restart (new shape %s detected)\n%!" (Settings.shape_to_string shape);
      true)
    else
   (* no progress measure *)
@@ -596,7 +596,7 @@ let do_restart es gs =
   let rep = L.for_all ((=) h) !hash_iteration in
   hash_iteration := h :: !hash_iteration;
   hash_iteration := Listx.take_at_most 20 !hash_iteration;
-  if rep && debug () then F.printf "Restart: repeated iteration state\n%!";
+  if rep && debug () then F.printf "restart (repeated iteration state)\n%!";
   (* iteration/size bound*)
   let running_time = (Unix.gettimeofday () -. !(start_time)) in
   let limit =
@@ -610,8 +610,8 @@ let do_restart es gs =
   let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
   let eqcounts = Listx.take_at_most 6 !(Statistics.eq_counts) in
   let blowup = !(St.iterations) > 6 && is_exp eqcounts in
-  if blowup && debug () then F.printf "Blowup!\n%!";
-  if limit && debug () then F.printf "Restart: limit reached\n";
+  if blowup && debug () then F.printf "restart (blowup)\n%!";
+  if limit && debug () then F.printf "restart (limit reached)\n";
   rep || limit || blowup
 ;;
 
