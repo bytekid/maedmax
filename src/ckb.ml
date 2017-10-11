@@ -121,6 +121,11 @@ let rec get_oldest_node (aa,rew) =
      else Some n
 ;;
 
+let shape_changed es =
+  let shape = St.problem_shape (List.map Lit.terms (NS.to_list es)) in
+  !(settings.auto) && shape <> !(St.shape) && shape <> NoShape
+;;
+
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
   if has_comp () then
@@ -265,7 +270,8 @@ let select_for_restart cc =
   let k = !(St.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
   let ths = Listset.diff (St.theory_equations (NS.to_list cc)) (axs ()) in
-  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths
+  let ths' = if shape_changed cc then ths else [] in
+  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
 
 let select rew cc =
   let thresh = !(settings.size_bound_equations) in
@@ -275,9 +281,7 @@ let select rew cc =
 let select_goals' k gg thresh =
  let acs = !(settings.ac_syms) in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
- let t = Unix.gettimeofday () in
  let sorted = NS.sort_size_unif small in
- St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. t);
  let gg_a = fst (Listx.split_at_most k sorted) in
  let gg_p = NS.diff_list gg gg_a in 
  if debug () then log_select gg gg_a;
@@ -575,7 +579,6 @@ let log_max_trs j rr rr' c =
    Rules.print (Variant.rename_rules rr')
 ;;
 
-
 (* towards main control loop *)
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
@@ -583,14 +586,11 @@ let do_restart es gs =
  if St.memory () > 6000 then (
    if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
    true)
- else
-   let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
-   let shape = St.problem_shape (to_eqs es) in
-   if shape <> !(St.shape) && shape <> NoShape then (
+ else if shape_changed es then (
      if debug () then
-       Format.printf "restart (new shape %s detected)\n%!" (Settings.shape_to_string shape);
+       Format.printf "restart (new shape detected)\n%!";
      true)
-   else
+ else
   (* no progress measure *)
   let h = Hashtbl.hash (NS.size es, es, gs) in
   let rep = L.for_all ((=) h) !hash_iteration in
