@@ -315,13 +315,11 @@ let overlaps rew rr aa =
  let ns =
    if not !(settings.unfailing) then rr
    else
-     let t = Unix.gettimeofday () in
      let acs, cs = !(settings.ac_syms), !(settings.only_c_syms) in
      let aa' = NS.ac_equivalence_free acs (Listset.diff aa !acx_rules) in
      let rr' = NS.ac_equivalence_free !(settings.ac_syms) rr in
      let aa' = NS.c_equivalence_free cs aa' in
      (*let rr' = NS.c_equivalence_free cs rr' in*)
-     St.t_tmp2 := !St.t_tmp2 +. (Unix.gettimeofday () -. t);
      rr' @ aa'
  in
  NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ]
@@ -448,16 +446,16 @@ let rlred ctx cc (s,t) =
   let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
-    let red = Rewriting.reducible_with [rl] in
-    let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
-    let b = is_rule rl && (red t || red s) in
-    Hashtbl.add redc (j, i) b; b)
+    try Hashtbl.find redc (j, i)
+    with Not_found ->
+      let red = Rewriting.reducible_with [rl] in
+      let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
+      let b = is_rule rl && (red t || red s) in
+      Hashtbl.add redc (j, i) b; b)
   in big_or ctx [ C.find_rule (Lit.terms n) | n <- ccs; redcbl (Lit.terms n) ]
 ;;
 
-let c_red ctx cc =
-  L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
-;;
+let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
 
 let c_red ctx = St.take_time St.t_cred (c_red ctx)
 
@@ -476,6 +474,8 @@ let c_cpred ctx = St.take_time St.t_ccpred (c_cpred ctx)
 let c_max_red ctx cc =
   L.iter (fun n -> assert_weighted (rlred ctx cc (Lit.terms n)) 1) cc
 ;;
+
+let c_max_red ctx = St.take_time St.t_cred (c_max_red ctx)
 
 
 let c_max_goal_red ctx cc gs =
@@ -558,7 +558,9 @@ let max_k ctx cc gs =
    St.take_time St.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symm);
+   let t = Unix.gettimeofday () in
    search_constraints ctx cc gs;
+   St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. t);
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
