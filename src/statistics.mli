@@ -21,6 +21,7 @@ val restarts : int ref
 val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref
+val shape : Settings.shape ref
 
 val memory : unit -> int
 
@@ -31,6 +32,8 @@ val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 val analyze : Literal.t list -> Literal.t list -> Yojson.Basic.json
 
 val problem_shape : Rules.t-> Rules.t -> Settings.shape
+
+val theory_equations : Literal.t list -> Literal.t list
 
 val json : unit -> Yojson.Basic.json
 

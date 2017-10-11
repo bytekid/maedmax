@@ -264,7 +264,8 @@ let axs _ = [ Lit.make_axiom e | e <- !(settings.es) ]
 let select_for_restart cc =
   let k = !(St.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
-  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs ())) 30)
+  let ths = Listset.diff (St.theory_equations (NS.to_list cc)) (axs ()) in
+  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths
 
 let select rew cc =
   let thresh = !(settings.size_bound_equations) in
@@ -583,6 +584,13 @@ let do_restart es gs =
    if debug () then F.printf "Memory limit of 6GB reached!\n%!";
    true)
  else
+   let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
+   let shape = St.problem_shape (to_eqs es) (to_eqs gs) in
+   if shape <> !(St.shape) then (
+     if debug () then
+       Format.printf "new shape %s\n%!" (Settings.shape_to_string shape);
+     true)
+   else
   (* no progress measure *)
   let h = Hashtbl.hash (NS.size es, es, gs) in
   let rep = L.for_all ((=) h) !hash_iteration in
@@ -607,6 +615,34 @@ let do_restart es gs =
   rep || limit || blowup
 ;;
 
+
+let detect_shape es gs =
+  let shape = St.problem_shape es gs in
+  St.shape := shape;
+  if debug () then
+    F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
+  let fs_count = L.length (Rules.signature es) in
+  match shape with
+    | Piombo
+    | Xeno
+    | Zolfo -> settings.n := 10
+    | Elio when fs_count > 3 -> settings.n := 10
+    | Silicio ->
+      settings.n := 10;
+      settings.size_age_ratio := 85;
+      settings.strategy := Strategy.strategy_ordered_lpo
+    | Ossigeno -> settings.n := 12
+    | Carbonio
+    | NoShape -> settings.n := 6
+    | Elio -> settings.n := 6
+    | Boro -> (
+      settings.n := 14;
+      settings.size_age_ratio := 70;
+      settings.size_bound_equations := 16;
+      settings.strategy := Strategy.strategy_ordered_kbo)
+;;
+
+
 let set_iteration_stats aa gs =
   let i = !St.iterations in
   St.iterations := i + 1;
@@ -630,6 +666,7 @@ let set_iteration_stats aa gs =
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string json))
 ;;
 
+
 let store_trs ctx j rr c =
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS is used; have to store *)
@@ -643,9 +680,11 @@ let store_trs ctx j rr c =
   rr_index
 ;;
 
+
 let non_gjoinable ctx ns rr = NS.subsumption_free ns
 
 let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
+
 
 let rec phi ctx aa gs =
   if do_restart aa gs then
@@ -693,31 +732,6 @@ let rec phi ctx aa gs =
   with Success r -> r
 ;;
 
-
-let detect_shape es gs =
-  let shape = St.problem_shape es gs in
-  if debug () then
-    F.printf "shape: %s%!" (Settings.shape_to_string shape);
-  let fs_count = L.length (Rules.signature es) in
-  match shape with
-    | Piombo
-    | Xeno
-    | Zolfo -> settings.n := 10
-    | Elio when fs_count > 3 -> settings.n := 10
-    | Silicio ->
-      settings.n := 10;
-      settings.size_age_ratio := 85;
-      settings.strategy := Strategy.strategy_ordered_lpo
-    | Ossigeno -> settings.n := 12
-    | Carbonio
-    | NoShape -> settings.n := 6
-    | Elio -> settings.n := 6
-    | Boro -> (
-      settings.n := 14;
-      settings.size_age_ratio := 70;
-      settings.size_bound_equations := 16;
-      settings.strategy := Strategy.strategy_ordered_kbo)
-;;
 
 let init_settings fs es gs =
  let acs = Ac.symbols es in

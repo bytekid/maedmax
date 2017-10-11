@@ -23,6 +23,12 @@ module Commutativity = struct
   let count es = List.length (symbols es)
 
   let equivalent cs (s, t) = Term.args_sort cs s = Term.args_sort cs t
+
+  let is_axiom = function
+      F(f, [V x; V y]), F(f', [V y'; V x']) -> f=f' && x=x' && y=y' && x <> y
+    | _ -> false
+  ;;
+
 end
 
 module Ac = struct
@@ -69,6 +75,15 @@ module Ac = struct
   let count es = List.length (symbols es)
 
   let equivalent acs (s, t) = Term.flatten acs s = Term.flatten acs t
+
+  let is_assoc_axiom = function
+      F(f0, [F(f1, [V x; V y]); V z]), F(f2, [V x'; F(f3, [V y'; V z'])]) ->
+      f0=f1 && f1=f2 && f2=f3 &&
+      x=x' && y=y' && z=z' && x<>y && x<>z && y<>z
+    | _ -> false
+  ;;
+
+  let is_axiom st = Commutativity.is_axiom st || is_assoc_axiom st
 end
 
 module Monoid = struct
@@ -105,6 +120,19 @@ module Monoid = struct
 
   let is_contained es = count es > 0
 
+  let is_left_ident_axiom = function
+      F(f,[F(n,[]);V x]), V x' -> x=x'
+    | _ -> false
+  ;;
+
+  let is_right_ident_axiom = function
+      F(f,[V x;F(n,[])]), V x' -> x=x'
+    | _ -> false
+  ;;
+
+  let is_axiom st =
+    Ac.is_assoc_axiom st || is_left_ident_axiom st || is_right_ident_axiom st
+
 end
 
 module Group = struct
@@ -135,6 +163,19 @@ module Group = struct
   let count es = List.length (symbols es)
 
   let is_contained es = count es > 0
+
+  let is_left_inv_axiom = function
+      F(f, [F(i, [V x']); V x]), F(n, []) -> x=x'
+    | _ -> false
+  ;;
+
+  let is_right_inv_axiom = function
+      F(f, [V x; F(i, [V x'])]), F(n, []) -> x=x'
+    | _ -> false
+  ;;
+
+  let is_axiom st =
+    Monoid.is_axiom st || is_left_inv_axiom st || is_right_inv_axiom st
 end
 
 module AbelianGroup = struct
@@ -149,6 +190,9 @@ module AbelianGroup = struct
     List.filter (is_for es) [ f,i,id | f <- bs; i <- us; id <- cs ]
 
   let count es = List.length (symbols es)
+
+  let is_axiom st =
+    Group.is_axiom st || Commutativity.is_axiom st
 
 end
 
@@ -195,6 +239,21 @@ module Ring = struct
   let count es = List.length (symbols es)
 
   let is_contained es = count es > 0
+
+  let is_left_distributivity = function
+    F(m,[V x;F(a,[V y;V z])]), F(a',[F(m',[V x';V y']); F(m'',[V x'';V z'])]) ->
+      m=m' && m'=m'' && a=a' && m<>a &&
+      x=x' && x=x'' && y=y' && z=z' && x<>y && x<>z && y<>z
+    | _ -> false
+
+  let is_right_distributivity = function
+    F(m,[F(a,[V y;V z]);V x]), F(a',[F(m',[V y';V x']); F(m'',[V z';V x''])]) ->
+      m=m' && m'=m'' && a=a' && m<>a &&
+      x=x' && x=x'' && y=y' && z=z' && x<>y && x<>z && y<>z
+    | _ -> false
+
+  let is_distributivity st =
+    is_left_distributivity st || is_right_distributivity st
 end
 
 module Lattice = struct
@@ -219,4 +278,10 @@ module Lattice = struct
   let count es = List.length (symbols es) / 2 (* account for symmetry *)
 
   let is_contained es = count es > 0
+
+  let is_absorb = function
+      F(f, [V x1; F(g, [V x2 ; V y])]), V x3 -> x1=x2 && x2=x3 && x1<>y
+    | _ -> false 
+
+  let is_axiom st = Ac.is_axiom st || is_absorb st
 end

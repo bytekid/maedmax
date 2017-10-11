@@ -30,6 +30,7 @@ let restarts = ref 0
 let time_diffs = ref []
 let mem_diffs = ref []
 let eq_counts = ref []
+let shape = ref NoShape
 
 (*** FUNCTIONS ***************************************************************)
 let take_time t f x =
@@ -66,6 +67,7 @@ let print () =
   printf "time diffs         %s@." (time_diff_str ());
   printf "memory diffs       %s@." (memory_diff_str ());
   printf "equation counts    %s@." (eq_count_str ());
+  printf "problem shape      %s@."(Settings.shape_to_string !shape);
   printf "times@.";
   printf " ground join checks %.3f@." !t_gjoin_check;
   printf " maxk               %.3f@." !t_maxk;
@@ -129,6 +131,16 @@ let problem_shape es gs =
     NoShape
 ;;
 
+let theory_equations es =
+  let theory_relevant l =
+    let eq = Literal.terms l in
+    Theory.Commutativity.is_axiom eq || Theory.Ac.is_axiom eq ||
+    Theory.Monoid.is_axiom eq || Theory.Group.is_axiom eq ||
+    Theory.Lattice.is_axiom eq || Theory.Ring.is_distributivity eq
+  in
+  List.filter theory_relevant es
+;;
+
 let analyze es gs =
   let es, ies = List.partition Literal.is_equality es in
   let all = List.map Literal.terms (es @ ies) in
@@ -180,7 +192,8 @@ let json () =
  let t_sat = "time/sat", trunc !t_sat in
  let t_cache = "time/cache", trunc !t_cache in
  let res = "restarts", `Int !restarts in
- let t = `Assoc [it; ea; res; mem; t_ccpred; t_ccomp; t_cred; t_select;
+ let shp = "shape", `String (Settings.shape_to_string !shape) in
+ let t = `Assoc [it; ea; res; mem; shp; t_ccpred; t_ccomp; t_cred; t_select;
   t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process; t_sat;
   t_cache]
  in t
