@@ -103,7 +103,8 @@ let ac_eqs () = [ normalize e | e <- Ac.eqs !(settings.ac_syms) ]
 
 let add_nodes ns =
   if !(settings.size_age_ratio) < 100 then
-    all_nodes := L.rev_append (L.rev !all_nodes) ns
+    let ns = NS.smaller_than !(settings.size_bound_equations) ns in
+    all_nodes := L.rev_append (L.rev !all_nodes) (NS.sort_size ns)
 ;;
 
 let rec get_oldest_node (aa,rew) =
@@ -717,7 +718,7 @@ let rec phi ctx aa gs =
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
-    add_nodes (NS.sort_size (NS.smaller_than 20 rest));
+    add_nodes rest;
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
        Some r -> raise (Success r)
      | None ->
