@@ -587,7 +587,7 @@ let do_restart es gs =
  else
    let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
    let shape = St.problem_shape (to_eqs es) (to_eqs gs) in
-   if shape <> !(St.shape) && shape <> NoShape then (
+   if !(settings.auto) && shape <> !(St.shape) && shape <> NoShape then (
      if debug () then
        Format.printf "restart (new shape %s detected)\n%!" (Settings.shape_to_string shape);
      true)
