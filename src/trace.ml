@@ -18,20 +18,20 @@ type origin = Initial
 
 type direction = LeftRight | RightLeft
 
-type cpf_step = pos * R.t * direction * Term.t
+type cpf_step = pos * R.t * direction * T.t
 
-type cpf_conv = Term.t * (cpf_step list)
+type cpf_conv = T.t * (cpf_step list)
 
 type rule = R.t * direction
 
-type inference = Deduce of rule * int list * rule
-  | Delete of R.t
-  | SimplifyL of R.t * int list * rule
-  | SimplifyR of R.t * int list * rule
+type inference = Deduce of T.t * T.t * T.t
+  | Delete of T.t
+  | SimplifyL of R.t * T.t
+  | SimplifyR of R.t * T.t
   | OrientL of R.t
   | OrientR of R.t
-  | Compose of R.t * int list * rule
-  | Collapse of R.t * int list * rule
+  | Compose of R.t * T.t
+  | Collapse of R.t * T.t
 
 (*** GLOBALS *****************************************************************)
 let trace_table : (R.t, origin * int) H.t = H.create 128
@@ -53,12 +53,12 @@ let dir = function false -> RightLeft | _ -> LeftRight
 let pstr = List.fold_left (fun s i -> s ^ (string_of_int i)) ""
 
 let print (s, ss) = 
-  F.printf "%a\n%!" Term.print s;
+  F.printf "%a\n%!" T.print s;
   let rec print = function
     | [] -> ()
     | (p,rl,d,t) :: steps -> (
       let ds = if d = LeftRight then "->" else "<-" in
-      F.printf " %s %a (%a at %s)\n%!" ds Term.print t R.print rl (pstr p);
+      F.printf " %s %a (%a at %s)\n%!" ds T.print t R.print rl (pstr p);
       print steps)
   in print ss
 ;;
@@ -144,10 +144,10 @@ let ancestors eqs =
 
 (* Get renaming that renames first to second rule *)
 let rename_to (l1,r1) (l2,r2) =
-  let t1, t2 = Term.F(0,[l1;r1]), Term.F(0,[l2;r2]) in
+  let t1, t2 = T.F(0,[l1;r1]), T.F(0,[l2;r2]) in
   try Subst.pattern_match t1 t2, true
   with _ ->
-    try Subst.pattern_match (Term.F(0,[r1;l1])) t2, false
+    try Subst.pattern_match (T.F(0,[r1;l1])) t2, false
     with _ -> failwith "Trace.rename_to: not a variant"
 ;;
 
@@ -181,7 +181,7 @@ let subst sub (t,steps) =
 ;;
 
 let subst_print = 
-  List.iter (fun (x,t) -> Format.printf "  %s -> %a\n" (Signature.get_var_name x) Term.print t)
+  List.iter (fun (x,t) -> Format.printf "  %s -> %a\n" (Signature.get_var_name x) T.print t)
 
 (* Given a conversion for s = t where u = v or v = u occurs produce a conversion
    for u = v using s = t or t = s. *)
@@ -271,7 +271,7 @@ let conversion_for (s,t) o =
    let ((r1,p,r2,mgu) as o) = the_overlap r1 r2 p in
    let s',t' = O.cp_of_overlap o in
    let ren, keep_dir = rename_to (s',t') (s,t) in
-   let u = Term.substitute ren (Term.substitute mgu (fst r2)) in
+   let u = T.substitute ren (T.substitute mgu (fst r2)) in
    let r1,d1 = normalize r1 RightLeft in
    let r2,d2 = normalize r2 LeftRight in
    let s',t' = Rule.substitute ren (s',t') in
@@ -414,8 +414,7 @@ let rec to_simplifyl (l,r) rs =
   let steps = rewrite_conv l rs in
   let rec collect acc u = function
       [] -> []
-    | (p,rl,d,v) :: ss ->
-      collect (Deduce ((rl,d),p,((u,r), LeftRight)) :: acc) v ss
+    | (p,rl,d,v) :: ss -> collect (SimplifyL ((u,r), v) :: acc) v ss
   in 
   last (l,steps), collect [] l steps
 ;;
@@ -424,8 +423,7 @@ let rec to_simplifyr (l,r) rs =
   let steps = rewrite_conv r rs in
   let rec collect acc u = function
       [] -> []
-    | (p,rl,d,v) :: ss ->
-    collect (Deduce ((rl,d),p,((l,u),RightLeft)) :: acc) v ss
+    | (p,rl,d,v) :: ss -> collect (SimplifyR ((l,u), v) :: acc) v ss
   in 
   last (r,steps), collect [] r steps
 ;;
@@ -435,9 +433,9 @@ let rec to_origins acc = function
   | (e,o) :: es -> (match o with
     | Initial -> to_origins acc es
     | CP (r1, p, r2) ->
-      let rd1 = normalize r1 RightLeft in
-      let rd2 = normalize r2 LeftRight in
-      to_origins (Deduce (rd1, p, rd2) :: acc) es
+      let (_,_,_,mgu) = the_overlap r1 r2 p in
+      let s = T.substitute mgu (fst r2) in
+      to_origins (Deduce (s, fst e, snd e) :: acc) es
     | Rewrite ((s0,t0), (ss, ts)) ->
       let s,os = to_simplifyl (s0,t0) ss in
       let _,os' = to_simplifyr (s,t0) ts in
@@ -448,8 +446,11 @@ let rec to_origins acc = function
 let the_run ee rr =
   let es = H.fold (fun e (o,i) es' -> (i,e,o) :: es') trace_table [] in
   let es = [ e,o | (_,e,o) <- List.sort (fun (i,_,_) (j,_,_) -> i-j) es ] in
-  let orient rl = if List.mem rl ee then OrientL rl else OrientR rl in
-  to_origins [] es @ [ Delete e | e <- !deleted ] @ [ orient r | r <- rr ]
+  let orient rl = if List.mem rl ee then OrientL rl else OrientR (R.flip rl) in
+  let deleted = [ Delete (fst e) | e <- !deleted ] in
+  let r = to_origins [] es @ deleted @ [ orient r | r <- rr ] in
+  Format.printf "%d steps in run\n%!" (List.length r);
+  r
 ;;
 
 (*** XML REPRESENTATION  *****************************************************)
@@ -474,12 +475,12 @@ let input_to_xml es g_opt =
 let step_to_xml (p,rl,dir,t) =
   let dirstr = function LeftRight -> "leftRight" | _ -> "rightLeft" in
   let dirxml = X.Element(dirstr dir, [], []) in
-  let components = [pos_to_xml p; R.to_xml rl; dirxml; Term.to_xml t] in
+  let components = [pos_to_xml p; R.to_xml rl; dirxml; T.to_xml t] in
   X.Element("equationStep", [], components)
 ;;
 
 let conversion_to_xml (t, steps) =
-  let start = X.Element("startTerm", [], [Term.to_xml t]) in
+  let start = X.Element("startTerm", [], [T.to_xml t]) in
   X.Element("conversion", [], start :: (List.map step_to_xml steps))
 ;;
 
@@ -494,36 +495,47 @@ let eqproof_to_xml cs =
   X.Element("equationalDisproof", [], [ xconv ])
 ;;
 
-let run_to_xml _ = X.Element("run", [], [])
-
-let ground_completion_to_xml' (rr,ee, ord) =
-  let xrun = X.Element("run", [], [ run_to_xml (the_run rr ee) ] ) in
-  let xrs = X.Element("rules", [], [ Rules.to_xml rr] ) in
-  let xes = X.Element("equations", [], [ Rules.to_xml ee ] ) in
-  let xord = X.Element("terminationProof", [], [ ord#to_xml ] ) in
-  let xres = X.Element("result", [], [ xrs; xes; xord ]) in
-  [ xrun; xres ]
+let inference_to_xml step =
+  let t3_to_xml ((s,t),u) = [ T.to_xml v | v <- [s;t;u] ] in
+  let to_xml = function
+      Deduce (s,t,u) -> X.Element("deduce", [], [ T.to_xml v | v <- [s;t;u] ])
+    | Delete s -> X.Element("delete", [], [T.to_xml s])
+    | SimplifyL (st,u) -> X.Element("simplifyl", [], t3_to_xml (st,u))
+    | SimplifyR (st,u) -> X.Element("simplifyr", [], t3_to_xml (st,u))
+    | OrientL (s,t) -> X.Element("orientl", [], [T.to_xml s; T.to_xml t])
+    | OrientR (s,t) -> X.Element("orientr", [], [T.to_xml s; T.to_xml t])
+    | Compose (st,u) -> X.Element("compose", [], t3_to_xml (st,u))
+    | Collapse (st,u) -> X.Element("collapse", [], t3_to_xml (st,u))
+  in X.Element("orderedCompletionStep", [], [ to_xml step ])
 ;;
 
-let eqdisproof_to_xml (rr,ee, ord) ((s,t), (rs,rt)) =
+let run_to_xml steps = X.Element("run", [], [ inference_to_xml s | s <- steps ])
+
+let ordered_completion_input_to_xml ee0 (rr,ee,ord) =
+  let xes0 = X.Element("equations", [], [ Rules.to_xml ee0 ] ) in
+  let xrs = X.Element("rules", [], [ Rules.to_xml rr] ) in
+  let xes = X.Element("equations", [], [ Rules.to_xml ee ] ) in
+  let xord = X.Element("reductionOrder", [], [ ord#to_xml ] ) in
+  X.Element("orderedCompletionInput", [], [ xes0; xrs; xes; xord ])
+;;
+
+let eqdisproof_to_xml (rr,ee,ord) ((s,t), (rs,rt)) =
   let xconv_s = conversion_to_xml (s, rewrite_conv' s rs) in
   let xconv_t = conversion_to_xml (t, rewrite_conv' t rt) in
   let xnorm = X.Element("normalization", [], [xconv_s; xconv_t]) in
-  let comps = ground_completion_to_xml' (rr,ee, ord) @ [xnorm ] in
+  let comps = (run_to_xml (the_run ee rr)) :: [xnorm ] in
   let xconv = X.Element("groundCompletionAndNormalization", [], comps) in
   X.Element("equationalDisproof", [], [ xconv ])
 ;;
 
-let ground_completion_to_xml (rr,ee, ord) =
-  let comps = ground_completion_to_xml' (rr,ee, ord) in
-  X.Element("groundCompletionProof", [], comps)
+let ground_completion_to_xml (rr,ee,ord) =
+  X.Element("orderedCompletionProof", [], [ run_to_xml (the_run ee rr) ])
 ;;
 
-let xml_proof_wrapper es0 g xproof =
-  let xinput = input_to_xml es0 g in
+let xml_proof_wrapper xinput xproof =
   let xversion = X.Element("cpfVersion", [], [ xml_str "2.1" ]) in
   let xt = X.Element("tool", [], [
-    X.Element("name", [], [ xml_str "madmax" ]);
+    X.Element("name", [], [ xml_str "maedmax" ]);
     X.Element("version", [], [ xml_str "0.9" ]) ])
   in
   let xo = X.Element("origin", [], [ X.Element("proofOrigin", [], [ xt ]) ]) in
@@ -536,16 +548,17 @@ let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
   let g = Variant.normalize_rule g_orig in
   let rulesubs = goal_proof g (s,t) (rs,rt) sigma in
   let xproof = X.Element("proof", [], [ eqproof_to_xml rulesubs ]) in
-  xml_proof_wrapper es0 (Some g) xproof
+  xml_proof_wrapper (input_to_xml es0 (Some g)) xproof
 ;;
 
 let xml_goal_disproof es0 g_orig ((rr,ee,ord) as result) rst =
   let g = Variant.normalize_rule g_orig in
   let xproof = X.Element("proof", [], [ eqdisproof_to_xml result (g,rst) ]) in
-  xml_proof_wrapper es0 (Some g) xproof
+  xml_proof_wrapper (input_to_xml es0 (Some g)) xproof
 ;;
 
-let xml_ground_completion es0 ((rr,ee,ord) as result) =
+let xml_ground_completion es0 result =
   let xproof = X.Element("proof", [], [ ground_completion_to_xml result ]) in
-  xml_proof_wrapper es0 None xproof
+  let xinput = ordered_completion_input_to_xml es0 result in
+  xml_proof_wrapper xinput xproof
 ;;
