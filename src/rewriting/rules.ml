@@ -101,3 +101,5 @@ let subsumption_free ee =
   let var rs r = if List.exists (Rule.variant r) rs then rs else r::rs in
   List.fold_left var [] ee'
 ;;
+
+let flip rr = [ Rule.flip r | r <- rr ]

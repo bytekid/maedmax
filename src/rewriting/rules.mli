@@ -41,3 +41,5 @@ val is_srs : t -> bool
 val to_xml : t -> Xml.xml
 
 val subsumption_free : t -> t
+
+val flip : t -> t
