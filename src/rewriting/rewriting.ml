@@ -56,6 +56,22 @@ let nf_with rules t =
    | ls -> nf (ls@acc) rules u
  in nf [] rules t
 
+let nf_with_at rules t =
+  let opt_fold f =
+    List.fold_left (fun r x -> match r with None -> f x | _ -> r) None
+  in
+  let reduct t =
+    let step p rl = try Some (step_at_with t p rl,p,rl) with _ -> None in
+    let step_at p = opt_fold (step p) rules in
+    opt_fold step_at (Term.positions t)
+  in
+  let rec nf acc t =
+    match reduct t with
+    | None -> List.rev acc,t
+    | Some (u,p,rl) -> nf ((rl,p) :: acc) u
+  in nf [] t
+;;
+
 let nf_with_ht ht rules t =
  try Hashtbl.find ht t with
  Not_found -> (
@@ -75,20 +91,3 @@ let u_nf rules t =
   | [] -> None, t
   | _ -> Some (Listx.unique ls), t
 
-(*
-let rec replace_at i ts u =
-  match i, ts with
-  | _, [] -> invalid_arg "Rewriting.replace_at"
-  | 0, _ :: l -> u :: l
-  | i, x :: l -> x :: replace_at (i - 1) l u
-
-let rec rewrite rules = function
-  | V _ -> []
-  | F (f, ts) as t ->
-      Listset.union 
-	(Listset.unique
-         [ substitute (Subst.pattern_match l t) r
-         | l, r <- rules; Subst.is_instance_of t l ])
-	[ F (f, replace_at i ts u) 
-        | i, ti <- Listx.ix ts; u <- rewrite rules ti ]
-*)
