@@ -792,7 +792,7 @@ let rec ckb fs (es, gs) =
  remember_state es gs;
  (* init state *)
  let ctx = mk_context () in
- let es0 = L.map Lit.normalize es in
+ let es0 = L.sort Pervasives.compare (L.map Lit.normalize es) in
  let gs0 = L.map Lit.normalize gs in
  all_nodes := es0;
  try
