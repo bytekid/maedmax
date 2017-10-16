@@ -16,6 +16,10 @@ type origin = Initial
   | Rewrite of R.t * (step list * step list)
   | CP of R.t * int list * R.t
 
+type result =
+  | Reduced of R.t * (step list * step list)
+  | Deleted
+
 type direction = LeftRight | RightLeft
 
 type cpf_step = pos * R.t * direction * T.t
@@ -34,7 +38,8 @@ type inference = Deduce of T.t * T.t * T.t
   | Collapse of R.t * T.t
 
 (*** GLOBALS *****************************************************************)
-let trace_table : (R.t, origin * int) H.t = H.create 128
+let parents_table : (R.t, origin * int) H.t = H.create 128
+let children_table : (R.t, result) H.t = H.create 128
 let goal_trace_table : (R.t, origin * int) H.t = H.create 128
 let deleted : R.t list ref = ref []
 let count = ref 0
@@ -43,9 +48,14 @@ let count = ref 0
 let root = []
 
 let parents = function
-   Initial-> []
+   Initial -> []
  | Rewrite (p, (lsteps, rsteps)) -> p :: (List.map fst (lsteps @ rsteps))
  | CP (rl1, _, rl2) -> [rl1; rl2]
+;;
+
+let children = function
+   Deleted -> []
+ | Reduced (c, (lsteps, rsteps)) -> [c]
 ;;
 
 let dir = function false -> RightLeft | _ -> LeftRight
@@ -72,10 +82,11 @@ let rec print_steps = function
 ;;
 
 (* keep first origin for equation to avoid cycles *)
-let add eq o = if not (H.mem trace_table eq) then (
+let add eq o = if not (H.mem parents_table eq) then
   let c = !count in
   count := c + 1;
-  H.add trace_table eq (o,c))
+  H.add parents_table eq (o,c)
+;;
 
 let gadd g o =
   if not (H.mem goal_trace_table g) then (
@@ -84,41 +95,26 @@ let gadd g o =
   if !(S.do_proof_debug) then
     F.printf "ADDING GOAL %i:%a\n" c Rule.print g;
   H.add goal_trace_table g (o,c))
+;;
 
-let add_initials eqs =
-  (*if !(S.do_proof_debug) then
-    List.iter (fun eq -> F.printf "initial: %a\n" R.print eq) eqs;*)
-  List.iter (fun e -> add e Initial) eqs
+let add_initials eqs = List.iter (fun e -> add e Initial) eqs
 
-let add_overlap eq (rl1,p,rl2,_) =
-  (*if !(S.do_proof_debug) then
-    F.printf "overlap: %a\n" R.print eq;*)
-  add eq (CP (rl1,p,rl2))
+let add_overlap eq (rl1,p,rl2,_) = add eq (CP (rl1,p,rl2))
 
 let add_rewrite eq eq0 steps =
-  (*if !(S.do_proof_debug) then
-    F.printf "rewrite: %a\n" R.print eq;*)
-  add eq (Rewrite (eq0,steps))
+  add eq (Rewrite (eq0,steps));
+  H.add children_table eq0 (Reduced (eq,steps))
+;;
 
 let add_delete eq =
-  (*if !(S.do_proof_debug) then
-    F.printf "rewrite: %a\n" R.print eq;*)
-  deleted := eq :: !deleted
+  if not (H.mem children_table eq) then
+    H.add children_table eq Deleted
 
-let add_initial_goal eqs =
-  (*if !(S.do_proof_debug) then
-    List.iter (fun eq -> F.printf "initial: %a\n" R.print eq) eqs;*)
-  List.iter (fun e -> gadd e Initial) eqs
+let add_initial_goal eqs = List.iter (fun e -> gadd e Initial) eqs
 
-let add_overlap_goal eq (rl1,p,rl2,_) =
-  (*if !(S.do_proof_debug) then
-    F.printf "overlap: %a\n" R.print eq;*)
-  gadd eq (CP (rl1,p,rl2))
+let add_overlap_goal eq (rl1,p,rl2,_) = gadd eq (CP (rl1,p,rl2))
 
-let add_rewrite_goal eq eq0 steps =
-  (*if !(S.do_proof_debug) then
-    F.printf "rewrite: %a\n" R.print eq;*)
-  gadd eq (Rewrite (eq0,steps))
+let add_rewrite_goal eq eq0 steps = gadd eq (Rewrite (eq0,steps))
 
 let ancestors eqs = 
   let rec ancestors acc = function
@@ -129,7 +125,7 @@ let ancestors eqs =
         if List.mem eq (List.map fst acc) then
           ancestors acc eqs
         else
-          let o,_ = H.find trace_table eq in
+          let o,_ = H.find parents_table eq in
           let ps = parents o in
           let acc' = ancestors acc (Listset.diff ps [eq | eq,_ <- acc]) in
           let xs = List.map fst acc' in
@@ -140,6 +136,23 @@ let ancestors eqs =
         F.printf "no origin found for %a\n%!" R.print eq;
         failwith "Trace.of_equation: equation unknown")
   in ancestors [] eqs
+;;
+
+(* Return descendants in simplification. Since the equations can emerge as
+   intermediate results, they need not be normalized. *)
+let descendants eqs =
+  let rec desc acc = function
+    | [] -> acc
+    | eq :: eqs ->
+      (* already present and final equations can be ignored *)
+      if List.mem eq (List.map fst acc) || not (H.mem children_table eq) then
+        desc acc eqs
+      else
+        let r = H.find children_table eq in
+        let acc' = desc acc (Listset.diff (children r) [eq | eq,_ <- acc]) in
+        let acc'' = (eq,r) :: acc' in
+        desc acc'' eqs
+  in desc [] eqs
 ;;
 
 (* Get renaming that renames first to second rule *)
@@ -181,13 +194,14 @@ let subst sub (t,steps) =
 ;;
 
 let subst_print = 
-  List.iter (fun (x,t) -> Format.printf "  %s -> %a\n" (Signature.get_var_name x) T.print t)
+  List.iter
+    (fun (x,t) -> F.printf "  %s -> %a\n" (Signature.get_var_name x) T.print t)
 
 (* Given a conversion for s = t where u = v or v = u occurs produce a conversion
    for u = v using s = t or t = s. *)
 let solve (s,steps) (u,v) goals =
  if !(S.do_proof_debug) then
-  (Format.printf "LOOK FOR %a IN: \n" Rule.print (u,v); print (s,steps));
+  (F.printf "LOOK FOR %a IN: \n" Rule.print (u,v); print (s,steps));
  let t = last (s,steps) in
  let rec solve steps_bef s' = function 
      [] -> failwith "Trace.solve: equation not found"
@@ -195,8 +209,9 @@ let solve (s,steps) (u,v) goals =
      if rl <> (u,v) && rl <> (v,u) then
        solve ((p,rl,flip d,s') :: steps_bef) t' steps_aft
      else (
-       if (!(S.do_proof_debug) && not (List.exists (fun g -> Rule.is_instance g (s,t)) goals)) then
-         Format.printf "no instance: %a\n %!" Rule.print (s,t);
+       if (!(S.do_proof_debug) &&
+          not (List.exists (fun g -> Rule.is_instance g (s,t)) goals)) then
+         F.printf "no instance: %a\n %!" Rule.print (s,t);
        let st_step = root, (s,t), LeftRight, t in
        let res = s', steps_bef @ [st_step] @ (snd (rev (t',steps_aft))) in
        let oriented_rl = if d = LeftRight then rl else Rule.flip rl in
@@ -204,13 +219,14 @@ let solve (s,steps) (u,v) goals =
          rev_unless res ((s',t') = (u,v)), Subst.empty
        else (
          if !(S.do_proof_debug) then
-           Format.printf "INSTANTIATE  %a TO %a\n%!" Rule.print oriented_rl Rule.print (s',t');
+           F.printf "INSTANTIATE  %a TO %a\n%!" Rule.print oriented_rl
+             Rule.print (s',t');
          let tau = Rule.instantiate_to oriented_rl (s',t') in
          assert ((Rule.substitute tau oriented_rl) = (s',t'));
          assert (equation_of res = (s',t'));
          let conv = rev_unless res (Rule.substitute tau (u,v) = (s',t')) in
          if !(S.do_proof_debug) then (
-           Format.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
+           F.printf "SUBSTITUTE TO %a\n%!" Rule.print (equation_of conv);
            subst_print tau;
          );
      conv, tau))
@@ -219,7 +235,7 @@ let solve (s,steps) (u,v) goals =
  if !(S.do_proof_debug) then (
    let uv' = Rule.substitute tau (u,v) in
    assert (equation_of conv = uv');
-   (Format.printf "RESULT: \n"; print conv));
+   (F.printf "RESULT: \n"; print conv));
  conv, tau
 ;;
 
@@ -339,15 +355,15 @@ let rec goal_ancestors rule_acc gconv_acc g o =
        let conv', tau = solve conv (s,t) (List.map fst gconv_acc) in
        let gconv = Rule.substitute tau (s,t), conv' in
        if !(S.do_proof_debug) then (
-         F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv); print (snd gconv));
+         F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv);
+           print (snd gconv));
        let rls = Listx.unique (List.map fst (rs @ rt)) in
        let o,i = H.find goal_trace_table (s,t) in
        if !(S.do_proof_debug) then
-           Format.printf "R-ADD GOAL %i:%a \n\n%!" i Rule.print (fst gconv);
+           F.printf "R-ADD GOAL %i:%a \n\n%!" i Rule.print (fst gconv);
        goal_ancestors (rls @ rule_acc) (gconv :: gconv_acc) (s,t) o
      (* (v,w) was obtained from deduce with goal g0 using rule rl *)
      | CP (rl, p, g0) ->
-       (*assert (snd (Variant.normalize_rule_dir g0));*)
        let g0 = Variant.normalize_rule g0 in
        if !(S.do_proof_debug) then
          F.printf "DERIVED BY DEDUCE FROM %a:\n%!" R.print g0;
@@ -355,11 +371,12 @@ let rec goal_ancestors rule_acc gconv_acc g o =
        let conv', tau = solve conv g0 (List.map fst gconv_acc) in
        let gconv = Rule.substitute tau g0, conv' in
        if !(S.do_proof_debug) then (
-         F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv); print (snd gconv));
+         F.printf "RESULTING CONVERISON for %a:\n%!" R.print (fst gconv);
+         print (snd gconv));
        let rl',d_rl = normalize rl LeftRight in
        let o,i = H.find goal_trace_table g0 in
        if !(S.do_proof_debug) then
-           Format.printf "D-ADD GOAL %i:%a \n\n%!" i Rule.print (fst gconv);
+           F.printf "D-ADD GOAL %i:%a \n\n%!" i Rule.print (fst gconv);
        goal_ancestors (rl' :: rule_acc) (gconv :: gconv_acc) g0 o
   with Not_found -> (
     F.printf "no origin found for goal %a\n%!" R.print g;
@@ -410,47 +427,256 @@ let goal_proof g_orig (s,t) (rs,rt) sigma =
   t
 ;;
 
+(* * * RUN CONSTRUCTION * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
+(* Construct a classical oKB run from a successful maedmax execution.
+   TODO That may fail for the following reasons (not experienced so far):
+   - an equation may have been constructed from a simplification using an
+     intermediate rule which may have been oriented using a different reduction
+     order.
+     May be remedied by doing Deduce instead of simplify in the creation phase.
+   - also the last entry in the children table may use a different TRS with a
+     different reduction order.
+*)
+
+(* Given equation l = r, compute SimplifyL inferences that correspond to the
+   rewrite sequence rs. The applied rules need not be oriented before, we can
+   also do ordered rewriting with equations. *)
 let rec to_simplifyl (l,r) rs =
   let steps = rewrite_conv l rs in
   let rec collect acc u = function
-      [] -> []
-    | (p,rl,d,v) :: ss -> collect (SimplifyL ((u,r), v) :: acc) v ss
+      [] -> acc (* reversal happens in to_origins *)
+    | (p,rl,d,v) :: ss ->
+      let s = SimplifyL ((u,r), v) in
+      collect (s :: acc) v ss
   in 
   last (l,steps), collect [] l steps
 ;;
 
+(* As above for SimplifyR. *)
 let rec to_simplifyr (l,r) rs =
   let steps = rewrite_conv r rs in
   let rec collect acc u = function
-      [] -> []
-    | (p,rl,d,v) :: ss -> collect (SimplifyR ((l,u), v) :: acc) v ss
+      [] -> acc (* reversal happens in to_origins *)
+    | (p,rl,d,v) :: ss ->
+      let s = SimplifyR ((l,u), v) in
+      collect ((*if (l,u) = rl then acc else*) s :: acc) v ss
   in 
   last (r,steps), collect [] r steps
 ;;
 
-let rec to_origins acc = function
+(* Compute Deduce and Simplify steps that gave rise to the given equations. *)
+let rec creation_steps acc = function
     [] -> List.rev acc
-  | (e,o) :: es -> (match o with
-    | Initial -> to_origins acc es
+  | ((s,t),o) :: es -> (match o with
+    | Initial -> creation_steps acc es
     | CP (r1, p, r2) ->
-      let (_,_,_,mgu) = the_overlap r1 r2 p in
-      let s = T.substitute mgu (fst r2) in
-      to_origins (Deduce (s, fst e, snd e) :: acc) es
+      let (r1,p,r2,mgu) as o = the_overlap r1 r2 p in
+      let s',t' = O.cp_of_overlap o in
+      let ren, keep_dir = rename_to (s',t') (s,t) in
+      let u = T.substitute ren (T.substitute mgu (fst r2)) in
+      let s',t' = Rule.substitute ren (s,t) in
+      creation_steps (Deduce (u, s', t') :: acc) es
     | Rewrite ((s0,t0), (ss, ts)) ->
       let s,os = to_simplifyl (s0,t0) ss in
       let _,os' = to_simplifyr (s,t0) ts in
-      to_origins (os' @ os @ acc) es
+      creation_steps (os' @ os @ acc) es
     )
 ;;
 
-let the_run ee rr =
-  let es = H.fold (fun e (o,i) es' -> (i,e,o) :: es') trace_table [] in
-  let es = [ e,o | (_,e,o) <- List.sort (fun (i,_,_) (j,_,_) -> i-j) es ] in
-  let orient rl = if List.mem rl ee then OrientL rl else OrientR (R.flip rl) in
-  let deleted = [ Delete (fst e) | e <- !deleted ] in
-  let r = to_origins [] es @ deleted @ [ orient r | r <- rr ] in
-  Format.printf "%d steps in run\n%!" (List.length r);
-  r
+(* Compute Simplify and Delete steps that simplify away the given equations. *)
+let rec simplify_steps acc = function
+    [] -> List.rev acc
+  | ((s0,t0),r) :: es -> (match r with
+    | Deleted -> simplify_steps (Delete s0 :: acc) es
+    | Reduced ((s,t), (ss, ts)) ->
+      let s,os = to_simplifyl (s0,t0) ss in
+      let _,os' = to_simplifyr (s,t0) ts in
+      simplify_steps (os' @ os @ acc) es
+    )
+;;
+
+(* Orient steps for rules rr out of equation set ee *)
+let orient_steps ee rr =
+  let orient acc rl =
+    if List.mem rl ee then OrientL rl :: acc else
+    if List.mem (R.flip rl) ee then OrientR (R.flip rl) :: acc else acc
+  in
+  List.fold_left orient [] rr
+;;
+
+(* Collapse/SimplifyL steps for l -> r where the rewrite steps rs apply to l *)
+let rec to_collapse (l,r) rs =
+  let steps = rewrite_conv l rs in
+  let rec collect acc u = function
+      [] -> acc (* reversal happens in caller *)
+    | (p,rl,d,v) :: ss ->
+      let s = if acc = [] then Collapse ((u,r), v) else SimplifyL ((u,r), v) in
+      F.printf "collapse %a to %a\n%!" Rule.print (u,r) Rule.print (v,r);
+      collect (s :: acc) v ss
+  in last (l,steps), collect [] l steps
+;;
+
+(* Compose steps for l -> r where the rewrite steps rs apply to r. *)
+let rec to_compose (l,r) rs =
+  let steps = rewrite_conv r rs in
+  let rec collect acc u = function
+      [] -> acc (* reversal happens in caller *)
+    | (p,rl,d,v) :: ss -> collect ((Compose ((l,u), v)) :: acc) v ss
+  in last (r,steps), collect [] r steps
+;;
+
+(* Compose and collapse steps to interreduce the TRS rr. *)
+let interreduce rr =
+  let rec reduce acc ee rr_u rr_p =
+    match rr_u with
+      [] -> (List.rev acc, ee, rr_p)
+    | (l,r) :: rr_u' ->
+      let rr = rr_p @ rr_u' in
+      let rrs,r' = Rewriting.nf_with_at rr r in
+      let lrs,l' = Rewriting.nf_with_at rr l in
+      let _,os = to_compose (l,r) rrs in
+      let _,os' = to_collapse (l,r') lrs in
+      if l=l' then reduce (os' @ os @ acc) ee rr_u' (Listset.add (l,r') rr_p)
+      else reduce (os' @ os @ acc) ((l',r') :: ee) rr_u' rr_p
+  in reduce [] [] rr []
+;;
+
+(* Show inference steps of a run. *)
+let show_run r =
+  let tp = T.print in
+  let rec show = function
+    [] -> ()
+  | OrientL e :: steps ->
+    F.printf " orientl %a = %a\n%!" tp (fst e) tp (snd e); show steps
+  | OrientR e :: steps ->
+    F.printf " orientr %a = %a\n%!" tp (fst e) tp (snd e); show steps
+  | Delete t :: steps ->
+    F.printf " delete %a = %a\n%!" tp t tp t; show steps
+  | Deduce (u,s,t) :: steps ->
+    F.printf " deduce %a <- %a -> %a\n" tp s tp u tp t; show steps
+  | SimplifyL ((s,t),u) :: steps ->
+    F.printf " simplifyl %a = %a to %a = %a\n%!" tp s tp t tp u tp t; show steps
+  | SimplifyR ((s,t),u) :: steps ->
+    F.printf " simplifyr %a = %a to %a = %a\n%!" tp s tp t tp s tp u; show steps
+  | Compose ((s,t),u) :: steps ->
+    F.printf " compose %a -> %a to %a -> %a\n%!" tp s tp t tp s tp u; show steps
+  | Collapse ((s,t),u) :: steps ->
+    F.printf " collapse %a -> %a to %a = %a\n%!" tp s tp t tp u tp t; show steps
+  in if !(S.do_proof_debug) then show r
+;;
+
+(* Simulate the inference steps starting from the initial equations ee0.
+   Outcommented lines could serve as fault tolerance. *)
+let simulate ee0 steps =
+  let drop, mem = Listx.remove, List.mem in
+  let (<:>) = Listset.add in
+  let rec sim acc (ee_i,rr_i) = function
+      [] -> List.rev acc,(ee_i,rr_i)
+    | z :: steps -> match z with
+    | OrientL e ->
+      if (mem e ee_i) then sim (z :: acc) (drop e ee_i, e <:> rr_i) steps
+      (*else if mem e rr_i then sim acc (ee_i, rr_i) steps*)
+      else failwith "orientl inference impossible"
+    | OrientR e ->
+      let rr_i' = Rule.flip e <:> rr_i in
+      if mem e ee_i then sim (z :: acc) (drop e ee_i, rr_i') steps
+      (*else if (mem (Rule.flip e) rr_i) then sim acc (ee_i, rr_i) steps*)
+      else failwith "orientr inference impossible"
+    | Delete t ->
+      sim (z :: acc) (drop (t,t) ee_i, rr_i) steps
+    | Deduce (u,s,t) ->
+      sim (z :: acc) ((s,t) <:> ee_i, rr_i) steps
+    | SimplifyL ((s,t) as st,u) ->
+      if mem st ee_i then sim (z :: acc) ((u,t) <:> (drop st ee_i), rr_i) steps
+      (*else if (mem (u,t) ee_i) then sim acc (ee_i, rr_i) steps*)
+      else failwith "SimplifyL inference impossible"
+    | SimplifyR ((s,t) as st,u) ->
+      if mem st ee_i then sim (z :: acc) ((s,u) <:> (drop st ee_i), rr_i) steps
+      (*else if (mem (s,u) ee_i) then sim acc (ee_i, rr_i) steps*)
+      else failwith "SimplifyR inference impossible"
+    | Collapse ((s,t) as st,u) ->
+      if mem st rr_i then sim (z :: acc) ((u,t) <:> ee_i, drop st rr_i) steps
+      (*else if (mem (u,t) ee_i) then sim acc (ee_i, rr_i) steps*)
+      else failwith "Collapse inference impossible"
+    | Compose ((s,t) as st,u) ->
+      if mem st rr_i then sim (z :: acc) (ee_i, (s,u) <:> (drop st rr_i)) steps
+      (*else if mem (s,u) rr_i then sim acc (ee_i, rr_i) steps*)
+      else failwith "Compose inference impossible"
+  in sim [] (ee0,[]) steps
+;;
+
+(* Check whether equations/rules required for inferences are present.
+   TODO: also check rewrite steps *)
+let check ee0 steps (ee,rr) =
+  let drop, mem, tp, d = Listx.remove, List.mem, T.print, !(S.do_proof_debug) in
+  let (<:>) = Listset.add in
+  let rec sim acc (ee_i,rr_i) = function
+      [] -> true
+    | z :: steps -> match z with
+    | OrientL e ->
+      if d then F.printf " orientl %a = %a\n%!" tp (fst e) tp (snd e);
+      (mem e ee_i) && sim (z :: acc) (drop e ee_i, e <:> rr_i) steps
+    | OrientR e ->
+      if d then F.printf " orientr %a = %a\n%!" tp (fst e) tp (snd e);
+      let rr_i' = Rule.flip e <:> rr_i in
+      mem e ee_i && sim (z :: acc) (drop e ee_i, rr_i') steps
+    | Delete t ->
+      if d then F.printf " delete %a = %a\n%!" tp t tp t;
+      mem (t,t) ee_i && sim (z :: acc) (drop (t,t) ee_i, rr_i) steps
+    | Deduce (u,s,t) ->
+      if d then F.printf " deduce %a <- %a -> %a\n" tp s tp u tp t;
+      sim (z :: acc) ((s,t) <:> ee_i, rr_i) steps
+    | SimplifyL ((s,t),u) ->
+      if d then F.printf " simplifyl %a = %a to %a = %a\n" tp s tp t tp u tp t;
+      mem (s,t) ee_i && sim (z :: acc) ((u,t) <:> (drop (s,t) ee_i), rr_i) steps
+    | SimplifyR ((s,t),u) ->
+      if d then F.printf " simplifyr %a = %a to %a = %a\n" tp s tp t tp s tp u;
+      mem (s,t) ee_i && sim (z :: acc) ((s,u) <:> (drop (s,t) ee_i), rr_i) steps
+    | Collapse ((s,t),u) ->
+      if d then F.printf " collapse %a -> %a to %a = %a\n" tp s tp t tp u tp t;
+      mem (s,t) rr_i && sim (z :: acc) ((u,t) <:> ee_i, drop (s,t) rr_i) steps
+    | Compose ((s,t),u) ->
+      if d then F.printf " compose %a -> %a to %a -> %a\n" tp s tp t tp s tp u;
+      mem (s,t) rr_i && sim (z :: acc) (ee_i, (s,u) <:> (drop (s,t) rr_i)) steps
+  in
+  let _, (ee',rr') = simulate ee0 steps in
+  sim [] (ee0,[]) steps && Listset.equal ee ee' && Listset.equal rr rr'
+;;
+
+(* Construct a run from ee0, to obtain (an interreduced version of) (ee,rr). *)
+let reconstruct_run ee0 ee rr =
+  (* collect derivations for computed (ee,rr) *)
+  let ee0 = [ Variant.normalize_rule e | e <- ee0 ] in
+  let steps0 = creation_steps [] (ancestors (ee @ rr)) in
+
+  (* simulate the run so far, this results in equations ee' and rr' *)
+  let steps1,(ee',rr') = simulate ee0 steps0 in
+
+  (* by ground completeness, additional equations must be subsumed/joinable *)
+  let ee'' = Listset.diff ee' (Rules.flip (ee @ rr) @ ee @ rr) in
+  (* compute these derivations that result in Delete or present equations *)
+  let steps_ee = simplify_steps [] (descendants ee'') in
+
+  (* rules in rr need to be oriented  *)
+  let orient_steps = orient_steps ee' (Listset.diff rr rr') in
+
+  (* interreduce the set of all rules, computing collapse/compose steps *)
+  let rr'' = Listset.union rr rr' in
+  let interred_steps, ee_add, rr_reduced = interreduce rr'' in
+
+  (* interreduction might produce equations that should be subsumed/joinable *)
+  let ss_ee' = simplify_steps [] (descendants (Listx.unique ee_add)) in
+
+  (* combine all inference steps *)
+  let steps = steps1 @ orient_steps @ steps_ee @ interred_steps @ ss_ee' in
+  let run, res = simulate ee0 steps in
+  assert (check ee0 run res);
+  if !(S.do_proof_debug) then (
+    F.printf "FINAL RUN:\n%!";
+    show_run run;
+    F.printf "final equations: \n%a\n%!" (Rules.print) (fst res);
+    F.printf "final rules: \n%a\n%!" (Rules.print) (snd res));
+  run, res
 ;;
 
 (*** XML REPRESENTATION  *****************************************************)
@@ -512,24 +738,23 @@ let inference_to_xml step =
 let run_to_xml steps = X.Element("run", [], [ inference_to_xml s | s <- steps ])
 
 let ordered_completion_input_to_xml ee0 (rr,ee,ord) =
+  let ee0 = [ Variant.normalize_rule e | e <- ee0 ] in
   let xes0 = X.Element("equations", [], [ Rules.to_xml ee0 ] ) in
-  let xrs = X.Element("rules", [], [ Rules.to_xml rr] ) in
+  let xrs = X.Element("trs", [], [ Rules.to_xml rr] ) in
   let xes = X.Element("equations", [], [ Rules.to_xml ee ] ) in
   let xord = X.Element("reductionOrder", [], [ ord#to_xml ] ) in
-  X.Element("orderedCompletionInput", [], [ xes0; xrs; xes; xord ])
+  let oxi = X.Element("orderedCompletionInput", [], [ xes0; xrs; xes; xord ]) in
+  X.Element("input",[],[oxi])
 ;;
 
-let eqdisproof_to_xml (rr,ee,ord) ((s,t), (rs,rt)) =
+let eqdisproof_to_xml ee0 (rr,ee,ord) ((s,t), (rs,rt)) =
   let xconv_s = conversion_to_xml (s, rewrite_conv' s rs) in
   let xconv_t = conversion_to_xml (t, rewrite_conv' t rt) in
   let xnorm = X.Element("normalization", [], [xconv_s; xconv_t]) in
-  let comps = (run_to_xml (the_run ee rr)) :: [xnorm ] in
+  let steps, _ = reconstruct_run ee0 ee rr in
+  let comps = (run_to_xml steps) :: [xnorm ] in
   let xconv = X.Element("groundCompletionAndNormalization", [], comps) in
   X.Element("equationalDisproof", [], [ xconv ])
-;;
-
-let ground_completion_to_xml (rr,ee,ord) =
-  X.Element("orderedCompletionProof", [], [ run_to_xml (the_run ee rr) ])
 ;;
 
 let xml_proof_wrapper xinput xproof =
@@ -551,14 +776,16 @@ let xml_goal_proof es0 g_orig ((s,t), (rs,rt), sigma) =
   xml_proof_wrapper (input_to_xml es0 (Some g)) xproof
 ;;
 
-let xml_goal_disproof es0 g_orig ((rr,ee,ord) as result) rst =
+let xml_goal_disproof es0 g_orig ((rr,ee,ord) as res) rst =
   let g = Variant.normalize_rule g_orig in
-  let xproof = X.Element("proof", [], [ eqdisproof_to_xml result (g,rst) ]) in
+  let xproof = X.Element("proof", [], [ eqdisproof_to_xml es0 res (g,rst) ]) in
   xml_proof_wrapper (input_to_xml es0 (Some g)) xproof
 ;;
 
-let xml_ground_completion es0 result =
-  let xproof = X.Element("proof", [], [ ground_completion_to_xml result ]) in
-  let xinput = ordered_completion_input_to_xml es0 result in
+let xml_ground_completion ee0 (rr,ee,ord) =
+  let steps, (ee',rr') = reconstruct_run ee0 ee rr in
+  let xcproof = X.Element("orderedCompletionProof", [], [ run_to_xml steps ]) in
+  let xproof = X.Element("proof", [], [ xcproof ]) in
+  let xinput = ordered_completion_input_to_xml ee0 (rr',ee',ord) in
   xml_proof_wrapper xinput xproof
 ;;
