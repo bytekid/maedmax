@@ -636,7 +636,9 @@ let detect_shape es =
       settings.n := 10;
       settings.size_age_ratio := 85;
       settings.strategy := Strategy.strategy_ordered_lpo
-    | Ossigeno -> settings.n := 12
+    | Ossigeno ->
+      settings.n := 12;
+      settings.size_age_ratio := 80;
     | Carbonio
     | NoShape -> settings.n := 6
     | Elio -> settings.n := 6
