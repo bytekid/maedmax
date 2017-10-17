@@ -213,7 +213,7 @@ let select_size_age aarew ns_sorted all n =
       selections := !selections + 1;
       if !selections mod (!(settings.size_age_ratio) / 10) <> 0 then
         select (L.tl ns) (L.hd ns :: acc) (n-1)
-      else if !selections mod 26 = 0 then
+      else if !selections mod 26 = 0 && all <> [] then
         let b = select_goal_similar aarew all in
         select ns (b::acc) (n-1)
       else (
