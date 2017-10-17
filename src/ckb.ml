@@ -365,6 +365,7 @@ let rewrite_seq rew (s,t) (rss,rst) =
 
 
 let succeeds ctx (rr,ee) rewriter cc gs =
+  let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list ee] in
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let fixed g =
@@ -709,7 +710,7 @@ let rec phi ctx aa gs =
     else aa
   in
   let process (j, aa, gs) (rr, c, order) =
-    let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in
+    let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in (* interreduce *)
     let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
@@ -722,9 +723,8 @@ let rec phi ctx aa gs =
     let sel, rest = select (aa,rew) nn in
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
-    let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list irr] in
     store_remaining_nodes ctx rest;
-    match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
+    match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) gs with
        Some r -> raise (Success r)
      | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs)
   in
