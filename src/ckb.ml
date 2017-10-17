@@ -644,7 +644,7 @@ let detect_shape es =
     | Elio -> settings.n := 6
     | Boro -> (
       settings.n := 14;
-      settings.size_age_ratio := 70;
+      settings.size_age_ratio := 200;
       settings.size_bound_equations := 16;
       settings.strategy := Strategy.strategy_ordered_kbo)
 ;;
