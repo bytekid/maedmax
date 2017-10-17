@@ -87,6 +87,10 @@ let has_comp () = L.mem S.Comp (constraints ())
 
 let debug _ = !(settings.d) >= 1
 
+let check_subsumption n = !(settings.check_subsumption) == n
+
+let nth_iteration n = !St.iterations mod n == 0
+
 let pop_strategy _ = 
  if debug () then F.printf "pop strategy\n%!";
  match !(settings.strategy) with
@@ -101,9 +105,12 @@ let normalize = Variant.normalize_rule
 
 let ac_eqs () = [ normalize e | e <- Ac.eqs !(settings.ac_syms) ]
 
-let add_nodes ns =
+let store_remaining_nodes ctx ns =
+  if has_comp () then
+    NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   if !(settings.size_age_ratio) < 100 then
-    all_nodes := L.rev_append (L.rev !all_nodes) ns
+    let ns' = NS.sort_size (NS.smaller_than 20 ns) in
+    all_nodes := L.rev_append (L.rev !all_nodes) ns'
 ;;
 
 let rec get_oldest_node (aa,rew) =
@@ -674,7 +681,8 @@ let set_iteration_stats aa gs =
 ;;
 
 
-let store_trs ctx j rr c =
+let store_trs ctx j rr cost =
+  let rr = [ Lit.terms r | r <- rr ] in
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS is used; have to store *)
   let rr_reduced =
@@ -683,7 +691,7 @@ let store_trs ctx j rr c =
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;
-  if debug () then log_max_trs j rr rr_reduced c;
+  if debug () then log_max_trs j rr rr_reduced cost;
   rr_index
 ;;
 
@@ -694,41 +702,31 @@ let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
 
 
 let rec phi ctx aa gs =
-  if do_restart aa gs then
-    raise (Restart (select_for_restart aa));
+  if do_restart aa gs then raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
   let aa =
-    if !(settings.check_subsumption) == 2 && !St.iterations mod 3 == 0 then
-      NS.subsumption_free aa
+    if check_subsumption 2 && nth_iteration 3 then NS.subsumption_free aa
     else aa
   in
   let process (j, aa, gs) (rr, c, order) =
-    let trs_n = store_trs ctx j [ Lit.terms r | r <- rr ] c in
-    let rr_red = C.redtrs_of_index trs_n in
+    let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in
     let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
-    let gs = NS.add_all (reduced rew gs) gs in
-    let irred = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    let irred' =
-      if !(settings.check_subsumption) == 1 then NS.subsumption_free irred
-      else irred
-    in
-    let aa_for_ols = NS.to_list (eqs_for_overlaps irred') in
+    let gs = NS.add_all (reduced rew gs) gs in (* rewrite goals wrt new TRS *)
+    let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
+    let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
+    let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in
     let cps = reduced rew (overlaps rew rr aa_for_ols) in (* rewrite CPs *)
-    let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
+    let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
-    (* FIXME where to move this variable registration stuff? *)
-    if has_comp () then
-      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
-    let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
-    add_nodes (NS.sort_size (NS.smaller_than 20 rest));
+    let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list irr] in
+    store_remaining_nodes ctx rest;
     match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
        Some r -> raise (Success r)
-     | None ->
-       (j+1, NS.add_list sel aa, NS.add_list gg gs)
+     | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs)
   in
   try
     let rrs = max_k ctx aa gs in
