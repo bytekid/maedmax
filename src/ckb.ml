@@ -696,12 +696,6 @@ let store_trs ctx j rr cost =
   rr_index
 ;;
 
-
-let non_gjoinable ctx ns rr = NS.subsumption_free ns
-
-let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
-
-
 let rec phi ctx aa gs =
   if do_restart aa gs then raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
