@@ -348,8 +348,6 @@ let saturated ctx (rr,ee) rewriter cc =
   let d = !(settings.d) in
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
-  (*let ns = if !(settings.unfailing) then rr @ ee else rr in
-  let cc' = !(settings.es) @ [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ] in*)
   let eqs = [ normalize (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n ] in
   Ground.all_joinable ctx str sys eqs xsig d
 ;;
@@ -368,26 +366,26 @@ let succeeds ctx (rr,ee) rewriter cc gs =
   let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list ee] in
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
-  let fixed g =
-    let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v
-  in
-  let sat = saturated ctx (rr,ee) rewriter cc in
-  let order = match sat with None -> rewriter#order | Some o -> o in
-  if not (NS.is_empty gs) && NS.exists fixed gs then (
-    let g = L.find fixed (NS.to_list gs) in
+  let ok g = let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v in
+  if not (NS.is_empty gs) && NS.exists ok gs then (
+    let g = L.find ok (NS.to_list gs) in
     let s,t = Lit.terms g in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if debug () then (
       let str = if joinable (s,t) then "joinable" else "unifiable" in
       F.printf "%s %a\n%!" str (fun f g -> Lit.print f g) g;
-      F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss] Rules.print [r | r,_ <- rst]);
+      F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss]
+        Rules.print [r | r,_ <- rst]);
     if joinable (s,t) then
       Some (Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
     else
       (* unifiable *)
       let s',t' = Rule.substitute (Subst.mgu s t) (s,t) in
       Some (Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]),Subst.mgu s t)))
-  else if rr @ ee = [] || (sat <> None &&
+  else (
+    let sat = saturated ctx (rr,ee) rewriter cc in
+    let order = match sat with None -> rewriter#order | Some o -> o in
+    if rr @ ee = [] || (sat <> None &&
           (L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs))) then (
     if !(settings.unfailing) && !(Settings.inequalities) = [] then
       Some (GroundCompletion (rr, ee, order))
@@ -397,7 +395,8 @@ let succeeds ctx (rr,ee) rewriter cc gs =
         Some (Proof (L.find joinable ieqs,([],[]),[])) (* UNSAT *)
       else Some (GroundCompletion (rr, ee, order)) (* SAT *)
     else Some (Completion rr)
-  ) else None
+  )
+  else None)
 ;;
 
 let succeeds ctx re rew cc =
