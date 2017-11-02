@@ -159,9 +159,9 @@ let print_json (es, gs) f res settings proof =
     "result",`String (success_code res);
     "time", f;
     "trs", `String res_str;
-    "statistics", Statistics.json ();
+    "statistics", Analytics.json ();
     "settings", json_settings settings (Strategy.to_string strat) !k;
-    "characteristics", Statistics.analyze es gs;
+    "characteristics", Analytics.analyze es gs;
     "proof", `String (match proof with Some s -> s | _ -> "")
   ] in
   F.printf "%s\n%!" (pretty_to_string t)
@@ -190,7 +190,7 @@ let print_res res =
 ;;
 
 let print_analysis es gs =
- F.printf "%s\n%!" (pretty_to_string (Statistics.analyze es gs))
+ F.printf "%s\n%!" (pretty_to_string (Analytics.analyze es gs))
 ;;         
 
 let clean es0 =
@@ -277,7 +277,7 @@ let () =
 	         Timer.stop timer;
            let secs = Timer.length ~res:Timer.Seconds timer in
            printf "%s %.2f %s@." "Search time:" secs "seconds";
-           Statistics.print ())
+           Analytics.print ())
          )
        with e -> printf "# SZS status GaveUp\n%!"; raise e end
       else if !analyze then

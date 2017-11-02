@@ -2,7 +2,6 @@
 module L = List
 module C = Cache
 module F = Format
-module St = Statistics
 module Sig = Signature
 
 (*** OPENS *******************************************************************)

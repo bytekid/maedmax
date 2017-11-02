@@ -4,7 +4,7 @@ module F = Format
 module L = List
 module O = Overlap
 module R = Rule
-module St = Statistics
+module A = Analytics
 module S = Settings
 module Ac = Theory.Ac
 module Commutativity = Theory.Commutativity
@@ -89,7 +89,7 @@ let debug _ = !(settings.d) >= 1
 
 let check_subsumption n = !(settings.check_subsumption) == n
 
-let nth_iteration n = !St.iterations mod n == 0
+let nth_iteration n = !A.iterations mod n == 0
 
 let pop_strategy _ = 
  if debug () then F.printf "pop strategy\n%!";
@@ -129,8 +129,8 @@ let rec get_oldest_node (aa,rew) =
 ;;
 
 let shape_changed es =
-  let shape = St.problem_shape (List.map Lit.terms (NS.to_list es)) in
-  !(settings.auto) && shape <> !(St.shape) && shape <> NoShape
+  let shape = A.problem_shape (List.map Lit.terms (NS.to_list es)) in
+  !(settings.auto) && shape <> !(A.shape) && shape <> NoShape
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -156,7 +156,7 @@ let rewrite rewriter (cs : NS.t) =
  in NS.fold rewrite cs (NS.empty (), NS.empty ())
 ;;  
    
-let rewrite rr = St.take_time St.t_rewrite (rewrite rr)
+let rewrite rr = A.take_time A.t_rewrite (rewrite rr)
 
 let reduced rr ns =
   let (irred, news) = rewrite rr ns in NS.add_all news irred
@@ -248,7 +248,7 @@ let split k ns =
 
 (* selection of small new nodes *)
 let select' ?(only_size=true) aarew k cc thresh =
- let k = if k = 0 then select_count !(St.iterations) else k in
+ let k = if k = 0 then select_count !(A.iterations) else k in
  let acs = !(settings.ac_syms) in
  let small = NS.smaller_than thresh cc in
  let aa = 
@@ -274,15 +274,15 @@ let select' ?(only_size=true) aarew k cc thresh =
 let axs _ = [ Lit.make_axiom e | e <- !(settings.es) ]
 
 let select_for_restart cc =
-  let k = !(St.restarts) * 2 in
+  let k = !(A.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
-  let ths = Listset.diff (St.theory_equations (NS.to_list cc)) (axs ()) in
+  let ths = Listset.diff (A.theory_equations (NS.to_list cc)) (axs ()) in
   let ths' = if shape_changed cc then ths else [] in
   fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
 
 let select rew cc =
   let thresh = !(settings.size_bound_equations) in
-  St.take_time St.t_select (select' ~only_size:false rew 0 cc) thresh
+  A.take_time A.t_select (select' ~only_size:false rew 0 cc) thresh
 ;;
 
 let select_goals' k gg thresh =
@@ -296,7 +296,7 @@ let select_goals' k gg thresh =
 ;;
 
 let select_goals k cc =
-  St.take_time St.t_select (select_goals' k cc) !(settings.size_bound_goals)
+  A.take_time A.t_select (select_goals' k cc) !(settings.size_bound_goals)
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -332,7 +332,7 @@ let overlaps rew rr aa =
  NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ]
 ;;
 
-let overlaps rew rr = St.take_time St.t_overlap (overlaps rew rr)
+let overlaps rew rr = A.take_time A.t_overlap (overlaps rew rr)
 
 (* goal only as outer rule *)
 let overlaps_on rew rr aa gs =
@@ -405,7 +405,7 @@ let succeeds ctx (rr,ee) rewriter cc gs =
 ;;
 
 let succeeds ctx re rew cc =
-  St.take_time St.t_success_check (succeeds ctx re rew cc)
+  A.take_time A.t_success_check (succeeds ctx re rew cc)
 ;;
 
 (* * FIND TRSS  * * *  * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -469,7 +469,7 @@ let rlred ctx cc (s,t) =
 
 let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
 
-let c_red ctx = St.take_time St.t_cred (c_red ctx)
+let c_red ctx = A.take_time A.t_cred (c_red ctx)
 
 let c_cpred ctx cc =
   Hashtbl.clear reducible;
@@ -481,13 +481,13 @@ let c_cpred ctx cc =
   L.iter (fun c -> ignore (assert_weighted c 2)) c2;
 ;;
 
-let c_cpred ctx = St.take_time St.t_ccpred (c_cpred ctx)
+let c_cpred ctx = A.take_time A.t_ccpred (c_cpred ctx)
 
 let c_max_red ctx cc =
   L.iter (fun n -> assert_weighted (rlred ctx cc (Lit.terms n)) 1) cc
 ;;
 
-let c_max_red ctx = St.take_time St.t_cred (c_max_red ctx)
+let c_max_red ctx = A.take_time A.t_cred (c_max_red ctx)
 
 
 let c_max_goal_red ctx cc gs =
@@ -512,7 +512,7 @@ let c_comp ctx ns =
  L.iter considered [ Lit.terms n | n <- ns; not (Lit.is_trivial n) ];
 ;;
 
-let c_comp ctx = St.take_time St.t_ccomp (c_comp ctx)
+let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
 
 (* constraints to guide search; those get all retracted *)
 let search_constraints ctx cc gs =
@@ -534,7 +534,7 @@ let search_constraints ctx cc gs =
 
 (* find k maximal TRSs *)
 let max_k ctx cc gs =
-  let k = !(settings.k) !(St.iterations) in
+  let k = !(settings.k) !(A.iterations) in
   let cc_symm = NS.to_list (NS.symmetric cc) in 
   if debug () then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
@@ -542,7 +542,7 @@ let max_k ctx cc gs =
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
     else (
       let sat_call = if use_maxsat () then max_sat else check in
-      if St.take_time St.t_sat sat_call ctx then (
+      if A.take_time A.t_sat sat_call ctx then (
         let m = get_model ctx in
         let c = if use_maxsat () then get_cost m else 0 in
         let is_rl n = eval m (C.find_rule n) && not (Rule.is_dp n) in
@@ -567,18 +567,18 @@ let max_k ctx cc gs =
    if has_comp () then
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
-   St.take_time St.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
+   A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symm);
    let t = Unix.gettimeofday () in
    search_constraints ctx cc gs;
-   St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. t);
+   A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
 ;;
 
-let max_k ctx cc = St.take_time St.t_maxk (max_k ctx cc)
+let max_k ctx cc = A.take_time A.t_maxk (max_k ctx cc)
 
 (* some logging functions *)
 let log_iteration i aa =
@@ -588,7 +588,7 @@ let log_iteration i aa =
 ;;
 
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@." !St.iterations j c
+ F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@." !A.iterations j c
    Rules.print (Variant.rename_rules rr)
    Rules.print (Variant.rename_rules rr')
 ;;
@@ -597,7 +597,7 @@ let log_max_trs j rr rr' c =
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
 let do_restart es gs =
- if St.memory () > 6000 then (
+ if A.memory () > 6000 then (
    if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
    true)
  else if shape_changed es then (
@@ -615,15 +615,15 @@ let do_restart es gs =
   let running_time = (Unix.gettimeofday () -. !(start_time)) in
   let limit =
     match strategy_limit () with
-      | IterationLimit i when !(St.iterations) > i -> true
+      | IterationLimit i when !(A.iterations) > i -> true
       | TimeLimit l when running_time > l -> true
       | _ -> false
   in
   (* estimate exponential blowup *)
   let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
   let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
-  let eqcounts = Listx.take_at_most 6 !(Statistics.eq_counts) in
-  let blowup = !(St.iterations) > 6 && is_exp eqcounts in
+  let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
+  let blowup = !(A.iterations) > 6 && is_exp eqcounts in
   if blowup && debug () then F.printf "restart (blowup)\n%!";
   if limit && debug () then F.printf "restart (limit reached)\n";
   rep || limit || blowup
@@ -631,8 +631,8 @@ let do_restart es gs =
 
 
 let detect_shape es =
-  let shape = St.problem_shape es in
-  St.shape := shape;
+  let shape = A.problem_shape es in
+  A.shape := shape;
   if debug () then
     F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
   let fs_count = L.length (Rules.signature es) in
@@ -663,25 +663,25 @@ let detect_shape es =
 
 
 let set_iteration_stats aa gs =
-  let i = !St.iterations in
-  St.iterations := i + 1;
-  St.ces := NS.size aa;
-  St.goals := NS.size gs;
-  let mem_diff = St.memory () - !last_mem in
+  let i = !A.iterations in
+  A.iterations := i + 1;
+  A.ces := NS.size aa;
+  A.goals := NS.size gs;
+  let mem_diff = A.memory () - !last_mem in
   let time_diff = Unix.gettimeofday () -. !last_time in
-  last_mem := St.memory ();
+  last_mem := A.memory ();
   last_time := Unix.gettimeofday ();
-  St.time_diffs := time_diff :: !(St.time_diffs);
-  St.mem_diffs := mem_diff :: !(St.mem_diffs);
-  St.eq_counts := NS.size aa :: !(St.eq_counts);
+  A.time_diffs := time_diff :: !(A.time_diffs);
+  A.mem_diffs := mem_diff :: !(A.mem_diffs);
+  A.eq_counts := NS.size aa :: !(A.eq_counts);
   if debug () then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
-     !St.iterations (NS.size aa) NS.print aa;
-   if !St.goals > 0 then
+     !A.iterations (NS.size aa) NS.print aa;
+   if !A.goals > 0 then
      let gnd = Rules.is_ground [ Lit.terms g | g <- NS.to_list gs ] in
-     F.printf "\nand %i goals:\n%a %i%!\n" !St.goals NS.print gs
+     F.printf "\nand %i goals:\n%a %i%!\n" !A.goals NS.print gs
        (if gnd then 1 else 0);
-   let json = St.json () in
+   let json = A.json () in
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string json))
 ;;
 
@@ -730,7 +730,7 @@ let rec phi ctx aa gs =
     let rrs = max_k ctx aa gs in
     let s = Unix.gettimeofday () in
     let _, aa', gs' = L.fold_left process (0, aa, gs) rrs in
-    St.t_process := !(St.t_process) +. (Unix.gettimeofday () -. s);
+    A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. s);
     phi ctx aa' gs'
   with Success r -> r
 ;;
@@ -743,7 +743,7 @@ let init_settings fs es gs =
  settings.only_c_syms := Listset.diff cs acs;
  settings.signature := Rules.signature (es @ gs);
  settings.d := !(fs.d);
- St.iterations := 0;
+ A.iterations := 0;
  settings.n := !(fs.n);
  settings.strategy := !(fs.strategy);
  settings.auto := !(fs.auto);
@@ -752,7 +752,7 @@ let init_settings fs es gs =
  settings.gs := gs;
  start_time := Unix.gettimeofday ();
  last_time := Unix.gettimeofday ();
- last_mem := St.memory ();
+ last_mem := A.memory ();
  Settings.is_ordered := !(settings.unfailing);
  if !(Settings.do_proof) then
    Trace.add_initials es;
@@ -816,12 +816,12 @@ let rec ckb fs (es, gs) =
   pop_strategy ();
   Strategy.clear ();
   Cache.clear ();
-  St.restarts := !St.restarts + 1;
+  A.restarts := !A.restarts + 1;
   Hashtbl.reset rewrite_trace;
   del_context ctx;
   Hashtbl.reset cp_cache;
   sizes := [];
-  St.mem_diffs := [];
-  St.time_diffs := [];
-  St.eq_counts := [];
+  A.mem_diffs := [];
+  A.time_diffs := [];
+  A.eq_counts := [];
   ckb fs ((if gs = [] then es0 else es_new @ es0), gs))

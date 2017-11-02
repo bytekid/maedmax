@@ -1,7 +1,6 @@
 (*** MODULES *****************************************************************)
 module L = List
 module T = Term
-module St = Statistics
 module C = Cache
 module Sig = Signature
 
