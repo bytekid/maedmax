@@ -359,10 +359,10 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
   let check constr st =
     if constr = False then False
     else (
-      if d > 0 then Format.printf "START joinability check %a \n%!" Rule.print st;
+      if d > 0 then Format.printf "check joinability of %a \n%!" Rule.print st;
       let c = if lookup trs es st then constr (* st is joinable *)
        else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))
-      in if d > 0 then Format.printf "END \n%!";
+      in
     c)
   in
   let j = match List.fold_left check True sts with
@@ -371,6 +371,6 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
     | Maybe c -> check_decode_constraints str trs c
   in 
   if d > 0 then
-    Format.printf "RESULT %s\n%!" (if j <> None then "YES" else "NO");
+    Format.printf "all equations are joinable: %s\n%!" (if j <> None then "YES" else "NO");
   j
 ;;

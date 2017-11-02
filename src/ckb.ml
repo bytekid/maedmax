@@ -348,8 +348,9 @@ let saturated ctx (rr,ee) rewriter cc =
   let d = !(settings.d) in
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
-  let eqs = [ normalize (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n ] in
-  Ground.all_joinable ctx str sys eqs xsig d
+  let eqs = [normalize (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n] in
+  let eqs' = Listset.diff eqs ([ t,s | s,t <- ee ] @ ee) in
+  Ground.all_joinable ctx str sys eqs' xsig d
 ;;
 
 let rewrite_seq rew (s,t) (rss,rst) =
@@ -363,6 +364,8 @@ let rewrite_seq rew (s,t) (rss,rst) =
 
 
 let succeeds ctx (rr,ee) rewriter cc gs =
+  if debug () then
+    Format.printf "start success check\n%!";
   let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list ee] in
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
@@ -373,7 +376,7 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if debug () then (
       let str = if joinable (s,t) then "joinable" else "unifiable" in
-      F.printf "%s %a\n%!" str (fun f g -> Lit.print f g) g;
+      F.printf "%s: %a\n%!" str (fun f g -> Lit.print f g) g;
       F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss]
         Rules.print [r | r,_ <- rst]);
     if joinable (s,t) then
@@ -385,17 +388,19 @@ let succeeds ctx (rr,ee) rewriter cc gs =
   else (
     let sat = saturated ctx (rr,ee) rewriter cc in
     let order = match sat with None -> rewriter#order | Some o -> o in
-    if rr @ ee = [] || (sat <> None &&
-          (L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs))) then (
-    if !(settings.unfailing) && !(Settings.inequalities) = [] then
-      Some (GroundCompletion (rr, ee, order))
-    else if !(settings.unfailing) then
-      let ieqs = !(Settings.inequalities) in
-      if L.exists joinable ieqs then
-        Some (Proof (L.find joinable ieqs,([],[]),[])) (* UNSAT *)
-      else Some (GroundCompletion (rr, ee, order)) (* SAT *)
-    else Some (Completion rr)
-  )
+    let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
+    if rr @ ee = [] || (sat <> None && (goals_ground || ee = [])) then (
+      if ee = [] then
+        Some (Completion rr)
+      else if !(settings.unfailing) && !(Settings.inequalities) = [] then
+        Some (GroundCompletion (rr, ee, order))
+      else (
+        let ieqs = !(Settings.inequalities) in
+        if L.exists joinable ieqs then
+          Some (Proof (L.find joinable ieqs,([],[]),[])) (* UNSAT *)
+        else
+          Some (GroundCompletion (rr, ee, order)) (* SAT *)
+    ))
   else None)
 ;;
 
@@ -785,7 +790,8 @@ let rec ckb fs (es, gs) =
  remember_state es gs;
  (* init state *)
  let ctx = mk_context () in
- let es0 = L.sort Pervasives.compare (L.map Lit.normalize es) in
+ let es' = L.map Lit.normalize [e | e <- es; not (Lit.is_trivial e)] in
+ let es0 = L.sort Pervasives.compare es' in
  let gs0 = L.map Lit.normalize gs in
  all_nodes := es0;
  try
