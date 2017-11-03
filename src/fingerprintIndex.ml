@@ -54,7 +54,6 @@ let empty = Leaf []
 let is_empty = function Leaf [] -> true | _ -> false
 
 let insert trie (term, value) =
-  (*Format.printf "Insert %a into \n%a\n" Term.print (fst rule) print trie;*)
   let rec insert fs trie = match fs, trie with
     | [], Leaf rs -> Leaf (value :: rs)
     | f :: fs', Leaf [] ->
@@ -66,7 +65,7 @@ let insert trie (term, value) =
       with Not_found -> (H.add h f (insert fs' (Leaf [])); Node h))
     | _ -> failwith ("FingerprintIndex insertion: unexpected pattern" ^ (F.to_string fs) ^ " and " ^ (to_string trie))
   in let res = insert (F.of_term term) trie in
-  (*Format.printf "...yields\n%a\n" print res;*)
+  (*Format.printf "insert %a with %s yields %a\n%!" Term.print term (F.to_string (F.of_term term)) print res;*)
   res
 ;;
 
@@ -87,9 +86,9 @@ let get_matches t trie =
   if is_empty trie then [] else retrieve (F.of_term t) trie
 ;;
 
-let get_overlaps t trie =
+let get_unifiables t trie =
   let rec retrieve fs0 = function
-    | Leaf rs -> assert (fs0 = []); rs
+    | Leaf rs -> rs
     | Node h ->
       let ret f fs = try retrieve fs (H.find h f) with Not_found -> [] in
       match fs0 with
@@ -100,5 +99,7 @@ let get_overlaps t trie =
           H.fold (fun k t rs -> retrieve fs t @ rs) h []
         | F.N :: fs -> ret F.B fs @ ret F.N fs
         | _ -> failwith "FingerprintIndex overlaps: too short fingerprint"
-  in retrieve (F.of_term t) trie
+  in let res = retrieve (F.of_term t) trie in
+  (*Format.printf "%d results for %a in %a\n%!" (List.length res) Term.print t print trie;*)
+  res
 ;;

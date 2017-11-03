@@ -329,16 +329,30 @@ let overlaps rew rr aa =
      (*let rr' = NS.c_equivalence_free cs rr' in*)
      rr' @ aa'
  in
- NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ]
+ (*let cps1 = NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ] in*)
+ let ns = [ Lit.terms n | n <- ns ] in
+ let t = Unix.gettimeofday ()  in
+ let ovl = new Overlapper.overlapper ns in
+ ovl#init ();
+ A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
+ let cps2 = NS.of_list [ cp | n <- ns; cp <- ovl#cps n ] in
+ (*if not (NS.equal cps1 cps2) then
+  Format.printf "Real CPs:\n%a\nIndexed CPs:\n%a\n%!"
+    NS.print cps1 NS.print cps2;
+ assert (NS.equal cps1 cps2);*)
+ cps2, ovl
 ;;
 
 let overlaps rew rr = A.take_time A.t_overlap (overlaps rew rr)
 
 (* goal only as outer rule *)
-let overlaps_on rew rr aa gs =
+let overlaps_on rew rr aa overlapper gs =
  let ns = rr @ aa in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
-  NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps rew r g ]
+ let cps1 = NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps rew r g ] in
+ (*let cps2 = NS.of_list [ cp | g <- gs_for_ols; cp <- overlapper#cps (Lit.terms g) ] in
+ assert (NS.subset cps1 cps2);*)
+ cps1
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -570,9 +584,7 @@ let max_k ctx cc gs =
    A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symm);
-   let t = Unix.gettimeofday () in
    search_constraints ctx cc gs;
-   A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
@@ -716,10 +728,11 @@ let rec phi ctx aa gs =
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
     let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
     let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in
-    let cps = reduced rew (overlaps rew rr aa_for_ols) in (* rewrite CPs *)
+    let cps, ovl = overlaps rew rr aa_for_ols in
+    let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
-    let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
+    let gcps = reduced rew (overlaps_on rew rr aa_for_ols ovl gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     store_remaining_nodes ctx rest;
     match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) gs with
