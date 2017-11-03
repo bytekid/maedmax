@@ -9,7 +9,7 @@ let rename = Rule.rename
 let mgu' s t = try Some (mgu s t) with Not_unifiable -> None
 
 let overlap_between_at rule1 rule2 p =
-  let l1,r1 = rename rule1 and l2, r2 = rename rule2 in
+  let l1,r1 = rule1 and l2, r2 = rename rule2 in
   if (p = [] && (Rule.variant (l1, r1) (l2, r2))) then None
   else
     match mgu' (subterm_at p l2) l1 with
