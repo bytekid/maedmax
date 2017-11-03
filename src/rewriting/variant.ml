@@ -89,7 +89,7 @@ let t_normalize = ref 0.0
 
 let normalize_rule_dir (s,t) =
   let tt = Unix.gettimeofday () in
- let s',t' =  Term.rename_canonical s, Term.rename_canonical t in
+ let s',t' =  Term.substitute_bot s, Term.substitute_bot t in
  let rule, dir =
    if s' < t' then (s,t), true
    else if t' < s' then (t,s), false
