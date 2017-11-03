@@ -48,7 +48,8 @@ let variable_condition (l, r) =
 let flip (l,r) = (r,l)
 
 let rename (l, r) =
-  let s = [ x, Term.V (Signature.fresh_var ()) | x <- Term.variables l ] in
+  let u = Term.F(0,[l;r]) in
+  let s = [ x, Term.V (Signature.fresh_var ()) | x <- Term.variables u ] in
   (Term.substitute s l, Term.substitute s r)
 
 let left_linear (l, r) = Term.linear l 

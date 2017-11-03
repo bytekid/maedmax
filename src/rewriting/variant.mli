@@ -27,3 +27,5 @@ val union_es : Rules.t -> Rules.t -> Rules.t
 val normalize_rule_dir : Rule.t -> Rule.t * bool
 
 val normalize_rule : Rule.t -> Rule.t
+
+val t_normalize : float ref

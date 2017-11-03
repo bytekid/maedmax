@@ -85,7 +85,10 @@ let interreduce rr =
 
 let union_es es1 es2 = unique ~eq:eq_variant (es1 @ es2)
 
+let t_normalize = ref 0.0
+
 let normalize_rule_dir (s,t) =
+  let tt = Unix.gettimeofday () in
  let s',t' =  Term.rename_canonical s, Term.rename_canonical t in
  let rule, dir =
    if s' < t' then (s,t), true
@@ -93,7 +96,9 @@ let normalize_rule_dir (s,t) =
    else if rename_rule [] (s,t) < rename_rule [] (t,s) then (s,t), true
    else (t,s), false
  in
- rename_rule [] rule, dir
+ let res = rename_rule [] rule, dir in
+ t_normalize := !t_normalize +. (Unix.gettimeofday () -. tt);
+ res
 ;;
 
 let normalize_rule (s,t) = fst (normalize_rule_dir (s,t))

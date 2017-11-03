@@ -83,7 +83,8 @@ let print () =
   printf " selection          %.3f@." !t_select;
   printf " caching            %.3f@." !t_cache;
   printf " tmp1               %.3f@." !t_tmp1;
-  printf " tmp2               %.3f@." !t_tmp2
+  printf " tmp2               %.3f@." !t_tmp2;
+  printf " normalization      %.3f@." !Variant.t_normalize
 ;;
 
 let is_applicative es =
