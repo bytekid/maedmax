@@ -360,7 +360,7 @@ let saturated ctx (rr,ee) rewriter cc =
   let d = !(settings.d) in
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
-  let eqs = [normalize (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n] in
+  let eqs = [(*normalize*) (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n] in
   (*let eqs' = Listset.diff eqs ([ t,s | s,t <- ee ] @ ee) in*)
   Ground.all_joinable ctx str sys eqs xsig d
 ;;

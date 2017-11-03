@@ -84,12 +84,6 @@ let rewriter_nf_with l rewriter =
     Some ([ make st' l.is_equality l.is_goal ], rls))
 ;;
   
-let to_nf l (rewriter : Rewriter.rewriter) =
-  let s, _ = rewriter#nf (fst l.terms) in
-  let t, _ = rewriter#nf (snd l.terms) in
-  make (Variant.normalize_rule (s,t)) l.is_equality l.is_goal
-;;
-  
 let joins l trs =
   let _, s' = Rewriting.nf_with trs (fst l.terms) in
   let _, t' = Rewriting.nf_with trs (snd l.terms) in
