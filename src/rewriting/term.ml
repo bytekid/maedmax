@@ -85,6 +85,11 @@ let rename_canonical t =
   substitute subst t
 ;;
 
+let rec substitute_bot = function
+  | V x -> V 0
+  | F (f, ts) -> F (f, [ substitute_bot ti | ti <- ts ])
+;;
+
 let rename_table : (t,t) Hashtbl.t = Hashtbl.create 256
 
 let rename_canonical t =

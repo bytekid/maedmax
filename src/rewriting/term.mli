@@ -44,6 +44,8 @@ val rename : t -> t
 
 val rename_canonical : t -> t
 
+val substitute_bot : t -> t
+
 val positions : t -> int list list
 
 val variable_positions : t -> int list list
