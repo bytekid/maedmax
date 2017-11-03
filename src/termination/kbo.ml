@@ -1,7 +1,6 @@
 (*** MODULES *****************************************************************)
 module L = List
 module T = Term
-module St = Statistics
 module C = Cache
 module Sig = Signature
 
@@ -45,7 +44,8 @@ let adm_smt (ctx,k) =
   let nat_f f = (w k f <>=> zero) <&> (p f <>=> zero) in
   let ensure_nat = big_and ctx [ nat_f f | f,_ <- !funs] in
   (* constants *)
-  let cadm = big_and ctx [ w k c <>=> one | c,a <- !funs; a=0 ] in (* w0 = 1 *)
+  let cs = [ c | c,a <- !funs; a=0 ] in
+  let cadm = big_and ctx [ w k c <>=> one | c <- cs ] in (* w0 = 1 *)
   (* unary symbols *)
   let f0 f = w k f <=> zero in
   let max f = big_and ctx [ p f <>> (p g) | g,_<- !funs; g <> f ] in
@@ -53,7 +53,9 @@ let adm_smt (ctx,k) =
   (* total *)
   let ps = [ f,g | f,_ <- !funs; g,_ <- !funs; f <> g ] in
   let total_prec = big_and ctx [ !! (p f <=> (p g)) | f, g <- ps ] in
-  big_and1 [ensure_nat; cadm; uadm; total_prec]
+  let cw0 = big_or ctx [ w k c <=> one | c <- cs ] in
+  let cw0' = if !(Settings.do_proof) then cw0 else mk_true ctx in
+  big_and1 [ensure_nat; cadm; uadm; total_prec; cw0']
 ;;
     
 let weight (ctx,k) t =

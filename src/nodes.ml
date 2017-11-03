@@ -84,6 +84,10 @@ let find p ns = H.fold (fun n _ x -> if p n then Some n else x) ns None
 
 let for_all p ns = H.fold (fun n _ b -> b && p n) ns true
 
+let subset ns1 ns2 = for_all (mem ns2) ns1
+
+let equal ns1 ns2 = subset ns1 ns2 && subset ns2 ns1
+
 let variant_free ns =
   let h = Hashtbl.create (H.length ns * 2) in
   let var e e' = Rule.variant (Lit.terms e) (Lit.terms e') in

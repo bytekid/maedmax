@@ -4,7 +4,7 @@ module F = Format
 module L = List
 module O = Overlap
 module R = Rule
-module St = Statistics
+module A = Analytics
 module S = Settings
 module Ac = Theory.Ac
 module Commutativity = Theory.Commutativity
@@ -87,6 +87,10 @@ let has_comp () = L.mem S.Comp (constraints ())
 
 let debug _ = !(settings.d) >= 1
 
+let check_subsumption n = !(settings.check_subsumption) == n
+
+let nth_iteration n = !A.iterations mod n == 0
+
 let pop_strategy _ = 
  if debug () then F.printf "pop strategy\n%!";
  match !(settings.strategy) with
@@ -101,7 +105,9 @@ let normalize = Variant.normalize_rule
 
 let ac_eqs () = [ normalize e | e <- Ac.eqs !(settings.ac_syms) ]
 
-let add_nodes ns =
+let store_remaining_nodes ctx ns =
+  if has_comp () then
+    NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   if !(settings.size_age_ratio) < 100 then
     let ns = NS.smaller_than !(settings.size_bound_equations) ns in
     all_nodes := L.rev_append (L.rev !all_nodes) (NS.sort_size ns)
@@ -120,6 +126,11 @@ let rec get_oldest_node (aa,rew) =
          F.printf " ... discard/present %a \n" Lit.print n;*)
        get_oldest_node (aa,rew))
      else Some n
+;;
+
+let shape_changed es =
+  let shape = A.problem_shape (List.map Lit.terms (NS.to_list es)) in
+  !(settings.auto) && shape <> !(A.shape) && shape <> NoShape
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -145,7 +156,7 @@ let rewrite rewriter (cs : NS.t) =
  in NS.fold rewrite cs (NS.empty (), NS.empty ())
 ;;  
    
-let rewrite rr = St.take_time St.t_rewrite (rewrite rr)
+let rewrite rr = A.take_time A.t_rewrite (rewrite rr)
 
 let reduced rr ns =
   let (irred, news) = rewrite rr ns in NS.add_all news irred
@@ -209,7 +220,7 @@ let select_size_age aarew ns_sorted all n =
       selections := !selections + 1;
       if !selections mod (!(settings.size_age_ratio) / 10) <> 0 then
         select (L.tl ns) (L.hd ns :: acc) (n-1)
-      else if !selections mod 26 = 0 then
+      else if !selections mod 26 = 0 && all <> [] then
         let b = select_goal_similar aarew all in
         select ns (b::acc) (n-1)
       else (
@@ -237,7 +248,7 @@ let split k ns =
 
 (* selection of small new nodes *)
 let select' ?(only_size=true) aarew k cc thresh =
- let k = if k = 0 then select_count !(St.iterations) else k in
+ let k = if k = 0 then select_count !(A.iterations) else k in
  let acs = !(settings.ac_syms) in
  let small = NS.smaller_than thresh cc in
  let aa = 
@@ -263,22 +274,21 @@ let select' ?(only_size=true) aarew k cc thresh =
 let axs _ = [ Lit.make_axiom e | e <- !(settings.es) ]
 
 let select_for_restart cc =
-  let k = !(St.restarts) * 2 in
+  let k = !(A.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
-  let ths = Listset.diff (St.theory_equations (NS.to_list cc)) (axs ()) in
-  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths
+  let ths = Listset.diff (A.theory_equations (NS.to_list cc)) (axs ()) in
+  let ths' = if shape_changed cc then ths else [] in
+  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
 
 let select rew cc =
   let thresh = !(settings.size_bound_equations) in
-  St.take_time St.t_select (select' ~only_size:false rew 0 cc) thresh
+  A.take_time A.t_select (select' ~only_size:false rew 0 cc) thresh
 ;;
 
 let select_goals' k gg thresh =
  let acs = !(settings.ac_syms) in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
- let t = Unix.gettimeofday () in
  let sorted = NS.sort_size_unif small in
- St.t_tmp1 := !St.t_tmp1 +. (Unix.gettimeofday () -. t);
  let gg_a = fst (Listx.split_at_most k sorted) in
  let gg_p = NS.diff_list gg gg_a in 
  if debug () then log_select gg gg_a;
@@ -286,7 +296,7 @@ let select_goals' k gg thresh =
 ;;
 
 let select_goals k cc =
-  St.take_time St.t_select (select_goals' k cc) !(settings.size_bound_goals)
+  A.take_time A.t_select (select_goals' k cc) !(settings.size_bound_goals)
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -312,25 +322,37 @@ let overlaps rew rr aa =
  let ns =
    if not !(settings.unfailing) then rr
    else
-     let t = Unix.gettimeofday () in
      let acs, cs = !(settings.ac_syms), !(settings.only_c_syms) in
      let aa' = NS.ac_equivalence_free acs (Listset.diff aa !acx_rules) in
      let rr' = NS.ac_equivalence_free !(settings.ac_syms) rr in
      let aa' = NS.c_equivalence_free cs aa' in
      (*let rr' = NS.c_equivalence_free cs rr' in*)
-     St.t_tmp2 := !St.t_tmp2 +. (Unix.gettimeofday () -. t);
      rr' @ aa'
  in
- NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ]
+ (*let cps1 = NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ] in*)
+ let ns = [ Lit.terms n | n <- ns ] in
+ let t = Unix.gettimeofday ()  in
+ let ovl = new Overlapper.overlapper ns in
+ ovl#init ();
+ A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
+ let cps2 = NS.of_list [ cp | n <- ns; cp <- ovl#cps n ] in
+ (*if not (NS.equal cps1 cps2) then
+  Format.printf "Real CPs:\n%a\nIndexed CPs:\n%a\n%!"
+    NS.print cps1 NS.print cps2;
+ assert (NS.equal cps1 cps2);*)
+ cps2, ovl
 ;;
 
-let overlaps rew rr = St.take_time St.t_overlap (overlaps rew rr)
+let overlaps rew rr = A.take_time A.t_overlap (overlaps rew rr)
 
 (* goal only as outer rule *)
-let overlaps_on rew rr aa gs =
+let overlaps_on rew rr aa overlapper gs =
  let ns = rr @ aa in
  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
-  NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps rew r g ]
+ let cps1 = NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps rew r g ] in
+ (*let cps2 = NS.of_list [ cp | g <- gs_for_ols; cp <- overlapper#cps (Lit.terms g) ] in
+ assert (NS.subset cps1 cps2);*)
+ cps1
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -340,9 +362,8 @@ let saturated ctx (rr,ee) rewriter cc =
   let d = !(settings.d) in
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
-  (*let ns = if !(settings.unfailing) then rr @ ee else rr in
-  let cc' = !(settings.es) @ [ n | n1 <- ns; n2 <- ns; n <- cps n1 n2 ] in*)
-  let eqs = [ normalize (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n ] in
+  let eqs = [normalize (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n] in
+  (*let eqs' = Listset.diff eqs ([ t,s | s,t <- ee ] @ ee) in*)
   Ground.all_joinable ctx str sys eqs xsig d
 ;;
 
@@ -357,42 +378,48 @@ let rewrite_seq rew (s,t) (rss,rst) =
 
 
 let succeeds ctx (rr,ee) rewriter cc gs =
+  if debug () then
+    Format.printf "start success check\n%!";
+  let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list ee] in
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
-  let fixed g =
-    let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v
-  in
-  let sat = saturated ctx (rr,ee) rewriter cc in
-  let order = match sat with None -> rewriter#order | Some o -> o in
-  if not (NS.is_empty gs) && NS.exists fixed gs then (
-    let g = L.find fixed (NS.to_list gs) in
+  let ok g = let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v in
+  if not (NS.is_empty gs) && NS.exists ok gs then (
+    let g = L.find ok (NS.to_list gs) in
     let s,t = Lit.terms g in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if debug () then (
       let str = if joinable (s,t) then "joinable" else "unifiable" in
-      F.printf "%s %a\n%!" str (fun f g -> Lit.print f g) g;
-      F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss] Rules.print [r | r,_ <- rst]);
+      F.printf "%s: %a\n%!" str (fun f g -> Lit.print f g) g;
+      F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss]
+        Rules.print [r | r,_ <- rst]);
     if joinable (s,t) then
       Some (Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
     else
       (* unifiable *)
       let s',t' = Rule.substitute (Subst.mgu s t) (s,t) in
       Some (Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]),Subst.mgu s t)))
-  else if rr @ ee = [] || (sat <> None &&
-          (L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs))) then (
-    if !(settings.unfailing) && !(Settings.inequalities) = [] then
-      Some (GroundCompletion (rr, ee, order))
-    else if !(settings.unfailing) then
-      let ieqs = !(Settings.inequalities) in
-      if L.exists joinable ieqs then
-        Some (Proof (L.find joinable ieqs,([],[]),[])) (* UNSAT *)
-      else Some (GroundCompletion (rr, ee, order)) (* SAT *)
-    else Some (Completion rr)
-  ) else None
+  else (
+    let sat = saturated ctx (rr,ee) rewriter cc in
+    let order = match sat with None -> rewriter#order | Some o -> o in
+    let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
+    if rr @ ee = [] || (sat <> None && (goals_ground || ee = [])) then (
+      if ee = [] then
+        Some (Completion rr)
+      else if !(settings.unfailing) && !(Settings.inequalities) = [] then
+        Some (GroundCompletion (rr, ee, order))
+      else (
+        let ieqs = !(Settings.inequalities) in
+        if L.exists joinable ieqs then
+          Some (Proof (L.find joinable ieqs,([],[]),[])) (* UNSAT *)
+        else
+          Some (GroundCompletion (rr, ee, order)) (* SAT *)
+    ))
+  else None)
 ;;
 
 let succeeds ctx re rew cc =
-  St.take_time St.t_success_check (succeeds ctx re rew cc)
+  A.take_time A.t_success_check (succeeds ctx re rew cc)
 ;;
 
 (* * FIND TRSS  * * *  * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -445,18 +472,18 @@ let rlred ctx cc (s,t) =
   let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
-    let red = Rewriting.reducible_with [rl] in
-    let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
-    let b = is_rule rl && (red t || red s) in
-    Hashtbl.add redc (j, i) b; b)
+    try Hashtbl.find redc (j, i)
+    with Not_found ->
+      let red = Rewriting.reducible_with [rl] in
+      let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
+      let b = is_rule rl && (red t || red s) in
+      Hashtbl.add redc (j, i) b; b)
   in big_or ctx [ C.find_rule (Lit.terms n) | n <- ccs; redcbl (Lit.terms n) ]
 ;;
 
-let c_red ctx cc =
-  L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
-;;
+let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
 
-let c_red ctx = St.take_time St.t_cred (c_red ctx)
+let c_red ctx = A.take_time A.t_cred (c_red ctx)
 
 let c_cpred ctx cc =
   Hashtbl.clear reducible;
@@ -468,11 +495,13 @@ let c_cpred ctx cc =
   L.iter (fun c -> ignore (assert_weighted c 2)) c2;
 ;;
 
-let c_cpred ctx = St.take_time St.t_ccpred (c_cpred ctx)
+let c_cpred ctx = A.take_time A.t_ccpred (c_cpred ctx)
 
 let c_max_red ctx cc =
   L.iter (fun n -> assert_weighted (rlred ctx cc (Lit.terms n)) 1) cc
 ;;
+
+let c_max_red ctx = A.take_time A.t_cred (c_max_red ctx)
 
 
 let c_max_goal_red ctx cc gs =
@@ -497,7 +526,7 @@ let c_comp ctx ns =
  L.iter considered [ Lit.terms n | n <- ns; not (Lit.is_trivial n) ];
 ;;
 
-let c_comp ctx = St.take_time St.t_ccomp (c_comp ctx)
+let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
 
 (* constraints to guide search; those get all retracted *)
 let search_constraints ctx cc gs =
@@ -519,7 +548,7 @@ let search_constraints ctx cc gs =
 
 (* find k maximal TRSs *)
 let max_k ctx cc gs =
-  let k = !(settings.k) !(St.iterations) in
+  let k = !(settings.k) !(A.iterations) in
   let cc_symm = NS.to_list (NS.symmetric cc) in 
   if debug () then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
@@ -527,7 +556,7 @@ let max_k ctx cc gs =
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
     else (
       let sat_call = if use_maxsat () then max_sat else check in
-      if St.take_time St.t_sat sat_call ctx then (
+      if A.take_time A.t_sat sat_call ctx then (
         let m = get_model ctx in
         let c = if use_maxsat () then get_cost m else 0 in
         let is_rl n = eval m (C.find_rule n) && not (Rule.is_dp n) in
@@ -552,7 +581,7 @@ let max_k ctx cc gs =
    if has_comp () then
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
-   St.take_time St.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
+   A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symm);
    search_constraints ctx cc gs;
@@ -561,7 +590,7 @@ let max_k ctx cc gs =
    trss
 ;;
 
-let max_k ctx cc = St.take_time St.t_maxk (max_k ctx cc)
+let max_k ctx cc = A.take_time A.t_maxk (max_k ctx cc)
 
 (* some logging functions *)
 let log_iteration i aa =
@@ -571,27 +600,26 @@ let log_iteration i aa =
 ;;
 
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@." !St.iterations j c
+ F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@." !A.iterations j c
    Rules.print (Variant.rename_rules rr)
    Rules.print (Variant.rename_rules rr')
 ;;
-
 
 (* towards main control loop *)
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
 let do_restart es gs =
- if St.memory () > 6000 then (
+ if A.memory () > 6000 then (
    if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
    true)
  else
    let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
-   let shape = St.problem_shape (to_eqs es) (to_eqs gs) in
-   if !(settings.auto) && shape <> !(St.shape) && shape <> NoShape then (
+   let shape = A.problem_shape (to_eqs es) in
+   if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape then (
      if debug () then
-       Format.printf "restart (new shape %s detected)\n%!" (Settings.shape_to_string shape);
+       Format.printf "restart (new shape detected)\n%!";
      true)
-   else
+ else
   (* no progress measure *)
   let h = Hashtbl.hash (NS.size es, es, gs) in
   let rep = L.for_all ((=) h) !hash_iteration in
@@ -602,37 +630,42 @@ let do_restart es gs =
   let running_time = (Unix.gettimeofday () -. !(start_time)) in
   let limit =
     match strategy_limit () with
-      | IterationLimit i when !(St.iterations) > i -> true
+      | IterationLimit i when !(A.iterations) > i -> true
       | TimeLimit l when running_time > l -> true
       | _ -> false
   in
   (* estimate exponential blowup *)
   let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
   let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
-  let eqcounts = Listx.take_at_most 6 !(Statistics.eq_counts) in
-  let blowup = !(St.iterations) > 6 && is_exp eqcounts in
+  let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
+  let blowup = !(A.iterations) > 6 && is_exp eqcounts in
   if blowup && debug () then F.printf "restart (blowup)\n%!";
   if limit && debug () then F.printf "restart (limit reached)\n";
   rep || limit || blowup
 ;;
 
 
-let detect_shape es gs =
-  let shape = St.problem_shape es gs in
-  St.shape := shape;
+let detect_shape es =
+  let shape = A.problem_shape es in
+  A.shape := shape;
   if debug () then
     F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
   let fs_count = L.length (Rules.signature es) in
   match shape with
     | Piombo
-    | Xeno
     | Zolfo -> settings.n := 10
+    | Xeno -> (
+      settings.reduce_AC_equations_for_CPs := true;
+      settings.n := 10
+    )
     | Elio when fs_count > 3 -> settings.n := 10
     | Silicio ->
       settings.n := 10;
       settings.size_age_ratio := 85;
       settings.strategy := Strategy.strategy_ordered_lpo
-    | Ossigeno -> settings.n := 12
+    | Ossigeno ->
+      settings.n := 12;
+      settings.size_age_ratio := 80;
     | Carbonio
     | NoShape -> settings.n := 6
     | Elio -> settings.n := 6
@@ -645,30 +678,31 @@ let detect_shape es gs =
 
 
 let set_iteration_stats aa gs =
-  let i = !St.iterations in
-  St.iterations := i + 1;
-  St.ces := NS.size aa;
-  St.goals := NS.size gs;
-  let mem_diff = St.memory () - !last_mem in
+  let i = !A.iterations in
+  A.iterations := i + 1;
+  A.ces := NS.size aa;
+  A.goals := NS.size gs;
+  let mem_diff = A.memory () - !last_mem in
   let time_diff = Unix.gettimeofday () -. !last_time in
-  last_mem := St.memory ();
+  last_mem := A.memory ();
   last_time := Unix.gettimeofday ();
-  St.time_diffs := time_diff :: !(St.time_diffs);
-  St.mem_diffs := mem_diff :: !(St.mem_diffs);
-  St.eq_counts := NS.size aa :: !(St.eq_counts);
+  A.time_diffs := time_diff :: !(A.time_diffs);
+  A.mem_diffs := mem_diff :: !(A.mem_diffs);
+  A.eq_counts := NS.size aa :: !(A.eq_counts);
   if debug () then (
    F.printf "Start iteration %i with %i equations:\n %a\n%!"
-     !St.iterations (NS.size aa) NS.print aa;
-   if !St.goals > 0 then
+     !A.iterations (NS.size aa) NS.print aa;
+   if !A.goals > 0 then
      let gnd = Rules.is_ground [ Lit.terms g | g <- NS.to_list gs ] in
-     F.printf "\nand %i goals:\n%a %i%!\n" !St.goals NS.print gs
+     F.printf "\nand %i goals:\n%a %i%!\n" !A.goals NS.print gs
        (if gnd then 1 else 0);
-   let json = St.json () in
+   let json = A.json () in
    F.printf "%s\n%!" (Yojson.Basic.pretty_to_string json))
 ;;
 
 
-let store_trs ctx j rr c =
+let store_trs ctx j rr cost =
+  let rr = [ Lit.terms r | r <- rr ] in
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS is used; have to store *)
   let rr_reduced =
@@ -677,58 +711,42 @@ let store_trs ctx j rr c =
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;
-  if debug () then log_max_trs j rr rr_reduced c;
+  if debug () then log_max_trs j rr rr_reduced cost;
   rr_index
 ;;
 
-
-let non_gjoinable ctx ns rr = NS.subsumption_free ns
-
-let non_gjoinable ctx ns = St.take_time St.t_gjoin_check (non_gjoinable ctx ns)
-
-
 let rec phi ctx aa gs =
-  if do_restart aa gs then
-    raise (Restart (select_for_restart aa));
+  if do_restart aa gs then raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
   let aa =
-    if !(settings.check_subsumption) == 2 && !St.iterations mod 3 == 0 then
-      NS.subsumption_free aa
+    if check_subsumption 2 && nth_iteration 3 then NS.subsumption_free aa
     else aa
   in
   let process (j, aa, gs) (rr, c, order) =
-    let trs_n = store_trs ctx j [ Lit.terms r | r <- rr ] c in
-    let rr_red = C.redtrs_of_index trs_n in
+    let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in (* interreduce *)
     let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
-    let gs = NS.add_all (reduced rew gs) gs in
-    let irred = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    let irred' =
-      if !(settings.check_subsumption) == 1 then NS.subsumption_free irred
-      else irred
-    in
-    let aa_for_ols = NS.to_list (eqs_for_overlaps irred') in
-    let cps = reduced rew (overlaps rew rr aa_for_ols) in (* rewrite CPs *)
-    let nn = NS.diff (NS.add_all cps red) aa in (* only new ones *)
+    let gs = NS.add_all (reduced rew gs) gs in (* rewrite goals wrt new TRS *)
+    let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
+    let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
+    let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in
+    let cps, ovl = overlaps rew rr aa_for_ols in
+    let cps = reduced rew cps in (* rewrite CPs *)
+    let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
-    (* FIXME where to move this variable registration stuff? *)
-    if has_comp () then
-      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) rest;
-    let gcps = reduced rew (overlaps_on rew rr aa_for_ols gs) in (* goal CPs *)
+    let gcps = reduced rew (overlaps_on rew rr aa_for_ols ovl gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
-    let rr,ee = [ Lit.terms r | r <- rr], [ Lit.terms e | e <- NS.to_list irred ] in
-    add_nodes rest;
-    match succeeds ctx (rr, ee) rew (NS.add_list (axs ()) cps) gs with
+    store_remaining_nodes ctx rest;
+    match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) gs with
        Some r -> raise (Success r)
-     | None ->
-       (j+1, NS.add_list sel aa, NS.add_list gg gs)
+     | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs)
   in
   try
     let rrs = max_k ctx aa gs in
     let s = Unix.gettimeofday () in
     let _, aa', gs' = L.fold_left process (0, aa, gs) rrs in
-    St.t_process := !(St.t_process) +. (Unix.gettimeofday () -. s);
+    A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. s);
     phi ctx aa' gs'
   with Success r -> r
 ;;
@@ -741,7 +759,7 @@ let init_settings fs es gs =
  settings.only_c_syms := Listset.diff cs acs;
  settings.signature := Rules.signature (es @ gs);
  settings.d := !(fs.d);
- St.iterations := 0;
+ A.iterations := 0;
  settings.n := !(fs.n);
  settings.strategy := !(fs.strategy);
  settings.auto := !(fs.auto);
@@ -750,7 +768,7 @@ let init_settings fs es gs =
  settings.gs := gs;
  start_time := Unix.gettimeofday ();
  last_time := Unix.gettimeofday ();
- last_mem := St.memory ();
+ last_mem := A.memory ();
  Settings.is_ordered := !(settings.unfailing);
  if !(Settings.do_proof) then
    Trace.add_initials es;
@@ -761,7 +779,7 @@ let init_settings fs es gs =
  if !(settings.reduce_AC_equations_for_CPs) then (
    let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
    acx_rules := [ Lit.flip r | r <- acxs ] @ acxs);
- if !(fs.auto) then detect_shape es gs
+ if !(fs.auto) then detect_shape es
 ;;
 
 let remember_state es gs =
@@ -788,7 +806,8 @@ let rec ckb fs (es, gs) =
  remember_state es gs;
  (* init state *)
  let ctx = mk_context () in
- let es0 = L.map Lit.normalize es in
+ let es' = L.map Lit.normalize [e | e <- es; not (Lit.is_trivial e)] in
+ let es0 = L.sort Pervasives.compare es' in
  let gs0 = L.map Lit.normalize gs in
  all_nodes := es0;
  try
@@ -813,12 +832,12 @@ let rec ckb fs (es, gs) =
   pop_strategy ();
   Strategy.clear ();
   Cache.clear ();
-  St.restarts := !St.restarts + 1;
+  A.restarts := !A.restarts + 1;
   Hashtbl.reset rewrite_trace;
   del_context ctx;
   Hashtbl.reset cp_cache;
   sizes := [];
-  St.mem_diffs := [];
-  St.time_diffs := [];
-  St.eq_counts := [];
+  A.mem_diffs := [];
+  A.time_diffs := [];
+  A.eq_counts := [];
   ckb fs ((if gs = [] then es0 else es_new @ es0), gs))

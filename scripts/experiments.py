@@ -27,7 +27,7 @@ def get_configs():
 
 def result_data(problem, result):
   name = problem['file']
-  name = name[0:name.index('.')]
+  name = name[0:name.rfind('.')]
   data = {"config": problem['config'], "result": result, "system": name}
   return data
 
@@ -41,7 +41,7 @@ def timeout_data(problem):
 
 def success_data(problem, data):
   name = problem['file']
-  name = name[0:name.index('.')]
+  name = name[0:name.rfind('.')]
   data['system'] = name
   data['config'] = problem['config']
   return data
@@ -60,7 +60,7 @@ def work(problem):
     print(str(problem["number"]) + ": " + problem["file"] + " " + code)
     if "TIMEOUT" in res:
       d = timeout_data(problem)
-      cmd = tool + " -analyze " + f + " > " + temp.name
+      cmd = tool + " --analyze " + f + " > " + temp.name
       os.system(cmd)
       file = open(temp.name, "r") 
       res = file.read()

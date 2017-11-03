@@ -59,8 +59,9 @@ let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed], max);
                     (ts_dp, [Comp], [MaxRed], max)]
 let strategy_ordered = [ (ts_kbo, [], [MaxRed], IterationLimit 8);
                          (ts_lpo, [], [MaxRed], IterationLimit 12);
-                         (ts_kbo, [], [MaxRed], IterationLimit 100);
-                         (ts_lpo, [], [MaxRed], IterationLimit 200); ]
+                         (ts_kbo, [], [MaxRed], IterationLimit 41);
+                         (ts_lpo, [], [MaxRed], IterationLimit 50); 
+                         (ts_kbo, [], [MaxRed], IterationLimit 70);]
 let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11);
                          (ts_kbo, [], [MaxRed], IterationLimit 100);
                          (ts_lpo, [], [MaxRed], IterationLimit 200); ]

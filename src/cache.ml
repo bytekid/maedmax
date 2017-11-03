@@ -1,5 +1,5 @@
 (*** MODULES *****************************************************************)
-module St = Statistics
+module A = Analytics
 
 (*** OPENS *******************************************************************)
 open Prelude
@@ -60,7 +60,7 @@ let redtrs_of_index n =
  with Not_found -> failwith ("redtrs_of_index failed")
 ;;
 
-let trs_of_index = St.take_time St.t_cache trs_of_index
+let trs_of_index = A.take_time A.t_cache trs_of_index
 
 let contains n m =
  try Hashtbl.find ht_contains (n,m)
@@ -72,7 +72,7 @@ let contains n m =
   c
 ;;
 
-let contains n = St.take_time St.t_cache (contains n)
+let contains n = A.take_time A.t_cache (contains n)
 
 let store_rule_var ctx lr =
   let v = mk_fresh_bool_var ctx in
@@ -147,7 +147,7 @@ let find_trs_var n =
  with Not_found -> failwith ("trsvar "^(string_of_int n)^" not found")
 ;;
 
-let find_trs_var = St.take_time St.t_cache find_trs_var
+let find_trs_var = A.take_time A.t_cache find_trs_var
 
 let store_trs trs =
  trscount := !trscount+1;
@@ -162,7 +162,7 @@ let was_oriented rule = Hashtbl.mem ht_was_oriented rule
 
 let store_redtrs trs n = Hashtbl.add ht_iredtrss n trs
 
-let store_trs = St.take_time St.t_cache store_trs
+let store_trs = A.take_time A.t_cache store_trs
 
 let assert_rule k f =
  if not (Hashtbl.mem ht_rlycs k) then (f k; Hashtbl.add ht_rlycs k true)

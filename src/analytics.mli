@@ -31,7 +31,7 @@ val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
 
 val analyze : Literal.t list -> Literal.t list -> Yojson.Basic.json
 
-val problem_shape : Rules.t-> Rules.t -> Settings.shape
+val problem_shape : Rules.t-> Settings.shape
 
 val theory_equations : Literal.t list -> Literal.t list
 

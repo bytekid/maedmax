@@ -1,6 +1,5 @@
 
 (*** MODULES *****************************************************************)
-module St = Statistics
 module Sig = Signature
 module C = Cache
 
