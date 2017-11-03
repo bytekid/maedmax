@@ -109,8 +109,13 @@ let store_remaining_nodes ctx ns =
   if has_comp () then
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   if !(settings.size_age_ratio) < 100 then
+<<<<<<< HEAD
     let ns = NS.smaller_than !(settings.size_bound_equations) ns in
     all_nodes := L.rev_append (L.rev !all_nodes) (NS.sort_size ns)
+=======
+    let ns' = NS.sort_size (NS.smaller_than 20 ns) in
+    all_nodes := L.rev_append (L.rev !all_nodes) ns'
+>>>>>>> 3d4931478493b087703a72e2d81fa68ae1c9b4b0
 ;;
 
 let rec get_oldest_node (aa,rew) =
