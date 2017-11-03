@@ -331,10 +331,8 @@ let overlaps rew rr aa =
  in
  (*let cps1 = NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ] in*)
  let ns = [ Lit.terms n | n <- ns ] in
- let t = Unix.gettimeofday ()  in
  let ovl = new Overlapper.overlapper ns in
  ovl#init ();
- A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
  let cps2 = NS.of_list [ cp | n <- ns; cp <- ovl#cps n ] in
  (*if not (NS.equal cps1 cps2) then
   Format.printf "Real CPs:\n%a\nIndexed CPs:\n%a\n%!"
@@ -403,7 +401,7 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let sat = saturated ctx (rr,ee) rewriter cc in
     let order = match sat with None -> rewriter#order | Some o -> o in
     let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
-    if rr @ ee = [] || (sat <> None && (goals_ground || ee = [])) then (
+    if rr @ ee = [] || (sat <> None && (goals_ground (*|| ee = []*))) then (
       if ee = [] then
         Some (Completion rr)
       else if !(settings.unfailing) && !(Settings.inequalities) = [] then
