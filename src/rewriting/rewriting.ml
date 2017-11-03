@@ -22,6 +22,7 @@ let rec rewrite_aux rules = function
         | Some lr -> 
 	  if List.mem lr used_rules 
 	  then used_rules, u else (lr :: used_rules), u
+;;
 
 let step_at_with t p (l,r) =
   let ti = Term.subterm_at p t in
@@ -41,11 +42,11 @@ let rec nf rules t =
  | [] -> t
  | _ -> nf rules u
 
-let reducible_with rules t =
- let used, _ = rewrite_aux rules t in
- match used with
- | [] -> false
- | _ -> true
+let rec reducible_with trs = function
+  | V _ -> false
+  | F (f, ts) ->
+      let r = List.fold_left (fun b u -> b || reducible_with trs u) false ts in
+      r || fst (rewrite_at_root (F (f, ts)) trs) <> None
 ;;
 
 let nf_with rules t =
