@@ -329,16 +329,16 @@ let overlaps rew rr aa =
      (*let rr' = NS.c_equivalence_free cs rr' in*)
      rr' @ aa'
  in
- (*let cps1 = NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ] in*)
- let ns = [ Lit.terms n | n <- ns ] in
- let ovl = new Overlapper.overlapper ns in
- ovl#init ();
- let cps2 = NS.of_list [ cp | n <- ns; cp <- ovl#cps n ] in
+ let cps1 = NS.of_list [ n | n1 <- ns; n2 <- ns; n <- cps rew n1 n2 ] in
+ (*let ns = [ Lit.terms n | n <- ns ] in*)
+ let ovl = new Overlapper.overlapper [] in
+ (*ovl#init ();
+ let cps2 = NS.of_list [ cp | n <- ns; cp <- ovl#cps n ] in*)
  (*if not (NS.equal cps1 cps2) then
   Format.printf "Real CPs:\n%a\nIndexed CPs:\n%a\n%!"
     NS.print cps1 NS.print cps2;
  assert (NS.equal cps1 cps2);*)
- cps2, ovl
+ cps1, ovl
 ;;
 
 let overlaps rew rr = A.take_time A.t_overlap (overlaps rew rr)
@@ -654,6 +654,7 @@ let detect_shape es =
     | Zolfo -> settings.n := 10
     | Xeno -> (
       settings.reduce_AC_equations_for_CPs := true;
+      settings.size_age_ratio := 80;
       settings.n := 10
     )
     | Elio when fs_count > 3 -> settings.n := 10
@@ -665,7 +666,9 @@ let detect_shape es =
       settings.n := 12;
       settings.size_age_ratio := 80;
     | Carbonio
-    | NoShape -> settings.n := 6
+    | NoShape -> (
+      settings.size_age_ratio := 80;
+      settings.n := 6)
     | Elio -> settings.n := 6
     | Boro -> (
       settings.n := 14;
