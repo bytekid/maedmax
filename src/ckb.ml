@@ -396,7 +396,7 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let sat = saturated ctx (rr,ee) rewriter cc in
     let order = match sat with None -> rewriter#order | Some o -> o in
     let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
-    if rr @ ee = [] || (sat <> None && (goals_ground (*|| ee = []*))) then (
+    if rr @ ee = [] || (sat <> None && goals_ground) then (
       if ee = [] then
         Some (Completion rr)
       else if !(settings.unfailing) && !(Settings.inequalities) = [] then
