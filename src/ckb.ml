@@ -537,8 +537,7 @@ let search_constraints ctx cc gs =
    | S.GoalRed -> c_max_goal_red ctx ccl gs
    | S.CPsRed -> c_cpred ctx ccl
    | S.MaxEmpty -> ()
- (*in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())*)
- in L.iter assert_mc (max_constraints ())
+ in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())
 ;;
 
 (* find k maximal TRSs *)
