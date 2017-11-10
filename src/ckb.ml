@@ -524,6 +524,7 @@ let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
 (* constraints to guide search; those get all retracted *)
 let search_constraints ctx cc gs =
  let ccl = NS.to_list cc in
+ let take_max = nth_iteration !(settings.max_oriented) in
  let assert_c = function
    | S.Red -> c_red ctx ccl
    | S.Empty -> ()
@@ -536,6 +537,7 @@ let search_constraints ctx cc gs =
    | S.GoalRed -> c_max_goal_red ctx ccl gs
    | S.CPsRed -> c_cpred ctx ccl
    | S.MaxEmpty -> ()
+ (*in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())*)
  in L.iter assert_mc (max_constraints ())
 ;;
 
@@ -711,6 +713,13 @@ let store_trs ctx j rr cost =
   rr_index
 ;;
 
+let equations_for_overlaps irr all =
+  if !A.iterations < 2 then NS.to_list (eqs_for_overlaps all)
+  else
+    let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
+    NS.to_list (eqs_for_overlaps irr')
+;;
+
 let rec phi ctx aa gs =
   if do_restart aa gs then raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
@@ -725,8 +734,9 @@ let rec phi ctx aa gs =
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in (* rewrite goals wrt new TRS *)
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
-    let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in
+    (*let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
+    let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
+    let aa_for_ols =equations_for_overlaps irr aa in
     let cps, ovl = overlaps rew rr aa_for_ols in
     let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)

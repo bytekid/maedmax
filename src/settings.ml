@@ -32,6 +32,7 @@ type t = {
  gs       : Rules.t ref ;
  k        : (int -> int) ref;  (* k TRSs are chosen in an iteration *)
  n        : int ref;  (* how many equations are (at most) selected *)
+ max_oriented : int ref;
  unfailing : bool ref;
  strategy : termination_strategy ref;
  tmp      : int ref; (* various purpose parameter *)
@@ -65,6 +66,7 @@ let default = {
  gs        = ref [] ;
  k         = ref k_default;
  n         = ref 10;
+ max_oriented = ref 1000;
  unfailing = ref false;
  strategy  = ref [];
  tmp       = ref 0;
