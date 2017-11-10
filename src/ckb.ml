@@ -650,7 +650,6 @@ let detect_shape es =
     | Zolfo -> settings.n := 10
     | Xeno -> (
       settings.reduce_AC_equations_for_CPs := true;
-      settings.size_age_ratio := 80;
       settings.n := 10
     )
     | Elio when fs_count > 3 -> settings.n := 10
@@ -662,9 +661,7 @@ let detect_shape es =
       settings.n := 12;
       settings.size_age_ratio := 80;
     | Carbonio
-    | NoShape -> (
-      settings.size_age_ratio := 80;
-      settings.n := 6)
+    | NoShape -> settings.n := 6
     | Elio -> settings.n := 6
     | Boro -> (
       settings.n := 14;
@@ -713,7 +710,7 @@ let store_trs ctx j rr cost =
 ;;
 
 let equations_for_overlaps irr all =
-  if !A.iterations < 2 && !(settings.full_CPs_with_axioms) then
+  if !A.iterations < 3 && !(settings.full_CPs_with_axioms) then
     NS.to_list (eqs_for_overlaps all)
   else
     let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
