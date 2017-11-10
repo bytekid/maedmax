@@ -713,7 +713,8 @@ let store_trs ctx j rr cost =
 ;;
 
 let equations_for_overlaps irr all =
-  if !A.iterations < 2 then NS.to_list (eqs_for_overlaps all)
+  if !A.iterations < 2 && !(settings.full_CPs_with_axioms) then
+    NS.to_list (eqs_for_overlaps all)
   else
     let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
     NS.to_list (eqs_for_overlaps irr')

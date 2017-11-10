@@ -44,7 +44,8 @@ type t = {
  size_age_ratio: int ref;
  size_bound_equations: int ref;
  size_bound_goals: int ref;
- reduce_AC_equations_for_CPs: bool ref
+ reduce_AC_equations_for_CPs: bool ref;
+ full_CPs_with_axioms : bool ref
 }
 
 (*** GLOBALS *****************************************************************)
@@ -78,7 +79,8 @@ let default = {
  size_age_ratio = ref 100;
  size_bound_equations = ref 200;
  size_bound_goals = ref 30;
- reduce_AC_equations_for_CPs = ref false
+ reduce_AC_equations_for_CPs = ref false;
+ full_CPs_with_axioms = ref false
 }
 
 let do_assertions = ref false
