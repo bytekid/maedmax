@@ -30,15 +30,16 @@ let normalize l = { l with terms = Variant.normalize_rule l.terms }
 
 let not_increasing l = not (Term.is_subterm (fst l.terms) (snd l.terms))
 
+(* Iff none of the literals is a goal, filter out trivial CPs *)
 let cps l l' =
   assert (not (l.is_goal && l'.is_goal));
   if not l.is_equality && not l'.is_equality then []
   else
     let r1, r2 = l.terms, l'.terms in
     let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2 ] in
-    let os = [ (s,t),o | (s,t),o <- os; s <> t ] in
-    let is_eq = l.is_equality && l'.is_equality in
     let is_goal = l.is_goal || l'.is_goal in
+    let os = if is_goal then os else [ (s,t),o | (s,t),o <- os; s <> t ] in
+    let is_eq = l.is_equality && l'.is_equality in
     if !(Settings.do_proof) then (
       let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
       let add ((s,t),o) =
@@ -69,7 +70,7 @@ let rewriter_nf_with l rewriter =
   let s', rs = rewriter#nf (fst ts) in
   let t', rt = rewriter#nf (snd ts) in
   let rls = List.map fst (rs @ rt) in
-  if s' = t' then (
+  if s' = t' && not l.is_goal then (
     if !(Settings.do_proof) then (
       let st' = Variant.normalize_rule (s',t') in
       T.add_rewrite st' ts (rs,rt);

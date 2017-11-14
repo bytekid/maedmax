@@ -141,7 +141,6 @@ let rewrite rewriter (cs : NS.t) =
  let rewrite n (irrdcbl, news) =
    match Lit.rewriter_nf_with n rewriter with
     | None -> (NS.add n irrdcbl, news) (* no progress here *)
-    (* n' is leftover of n (only relevant with constraints *)
     | Some (nnews, rs) -> ((* if terms got equal, nnew is empty *)
         if nnews <> [] then
           add_rewrite_trace (Lit.terms n) rs (Lit.terms (L.hd nnews));
@@ -307,7 +306,7 @@ let cps rew n1 n2 =
     with Not_found -> (
       let cps = Lit.cps n1 n2 in
       Hashtbl.add cp_cache (n1,n2) cps;
-    cps))
+      cps))
 ;;
 
 (* get overlaps for rules rr and active nodes cc *)
