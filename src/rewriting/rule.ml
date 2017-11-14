@@ -67,7 +67,7 @@ let instantiate_to (l1, r1) (l2, r2) =
 let is_instance (l1, r1) (l2, r2) =
   let (l2, r2) = rename (l2, r2) in
   let lr1 = Term.F (100, [l1; r1]) and lr2 = Term.F (100, [l2; r2]) in
-  try let _ = Subst.pattern_match lr1 lr2 in true with _ -> false
+  Subst.is_instance_of lr1 lr2
 ;;
 
 let variant (l1, r1) (l2, r2) =
