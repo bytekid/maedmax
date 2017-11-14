@@ -28,6 +28,14 @@ let do_ordered _ =
   settings.strategy := S.strategy_ordered
 ;;
 
+let do_concon _ =
+  settings.unfailing := true;
+  settings.max_oriented := 2;
+  settings.full_CPs_with_axioms := true;
+  settings.k := (fun _ -> 2);
+  settings.strategy := S.strategy_ordered
+;;
+
 let do_unordered _ =
   settings.unfailing := false;
   settings.k := (fun _ -> 2);
@@ -41,6 +49,8 @@ let options = Arg.align
     " use heuristic settings (automatic mode)");
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
     " print problem characteristics");
+    ("--concon", Arg.Unit do_concon,
+     " satisfiability-preferring strategy");
    ("--cpf", Arg.Set Settings.do_proof,
     " output certifiable CPF proof");
    ("--cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
