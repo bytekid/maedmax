@@ -42,7 +42,7 @@ decl:
   | INCLUDEAXIOMS LPAREN FILE RPAREN DOT decl { add_axioms $3 $6}
   | axiom decl { add_equation $1 $2 }
   | hypothesis decl { add_equation $1 $2 }
-  | eq_conjecture decl { add_equation $1 $2 }
+  | eq_conjecture decl { add_goal (fst $1) $2 }
   | ineq_conjecture decl { add_goal (fst $1) $2 }
   | COMMENT decl { $2 }
   | { [],[],[]}
