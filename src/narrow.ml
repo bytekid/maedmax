@@ -10,39 +10,24 @@ let settings = Settings.default
 let debug _ = !(settings.d) >= 1
 
 let pstr = function
-[] -> "e"
-| p -> L.fold_left (fun s i -> s ^ (string_of_int i)) "" p
+    [] -> "e"
+  | p -> L.fold_left (fun s i -> s ^ (string_of_int i)) "" p
 ;;
 
 let narrow_forward_at_with ((s,t),(ps,pt)) p (l,r) =
-let s_p = T.subterm_at p s in
-try
-let subst = T.substitute (Subst.mgu s_p l) in
-if debug () then
-  Format.printf "forward narrow %a with %a at %s\n%!" T.print s
-    R.print (l,r) (pstr p);
-let s' = T.replace (subst s) (subst r) p in
-let ps' = L.filter (fun q -> not (Listx.is_prefix p q)) ps in 
-let ps' = ps' @ [ p @ q | q <- T.function_positions r ] in
-[((s',subst t),(Listx.unique ps',pt))]
-with _ -> []
-;;
-
-let narrow_backward_at_with ((s,t),(ps,pt)) p (l,r) =
-let s_p = T.subterm_at p s in
-try
-if debug () then
-Format.printf "backward narrow %a with %a at %s?\n%!" T.print s
-  R.print (l,r) (pstr p);
-let subst = T.substitute (Subst.mgu s_p r) in
-if debug () then
-  Format.printf "backward narrow %a with %a at %s\n%!" T.print s
-    R.print (l,r) (pstr p);
-let s' = T.replace (subst s) (subst l) p in
-let ps' = L.filter (fun q -> not (Listx.is_prefix p q)) ps in 
-let ps' = ps' @ [ p @ q | q <- T.function_positions l ] in
-[((s',subst t),(Listx.unique ps',pt))]
-with _ -> []
+  let s_p = T.subterm_at p s in
+  try
+    let subst = T.substitute (Subst.mgu s_p l) in
+    (*if debug () then
+      Format.printf "forward narrow %a with %a at %s\n%!" T.print s
+        R.print (l,r) (pstr p);*)
+    let s' = T.replace (subst s) (subst r) p in
+    let ps' = L.filter (fun q -> not (Listx.is_prefix p q)) ps in
+    let ps' = Listx.unique (ps' @ [ p @ q | q <- T.function_positions r ]) in
+    let st', keep_dir = Variant.normalize_rule_dir (s',subst t) in
+    let pst = if keep_dir then (ps',pt) else (pt,ps') in
+    [(st', pst)]
+  with _ -> []
 ;;
 
 let narrow_at rr st p =
@@ -77,8 +62,13 @@ let decide rr ee ord (s,t) =
   let patch (l,r) = 
     let vs = Listset.diff (T.variables r) (T.variables l) in
     R.substitute [ v, T.F (bot,[]) | v <- vs ] (l,r)
-  in 
-  let ee' = L.map patch ee in  
+  in
+  let ee' = L.map patch ee in
+  let var_add es n = if not (L.exists (R.variant n) es) then n::es else es in
+  let ee' = L.fold_left var_add [] ee' in
+  let ee' = L.filter (fun e -> not (L.exists (fun e' -> R.is_proper_instance e e') ee')) ee' in
+  if debug () then (
+    Format.printf "EE:\n%a\n%!" Rules.print ee');
   let rr' = rr @ ee' in
 
   let rec decide_by_narrowing all gs =
@@ -102,17 +92,17 @@ let decide rr ee ord (s,t) =
   else if L.for_all (fun (_,(ps,pt)) -> ps @ pt = []) gs then (
     Some (Settings.GroundCompletion (rr,ee,ord)))
   else
+    let all' = unique (all @ gs) in
     let remove_gs ((st,(ps,pt)) as np) =
       try
-        let _,(ps',pt') = L.find (fun (st',_) -> R.variant st' st) all in
+        let _,(ps',pt') = L.find (fun (st',_) -> R.variant st' st) all' in
         (st,(Listset.diff ps ps', Listset.diff pt pt'))
       with Not_found -> np
     in
     let gs' = unique (L.concat (L.map (narrow rr') gs)) in
     let gs' = L.map remove_gs gs' in
-    let all' = unique (all @ gs') in
     decide_by_narrowing all' (Listx.unique gs')
   in
   let ps_pt = T.function_positions s,T.function_positions t in
-  decide_by_narrowing [(s,t),ps_pt] [(s,t),ps_pt]
+  decide_by_narrowing [] [(s,t),ps_pt]
 ;;
