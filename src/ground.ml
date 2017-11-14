@@ -193,12 +193,14 @@ let ordered_ac_step sys ctx conds (l,r) (u,c0) =
   with Subst.Not_matched -> u, c0
 ;;
 
+let nf = Rewriting.nf
+
 let ac_nf ctx sys conds f u =
   let rec ac_nf c u = function
   | [] -> u, c
   | p :: ps ->
     let u0 = subterm_at p u in
-    let u1 = Rewriting.nf sys.trs u0 in
+    let u1 = nf sys.trs u0 in
     (*if u1 <> u0 then Format.printf "  R step from %a to %a \n%!" Term.print u0 Term.print u1;*)
     let u2, c2 = ordered_ac_step sys ctx conds (Ac.commutativity f) (u1,c) in
     (*if u1 <> u2 then Format.printf "  commutativity step from %a to %a \n%!" Term.print u1 Term.print u2;*)
@@ -212,7 +214,7 @@ let ac_nf ctx sys conds f u =
 
 (* reducts wrt ordered rewriting with special MN90 AC rules *)
 let ac_reducts ctx sys conds f (u,c) =
-  let u = Rewriting.nf sys.trs u in
+  let u = nf sys.trs u in
   let rec reducts acc = function
     | [] -> acc
     | p :: ps ->
@@ -241,7 +243,8 @@ let order_extensible ord (s,t) =
 ;;
 
 let rec joinable ctx sys p =
-  if r_joinable ctx sys p || (e_instance ctx sys p) then True
+  let p' = {p with s = nf sys.trs p.s; t = nf sys.trs p.t; } in
+  if r_joinable ctx sys p || (e_instance ctx sys p) || (e_instance ctx sys p') then True
   else if sys.acsyms <> [] then ac_joinable ctx sys p
   else instance_joinable ctx sys p None
   (*let j0 = joinable_args ctx sys p in
@@ -254,7 +257,7 @@ let rec joinable ctx sys p =
   (contradictory_constraints ctx sys) <||>*)
 
 and r_joinable ctx sys p = 
-  Rewriting.nf sys.trs p.s = (Rewriting.nf sys.trs p.t)
+  nf sys.trs p.s = (nf sys.trs p.t)
 
 and e_instance ctx sys p =
   let es_symm = [ t,s | s,t <- sys.es ] @ sys.es in
@@ -304,7 +307,7 @@ and ac_joinable_for_ord ctx sys p f =
       else Format.printf "   maybe AC joined\n%!");
     c)
   else (
-    let s', t' = Rewriting.nf sys.trs s, Rewriting.nf sys.trs t in
+    let s', t' = nf sys.trs s, nf sys.trs t in
     if !debug > 1 then 
       Format.printf "  Eq is %a = %a going for instantiation\n%!" Term.print s' Term.print t';
     if contradictory_constraints sys ctx p then True 
@@ -327,7 +330,7 @@ and instance_joinable ctx sys p ac =
     let instance_joinable (f,a) =
       let sub = sub (f,a) in (* call sub only once -> different vars*)
       let s0,t0 = sub p.s, sub p.t in
-      let s1,t1 = Rewriting.nf sys.trs s0, Rewriting.nf sys.trs t0 in
+      let s1,t1 = nf sys.trs s0, nf sys.trs t0 in
       let xs = List.map sub p.var_order in
       if s1 = t1 then True
       (* instantiation is not in normal form: kill TODO prove *)
