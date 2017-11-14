@@ -184,3 +184,12 @@ let rec partitions =
    let ps = partitions xs in
    [ [[x]] @ p | p <- ps] @ List.flatten [ add_to_1 x p | p <- ps]
 ;;
+
+let is_prefix xs ys =
+  let rec check = function
+      [], _ -> true
+    | x::xs, y::ys when x = y -> check (xs,ys)
+    | _ -> false
+  in check (xs, ys)
+;;
+
