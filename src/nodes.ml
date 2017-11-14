@@ -105,11 +105,13 @@ let diff ns d = H.fold (fun n _ nsr -> remove n nsr) d ns
 
 let diff_list ns = L.fold_left (fun nsr n -> remove n nsr) ns
 
-let print ppf ns = 
-  let l = to_list ns in
+let print_list ppf l =
   let rs = List.sort Pervasives.compare l in
   let print_list = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
   Format.fprintf ppf "@[<v 0> %a@]" print_list rs
+;;
+
+let print ppf ns = print_list ppf (to_list ns)
 
 let iter f = H.iter (fun n _ -> f n)
 
