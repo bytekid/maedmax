@@ -16,13 +16,6 @@ open Prelude
 open Yicesx
 open Settings
 
-(*** TYPES *******************************************************************)
-type rewrite_steps = (Rule.t * Term.pos * Term.t) list
-type result = Completion of Rules.t
-  | GroundCompletion of (Rules.t * Rules.t * Order.t)
-  | Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
-  | Disproof of (Rules.t * Rules.t * Order.t * (rewrite_steps * rewrite_steps))
-
 (*** EXCEPTIONS **************************************************************)
 exception Success of result
 exception Restart of Lit.t list
@@ -369,10 +362,10 @@ let rewrite_seq rew (s,t) (rss,rst) =
   seq s rss, seq t rst
 ;;
 
-
 let succeeds ctx (rr,ee) rewriter cc gs =
   if debug () then
-    Format.printf "start success check\n%!";
+    Format.printf "start success check\nRR:\n%a\nEE:\n%a\n%!"
+      Rules.print [ Lit.terms r | r <- rr] NS.print ee;
   let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list ee] in
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
@@ -396,7 +389,13 @@ let succeeds ctx (rr,ee) rewriter cc gs =
     let sat = saturated ctx (rr,ee) rewriter cc in
     let order = match sat with None -> rewriter#order | Some o -> o in
     let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
-    if rr @ ee = [] || (sat <> None && goals_ground) then (
+    let orientable (s,t) = order#gt s t || order#gt t s in
+    (* if an equation is orientable, wait one iteration ... *)
+    if sat <> None && not goals_ground && L.length !(settings.gs) = 1 &&
+      List.for_all (fun e -> not (orientable e)) ee then
+      let g = List.hd !(settings.gs) in
+      Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order g
+    else if rr @ ee = [] || (sat <> None && goals_ground) then (
       if ee = [] then
         Some (Completion rr)
       else if !(settings.unfailing) && !(Settings.inequalities) = [] then
@@ -733,7 +732,7 @@ let rec phi ctx aa gs =
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
     (*let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
     let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
-    let aa_for_ols =equations_for_overlaps irr aa in
+    let aa_for_ols = equations_for_overlaps irr aa in
     let cps, ovl = overlaps rew rr aa_for_ols in
     let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)

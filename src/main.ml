@@ -139,7 +139,7 @@ let call () =
   in add_arg 0
 ;;
 
-let success_code = function Ckb.Proof _ -> "UNSAT" | _ -> "SAT"
+let success_code = function Proof _ -> "UNSAT" | _ -> "SAT"
 
 let json_settings settings s k =
  let s = "strategy", `String s in
@@ -151,11 +151,11 @@ let json_settings settings s k =
 
 let print_json (es, gs) f res settings proof =
   let res_str = match res with
-    | Ckb.Completion rr -> trs_string rr
-    | Ckb.GroundCompletion (rr,ee,_)
-    | Ckb.Disproof (rr,ee,_,_) -> (* TODO: show different normal forms? *)
+    | Completion rr -> trs_string rr
+    | GroundCompletion (rr,ee,_)
+    | Disproof (rr,ee,_,_) -> (* TODO: show different normal forms? *)
       if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
-    | Ckb.Proof _ -> "..."
+    | Proof _ -> "..."
   in
   let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
   let strat = !(settings.strategy) in
@@ -183,14 +183,14 @@ let print_json_term yes f =
 let print_res res =
   printf "# SZS status ";
   match res with
-   | Ckb.Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
-   | Ckb.GroundCompletion (rr,ee,order)
-   | Ckb.Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
+   | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
+   | GroundCompletion (rr,ee,order)
+   | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
     (printf "Satisfiable\n\n%a@." print_trs rr;
     if ee <> [] then printf "%a@." print_es ee;
     order#print ();
     Format.printf "\n")
-   | Ckb.Proof _ -> printf "Unsatisfiable\n%!"
+   | Proof _ -> printf "Unsatisfiable\n%!"
 ;;
 
 let print_analysis es gs =
@@ -211,14 +211,14 @@ let clean es0 =
     in
     (rr' @ rr_pre, ee'')
   in function
-    | Ckb.Completion trs -> Ckb.Completion (reduce trs)
-    | Ckb.GroundCompletion (rr,ee,o) ->
+    | Completion trs -> Completion (reduce trs)
+    | GroundCompletion (rr,ee,o) ->
       let rr',ee' = clean rr ee in
-      Ckb.GroundCompletion (rr',ee',o)
-    | Ckb.Disproof (rr,ee,o,(rs,rt)) ->
+      GroundCompletion (rr',ee',o)
+    | Disproof (rr,ee,o,(rs,rt)) ->
       let rr',ee' = clean rr ee in
-      Ckb.Disproof (rr',ee',o,(rs,rt))
-    | Ckb.Proof p -> Ckb.Proof p
+      Disproof (rr',ee',o,(rs,rt))
+    | Proof p -> Proof p
 ;;
 
 let proof_string ?(readable=true) (es,gs) =
@@ -228,18 +228,18 @@ let proof_string ?(readable=true) (es,gs) =
       ((if readable then Xml.to_string_fmt else Xml.to_string) p)
   in
   function
-    Ckb.Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
+    Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
       let goal = Literal.terms (List.hd gs) in
       let es = List.map Literal.terms es in
       let p = Trace.xml_goal_proof es goal ((s,t),(rs, rt), sigma) in
       result_string p
-  | Ckb.Completion _ ->
+  | Completion _ ->
     failwith "Main.show_proof: not yet supported for Completion"
-  | Ckb.GroundCompletion (rr,ee,o) -> (* no goal exists *)
+  | GroundCompletion (rr,ee,o) -> (* no goal exists *)
       let es = List.map Literal.terms es in
       let p = Trace.xml_ground_completion es (rr,ee,o) in
       result_string p
-  | Ckb.Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
+  | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
       let g = Literal.terms (List.hd gs) in
       let es = List.map Literal.terms es in
       let p = Trace.xml_goal_disproof es g (rr,ee,o) rst in

@@ -48,6 +48,12 @@ type t = {
  full_CPs_with_axioms : bool ref
 }
 
+type rewrite_steps = (Rule.t * Term.pos * Term.t) list
+type result = Completion of Rules.t
+| GroundCompletion of (Rules.t * Rules.t * Order.t)
+| Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
+| Disproof of (Rules.t * Rules.t * Order.t * (rewrite_steps * rewrite_steps))
+
 (*** GLOBALS *****************************************************************)
 (* k functions *)
 let k_default = fun i -> if i < 3 then 6 else 2
