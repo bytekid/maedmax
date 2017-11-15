@@ -2,9 +2,10 @@
 module L = List
 module T = Term
 module R = Rule
+module S = Settings
 
 (*** GLOBALS *****************************************************************)
-let settings = Settings.default
+let settings = S.default
 
 (*** FUNCTIONS ***************************************************************)
 let debug _ = !(settings.d) >= 1
@@ -88,9 +89,9 @@ let decide rr ee ord (s,t) =
   if L.exists unifiable gs then (
     if debug () then
       Format.printf "UNSAT, found unifiable equation\n%!";
-    Some (Settings.Proof (fst (L.find unifiable gs),([],[]),[])))
+    Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[])))
   else if L.for_all (fun (_,(ps,pt)) -> ps @ pt = []) gs then (
-    Some (Settings.GroundCompletion (rr,ee,ord)))
+    Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
   else
     let all' = unique (all @ gs) in
     let remove_gs ((st,(ps,pt)) as np) =

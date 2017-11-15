@@ -149,7 +149,7 @@ let call () =
   in add_arg 0
 ;;
 
-let success_code = function Proof _ -> "UNSAT" | _ -> "SAT"
+let success_code = function UNSAT _ -> "UNSAT" | SAT -> "SAT"
 
 let json_settings settings s k =
  let s = "strategy", `String s in
@@ -159,8 +159,8 @@ let json_settings settings s k =
  `Assoc [s; k; n; sa]
 ;;
 
-let print_json (es, gs) f res settings proof =
-  let res_str = match res with
+let print_json (es, gs) f (a,p) settings proof =
+  let res_str = match p with
     | Completion rr -> trs_string rr
     | GroundCompletion (rr,ee,_)
     | Disproof (rr,ee,_,_) -> (* TODO: show different normal forms? *)
@@ -170,7 +170,7 @@ let print_json (es, gs) f res settings proof =
   let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
   let strat = !(settings.strategy) in
   let t = `Assoc [
-    "result",`String (success_code res);
+    "result",`String (success_code a);
     "time", f;
     "trs", `String res_str;
     "statistics", Analytics.json ();
@@ -190,17 +190,18 @@ let print_json_term yes f =
  F.printf "%s\n%!" (pretty_to_string t)
 ;;
 
-let print_res res =
+let print_res answer res =
   printf "# SZS status ";
+  let answer_str = success_code answer in
   match res with
    | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
    | GroundCompletion (rr,ee,order)
    | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
-    (printf "Satisfiable\n\n%a@." print_trs rr;
+    (printf "%s\n\n%a@." answer_str print_trs rr;
     if ee <> [] then printf "%a@." print_es ee;
     order#print ();
     Format.printf "\n")
-   | Proof _ -> printf "Unsatisfiable\n%!"
+   | Proof _ -> printf "%s\n%!" answer_str
 ;;
 
 let print_analysis es gs =
@@ -273,21 +274,21 @@ let () =
       if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
-	      let res = Ckb.ckb settings input in
+	      let answer, proof = Ckb.ckb settings input in
         if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
-         let proof =
+         let proofstr =
            if !(Settings.do_proof) then
-             Some (proof_string ~readable:false input res)
+             Some (proof_string ~readable:false input proof)
            else None
          in
-         print_json (es,gs) secs (clean es res) settings proof
+         print_json (es,gs) secs (answer,clean es proof) settings proofstr
         ) else (
          if !(Settings.do_proof) then
-           show_proof input res
+           show_proof input proof
          else (
-           print_res (clean es res);
+           print_res answer (clean es proof);
 	         Timer.stop timer;
            let secs = Timer.length ~res:Timer.Seconds timer in
            printf "%s %.2f %s@." "Search time:" secs "seconds";

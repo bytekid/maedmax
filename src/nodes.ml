@@ -37,6 +37,8 @@ let symmetric ns =
 
 let to_list ns = H.fold (fun n _ l -> n::l) ns [] 
 
+let to_rules ns = L.map Lit.terms (to_list ns)
+
 let cmp n1 n2 =
   let s1, s2 = Rule.size (Lit.terms n1), Rule.size (Lit.terms n2) in
   if s1 <> s2 then s1 - s2

@@ -361,16 +361,17 @@ let rewrite_seq rew (s,t) (rss,rst) =
   seq s rss, seq t rst
 ;;
 
-let succeeds ctx (rr,ee) rewriter cc gs =
+let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   if debug () then
-    Format.printf "start success check\nRR:\n%a\nEE:\n%a\n%!"
-      Rules.print [ Lit.terms r | r <- rr] NS.print ee;
+    Format.printf "start success check\nRR:\n%a\nCC:\n%a\n%!"
+      Rules.print [ Lit.terms r | r <- rr] NS.print cc;
   let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list ee] in
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let ok g = let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v in
   if not (NS.is_empty gs) && NS.exists ok gs then (
     let g = L.find ok (NS.to_list gs) in
+    let answer = if Lit.is_inequality g then UNSAT else SAT in
     let s,t = Lit.terms g in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if debug () then (
@@ -379,34 +380,34 @@ let succeeds ctx (rr,ee) rewriter cc gs =
       F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss]
         Rules.print [r | r,_ <- rst]);
     if joinable (s,t) then
-      Some (Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
+      Some (answer, Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
     else
       (* unifiable *)
+      let sigma = Subst.mgu s t in
       let s',t' = Rule.substitute (Subst.mgu s t) (s,t) in
-      Some (Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]),Subst.mgu s t)))
+      Some (answer, Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]), sigma)))
   else (
     let sat = saturated ctx (rr,ee) rewriter cc in
     let order = match sat with None -> rewriter#order | Some o -> o in
     let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
     let orientable (s,t) = order#gt s t || order#gt t s in
     (* if an equation is orientable, wait one iteration ... *)
-    if sat <> None && not goals_ground && L.length !(settings.gs) = 1 &&
+
+    if L.exists joinable ieqs then
+      Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
+    else if sat <> None && not goals_ground && L.length !(settings.gs) = 1 &&
       List.for_all (fun e -> not (orientable e)) ee then
       let g = List.hd !(settings.gs) in
       Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order g
     else if rr @ ee = [] || (sat <> None && goals_ground) then (
       if ee = [] then
-        Some (Completion rr)
-      else if !(settings.unfailing) && !(Settings.inequalities) = [] then
-        Some (GroundCompletion (rr, ee, order))
+        Some (SAT, Completion rr)
       else (
-        let ieqs = !(Settings.inequalities) in
-        if L.exists joinable ieqs then
-          Some (Proof (L.find joinable ieqs,([],[]),[])) (* UNSAT *)
-        else
-          Some (GroundCompletion (rr, ee, order)) (* SAT *)
-    ))
-  else None)
+        (*assert (!(settings.unfailing) && ieqs = []);
+        Format.printf "inequalities: %a\n%!" Rules.print ieqs;*)
+        Some (SAT, GroundCompletion (rr, ee, order)))
+    )
+    else None)
 ;;
 
 let succeeds ctx re rew cc =
@@ -739,7 +740,8 @@ let rec phi ctx aa gs =
     let gcps = reduced rew (overlaps_on rew rr aa_for_ols ovl gs) in (* goal CPs *)
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     store_remaining_nodes ctx rest;
-    match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) gs with
+    let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
+    match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) ieqs gs with
        Some r -> raise (Success r)
      | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs)
   in
@@ -794,6 +796,7 @@ let rec ckb fs (es, gs) =
   (* TODO check positive/negative goals??? *)
  let eq_ok e = Lit.is_equality e || Lit.is_ground e in
  if not (L.for_all eq_ok es) then raise Fail
+ else if List.length (L.filter Lit.is_inequality gs) > 1 then raise Fail
  else
  let gs  : Lit.t list = 
    if L.length gs <= 1 then gs

@@ -49,10 +49,14 @@ type t = {
 }
 
 type rewrite_steps = (Rule.t * Term.pos * Term.t) list
-type result = Completion of Rules.t
+type proof = Completion of Rules.t
 | GroundCompletion of (Rules.t * Rules.t * Order.t)
 | Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
 | Disproof of (Rules.t * Rules.t * Order.t * (rewrite_steps * rewrite_steps))
+
+type answer = SAT | UNSAT
+type result = answer * proof
+
 
 (*** GLOBALS *****************************************************************)
 (* k functions *)
@@ -95,7 +99,6 @@ let do_proof = ref false
 let do_proof_debug = ref false
 let is_ordered = ref false
 
-let inequalities : Rules.t ref = ref []
 let inst_depth : int ref = ref 2
 
 let shape_to_string = function
