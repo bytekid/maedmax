@@ -58,7 +58,7 @@ let narrow rr ((s,t),(ps,pt)) =
   (L.map (narrow_at rr ((t,s),(pt,ps))) pt))
 ;;
 
-let decide rr ee ord (s,t) =
+let decide rr ee ord gs =
   let bot = match ord#bot with Some b -> b | _ -> 100 in
   let patch (l,r) = 
     let vs = Listset.diff (T.variables r) (T.variables l) in
@@ -104,6 +104,6 @@ let decide rr ee ord (s,t) =
     let gs' = L.map remove_gs gs' in
     decide_by_narrowing all' (Listx.unique gs')
   in
-  let ps_pt = T.function_positions s,T.function_positions t in
-  decide_by_narrowing [] [(s,t),ps_pt]
+  let gs = [(s,t), (T.function_positions s,T.function_positions t)|s,t <- gs] in
+  decide_by_narrowing [] gs
 ;;

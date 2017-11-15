@@ -369,9 +369,9 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let ok g = let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v in
-  if not (NS.is_empty gs) && NS.exists ok gs then (
+  if NS.exists ok gs then (
     let g = L.find ok (NS.to_list gs) in
-    let answer = if Lit.is_inequality g then UNSAT else SAT in
+    assert (Lit.is_inequality g); (* equality goals are used as axioms *)
     let s,t = Lit.terms g in
     let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
     if debug () then (
@@ -380,32 +380,29 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       F.printf "rules: {%a} \n{%a}\n" Rules.print [r | r,_ <- rss]
         Rules.print [r | r,_ <- rst]);
     if joinable (s,t) then
-      Some (answer, Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
+      Some (UNSAT, Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
     else
       (* unifiable *)
       let sigma = Subst.mgu s t in
-      let s',t' = Rule.substitute (Subst.mgu s t) (s,t) in
-      Some (answer, Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]), sigma)))
+      let s',t' = Rule.substitute sigma (s,t) in
+      Some (UNSAT, Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]), sigma)))
   else (
     let sat = saturated ctx (rr,ee) rewriter cc in
     let order = match sat with None -> rewriter#order | Some o -> o in
     let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
     let orientable (s,t) = order#gt s t || order#gt t s in
-    (* if an equation is orientable, wait one iteration ... *)
-
-    if L.exists joinable ieqs then
+    if L.exists joinable ieqs then (* joinable inwquality axiom *)
       Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
-    else if sat <> None && not goals_ground && L.length !(settings.gs) = 1 &&
+    (* if an equation is orientable, wait one iteration ... *)
+    else if sat <> None && not goals_ground &&
       List.for_all (fun e -> not (orientable e)) ee then
-      let g = List.hd !(settings.gs) in
-      Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order g
+      Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order !(settings.gs)
     else if rr @ ee = [] || (sat <> None && goals_ground) then (
       if ee = [] then
         Some (SAT, Completion rr)
-      else (
-        (*assert (!(settings.unfailing) && ieqs = []);
-        Format.printf "inequalities: %a\n%!" Rules.print ieqs;*)
-        Some (SAT, GroundCompletion (rr, ee, order)))
+      else if ieqs = [] then
+        Some (SAT, GroundCompletion (rr, ee, order))
+      else None
     )
     else None)
 ;;
@@ -796,15 +793,7 @@ let rec ckb fs (es, gs) =
   (* TODO check positive/negative goals??? *)
  let eq_ok e = Lit.is_equality e || Lit.is_ground e in
  if not (L.for_all eq_ok es) then raise Fail
- else if List.length (L.filter Lit.is_inequality gs) > 1 then raise Fail
  else
- let gs  : Lit.t list = 
-   if L.length gs <= 1 then gs
-   else
-     let gs = [ Lit.terms g | g <- gs ] in
-     let g = Term.F(-1, L.map fst gs), Term.F(-1, L.map snd gs) in 
-     [ Lit.make_goal g ]
- in
  (*if gs = [] then settings.strategy := Strategy.strategy_ordered_sat;*)
  (* store initial state to capture*)
  remember_state es gs;
