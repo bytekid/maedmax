@@ -305,6 +305,9 @@ let cps rew n1 n2 =
     try Hashtbl.find cp_cache (n1,n2)
     with Not_found -> (
       let cps = Lit.cps n1 n2 in
+      if !(settings.d) >= 2 && List.length cps > 0 then
+        Format.printf "CPs between %a and %a: %a\n%!" Lit.print n1 Lit.print n2
+          NS.print_list cps;
       Hashtbl.add cp_cache (n1,n2) cps;
       cps))
 ;;
@@ -321,7 +324,6 @@ let overlaps rew rr aa =
      (*let rr' = NS.c_equivalence_free cs rr' in*)
      rr' @ aa'
  in
- let ns = [ Lit.terms n | n <- ns ] in
  let ovl = new Overlapper.overlapper ns in
  ovl#init ();
  let cps2 = NS.of_list [ cp | n <- ns; cp <- ovl#cps n ] in
@@ -331,13 +333,13 @@ let overlaps rew rr aa =
 let overlaps rew rr = A.take_time A.t_overlap (overlaps rew rr)
 
 (* goal only as outer rule *)
-let overlaps_on rew rr aa overlapper gs =
- let ns = rr @ aa in
- let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
- let cps1 = NS.of_list [ n | r <- ns; g <- gs_for_ols; n <- cps rew r g ] in
- (*let cps2 = NS.of_list [ cp | g <- gs_for_ols; cp <- overlapper#cps (Lit.terms g) ] in
- assert (NS.subset cps1 cps2);*)
- cps1
+let overlaps_on rew rr aa _ gs =
+  let ns = rr @ aa in
+  let ovl = new Overlapper.overlapper ns in
+  ovl#init ();
+  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
+  let cps2 = NS.of_list [ cp | g <- gs_for_ols; cp <- ovl#cps g ] in
+  cps2
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -407,8 +409,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
     else None)
 ;;
 
-let succeeds ctx re rew cc =
-  A.take_time A.t_success_check (succeeds ctx re rew cc)
+let succeeds ctx re rew cc ie =
+  A.take_time A.t_success_check (succeeds ctx re rew cc ie)
 ;;
 
 (* * FIND TRSS  * * *  * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -598,41 +600,41 @@ let log_max_trs j rr rr' c =
 (* towards main control loop *)
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
-let do_restart es gs =
- if A.memory () > 6000 then (
-   if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
-   true)
- else
-   let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
-   let shape = A.problem_shape (to_eqs es) in
-   if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape then (
-     if debug () then
-       Format.printf "restart (new shape detected)\n%!";
-     true)
- else
-  (* no progress measure *)
-  let h = Hashtbl.hash (NS.size es, es, gs) in
-  let rep = L.for_all ((=) h) !hash_iteration in
-  hash_iteration := h :: !hash_iteration;
-  hash_iteration := Listx.take_at_most 20 !hash_iteration;
-  if rep && debug () then F.printf "restart (repeated iteration state)\n%!";
-  (* iteration/size bound*)
-  let running_time = (Unix.gettimeofday () -. !(start_time)) in
-  let limit =
-    match strategy_limit () with
-      | IterationLimit i when !(A.iterations) > i -> true
-      | TimeLimit l when running_time > l -> true
-      | _ -> false
-  in
-  (* estimate exponential blowup *)
-  let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
-  let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
-  let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
-  let blowup = !(A.iterations) > 6 && is_exp eqcounts in
-  if blowup && debug () then F.printf "restart (blowup)\n%!";
-  if limit && debug () then F.printf "restart (limit reached)\n";
-  rep || limit || blowup
-;;
+   let do_restart es gs =
+    if A.memory () > 6000 then (
+      if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
+      true)
+    else
+      let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
+      let shape = A.problem_shape (to_eqs es) in
+      if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape then (
+        if debug () then
+          Format.printf "restart (new shape detected)\n%!";
+        true)
+    else
+     (* no progress measure *)
+     let h = Hashtbl.hash (NS.size es, es, gs) in
+     let rep = L.for_all ((=) h) !hash_iteration in
+     hash_iteration := h :: !hash_iteration;
+     hash_iteration := Listx.take_at_most 20 !hash_iteration;
+     if rep && debug () then F.printf "restart (repeated iteration state)\n%!";
+     (* iteration/size bound*)
+     let running_time = (Unix.gettimeofday () -. !(start_time)) in
+     let limit =
+       match strategy_limit () with
+         | IterationLimit i when !(A.iterations) > i -> true
+         | TimeLimit l when running_time > l -> true
+         | _ -> false
+     in
+     (* estimate exponential blowup *)
+     let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
+     let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
+     let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
+     let blowup = !(A.iterations) > 6 && is_exp eqcounts in
+     if blowup && debug () then F.printf "restart (blowup)\n%!";
+     if limit && debug () then F.printf "restart (limit reached)\n";
+     rep || limit || blowup
+   ;;
 
 
 let detect_shape es =
@@ -734,7 +736,12 @@ let rec phi ctx aa gs =
     let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
-    let gcps = reduced rew (overlaps_on rew rr aa_for_ols ovl gs) in (* goal CPs *)
+    let t = Unix.gettimeofday () in
+    let gos = overlaps_on rew rr aa_for_ols ovl gs in
+    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
+    let t = Unix.gettimeofday () in
+    let gcps = reduced rew gos in (* goal CPs *)
+    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     store_remaining_nodes ctx rest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
