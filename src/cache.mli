@@ -46,8 +46,6 @@ val store_redtrs : Rules.t -> int -> unit
 
 val get_all_strict : int -> (Rule.t * Yicesx.t) list
 
-val was_oriented : Rule.t -> bool
-
 val clear : unit -> unit
 
 val decode_print : Yices.model -> int -> unit

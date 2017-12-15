@@ -17,8 +17,6 @@ let ht_trssi : (Rules.t,int) Hashtbl.t = Hashtbl.create 128;;
 (* tuples ((n,m),b) to remember whether TRS n contains TRS m *)
 let ht_contains : (int * int, bool) Hashtbl.t = Hashtbl.create 200;;
 
-let ht_was_oriented : (Rule.t,bool) Hashtbl.t = Hashtbl.create 128;;
-
 (* Yices variable for each TRS *)
 let ht_trsvars : (int, Yicesx.t) Hashtbl.t = Hashtbl.create 128;;
 
@@ -154,11 +152,8 @@ let store_trs trs =
  let n = !trscount in
  Hashtbl.add ht_itrss n trs;
  Hashtbl.add ht_trssi trs n;
- List.iter (fun rl -> Hashtbl.add ht_was_oriented rl true) trs;
  n
 ;;
-
-let was_oriented rule = Hashtbl.mem ht_was_oriented rule
 
 let store_redtrs trs n = Hashtbl.add ht_iredtrss n trs
 
