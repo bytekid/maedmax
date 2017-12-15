@@ -1,13 +1,16 @@
+module C = Cache
+
 open Yicesx
 
 let check s ls is_json =
  let trs = List.map Literal.terms ls in
  let ctx = Yices.mk_context () in
  Strategy.init s 0 ctx trs;
- Cache.store_rule_vars ctx (trs @ [ t,s | s,t <- trs ]); 
+ C.store_rule_vars ctx (trs @ [ t,s | s,t <- trs ]); 
  Strategy.assert_constraints s 0 ctx trs;
- require (Strategy.bootstrap_constraints 0 ctx trs);
- require (big_and ctx [ Cache.find_rule st | st <- trs ]);
+ let trs_vs = [ r, C.find_rule r | r <- trs] in
+ require (Strategy.bootstrap_constraints 0 ctx trs_vs);
+ require (big_and ctx [ v | _,v <- trs_vs ]);
  if check ctx then (
    if not is_json then Strategy.decode_print 0 (get_model ctx) s;
    (*let cps = Overlap.cps trs in

@@ -34,7 +34,8 @@ val init : Settings.t_term -> int -> Yices.context -> Rules.t -> unit
 val assert_constraints : Settings.t_term -> int -> Yices.context -> Rules.t ->
   unit
 
-val bootstrap_constraints : int -> Yices.context -> Rules.t -> Yicesx.t
+val bootstrap_constraints :
+  int -> Yices.context -> (Rule.t * Yicesx.t) list -> Yicesx.t
 
 val decode_print : int -> Yices.model -> Settings.t_term -> unit
 

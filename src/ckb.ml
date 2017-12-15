@@ -428,12 +428,12 @@ let store_trss ctx =
 
 let c_maxcomp ctx cc =
  let oriented (l,r) = C.find_rule (l,r) <|> (C.find_rule (r,l)) in
- L.iter (fun n -> assert_weighted (oriented (Lit.terms n)) 1) cc
+ L.iter (fun rl -> assert_weighted (oriented rl) 1) cc
 ;;
 
 let c_not_oriented ctx cc =
  let exp (l,r) = (!! (C.find_rule (l,r))) <&> (!! (C.find_rule (r,l))) in
- L.iter (fun n -> assert_weighted (exp (Lit.terms n)) 1) cc
+ L.iter (fun rl -> assert_weighted (exp rl) 1) cc
 ;;
 
 let idx r = 
@@ -459,7 +459,7 @@ let is_reducible ctx cc (s,t) =
 let is_reducible ctx cc = A.take_time A.t_tmp2 (is_reducible ctx cc)
 
 let rlred ctx cc (s,t) =
-  let ccs = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
+  let ccs = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
   let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
@@ -470,15 +470,14 @@ let rlred ctx cc (s,t) =
       let b = is_rule rl && (red t || red s) in
       Hashtbl.add redc (j, i) b; b)
   in
-  big_or ctx [ C.find_rule (Lit.terms n) | n <- ccs; redcbl (Lit.terms n) ]
+  big_or ctx [ C.find_rule rl | rl <- ccs; redcbl rl ]
 ;;
 
-let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
+let c_red ctx cc = L.iter (fun rl -> require (rlred ctx cc rl)) cc
 let c_red ctx = A.take_time A.t_cred (c_red ctx)
 
 (* this heuristic uses rules only in one direction *)
-let c_red_size ctx cc =
-  let ccr = List.map Lit.terms cc in
+let c_red_size ctx ccr =
   let ccsym = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) ccr ccr in
   let ccsym' = [ l,r | l,r <- ccsym; Term.size l >= Term.size r ] in
   let rdc = new Rewriter.reducibility_checker ccsym' in
@@ -494,8 +493,7 @@ let c_red_size ctx = A.take_time A.t_cred (c_red_size ctx)
 
 let c_cpred ctx cc =
   Hashtbl.clear reducible;
-  let ccsym' = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
-  let ccsym = List.map Lit.terms ccsym' in
+  let ccsym = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
   (* create indices *)
   let rdc = new Rewriter.reducibility_checker ccsym in
   rdc#init ();
@@ -515,8 +513,8 @@ let c_cpred ctx cc =
 let c_cpred ctx = A.take_time A.t_ccpred (c_cpred ctx)
 
 let c_min_cps ctx cc =
-  let ccsymm = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
-  let rs = [ Lit.terms n | n <- ccsymm; Rule.is_rule (Lit.terms n) ] in
+  let ccsymm = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
+  let rs = [ rl | rl <- ccsymm; Rule.is_rule rl ] in
   let rule = C.find_rule in
   let c2 = [ !! (rule rl <&> (rule rl')) | rl <- rs; rl' <- rs;
                                             st <- O.nontrivial_cps rl rl' ] in
@@ -524,7 +522,7 @@ let c_min_cps ctx cc =
 ;;
 
 let c_max_red ctx cc =
-  L.iter (fun n -> assert_weighted (rlred ctx cc (Lit.terms n)) 1) cc
+  L.iter (fun rl -> assert_weighted (rlred ctx cc rl) 1) cc
 ;;
 
 let c_max_red ctx = A.take_time A.t_cred (c_max_red ctx)
@@ -549,14 +547,13 @@ let c_comp ctx ns =
  in
  (* initial equations have to be considered *)
  require (all_eqs !(settings.es));
- L.iter considered [ Lit.terms n | n <- ns; not (Lit.is_trivial n) ];
+ L.iter considered [ l,r | l,r <- ns; not (l=r) ];
 ;;
 
 let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
 
 (* constraints to guide search; those get all retracted *)
-let search_constraints ctx cc gs =
- let ccl = NS.to_list cc in
+let search_constraints ctx (ccl, ccsymlvs) gs =
  let take_max = nth_iteration !(settings.max_oriented) in
  let assert_c = function
    | S.Red -> c_red ctx ccl
@@ -579,6 +576,11 @@ let search_constraints ctx cc gs =
 let max_k ctx cc gs =
   let k = !(settings.k) !(A.iterations) in
   let cc_symm = NS.to_list (NS.symmetric cc) in 
+  let cc_symml = [Lit.terms c | c <- cc_symm] in
+  L.iter (fun n -> ignore (C.store_rule_var ctx n)) cc_symml;
+  (* lookup is not for free: get these variables only once *)
+  let cc_symm_vars = [ n, C.find_rule (Lit.terms n) | n <- cc_symm ] in
+  let cc_symml_vars = [ Lit.terms n,v | n,v <- cc_symm_vars ] in
   if debug () then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
   let rec max_k acc ctx cc n =
@@ -592,12 +594,11 @@ let max_k ctx cc gs =
 
         (*let is_rl n = eval m (C.find_rule n) && not (Rule.is_dp n) in
         let rr = [ n | n <- cc_symm; is_rl (Lit.terms n) ] in*)
-        let add_rule n rls =
+        let add_rule (n,v) rls =
           let ts = Lit.terms n in
-          let v = C.find_rule ts in
           if eval m v && not (Rule.is_dp ts) then (n,v) :: rls else rls
         in
-        let rr = List.fold_right add_rule cc_symm []  in
+        let rr = List.fold_right add_rule cc_symm_vars []  in
         A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
         let order =
           if !(settings.unfailing) then Strategy.decode 0 m s
@@ -614,15 +615,13 @@ let max_k ctx cc gs =
          raise (Restart (select_for_restart cc));
        acc))
    in
-   let cc_symm = [ Lit.terms c | c <- cc_symm ] in 
-   L.iter (fun n -> ignore (C.store_rule_var ctx n)) cc_symm;
    if has_comp () then
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
-   A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx)cc_symm;
+   A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx) cc_symml;
    push ctx; (* backtrack point for Yices *)
-   require (Strategy.bootstrap_constraints 0 ctx cc_symm);
-   search_constraints ctx cc gs;
+   require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
+   search_constraints ctx ([ Lit.terms n | n <- NS.to_list cc ], cc_symml) gs;
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
