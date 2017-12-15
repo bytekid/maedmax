@@ -137,14 +137,14 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
 end
 
 
-class reducibility_checker (eqs : Rules.t) = object (self)
+class reducibility_checker (eqs : (Rule.t * Yicesx.t) list) = object (self)
 
 val red_table : (Term.t, Yicesx.t list) H.t = H.create 256
 val mutable index = FingerprintIndex.empty
 
 method init () =
   let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
-  let idx = [ l, ((l,r), Cache.find_rule (l,r)) | l,r <- eqs; is_rule (l,r) ] in
+  let idx = [ l, ((l,r),v) | (l,r),v <- eqs; is_rule (l,r) ] in
   index <- FingerprintIndex.create idx
 
 method reducible_rule (l,r) =

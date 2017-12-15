@@ -476,10 +476,9 @@ let rlred ctx cc (s,t) =
 let c_red ctx cc = L.iter (fun rl -> require (rlred ctx cc rl)) cc
 let c_red ctx = A.take_time A.t_cred (c_red ctx)
 
-(* this heuristic uses rules only in one direction *)
-let c_red_size ctx ccr =
-  let ccsym = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) ccr ccr in
-  let ccsym' = [ l,r | l,r <- ccsym; Term.size l >= Term.size r ] in
+(* this heuristic uses rules only in a non-increasing way *)
+let c_red_size ctx ccr cc_vs =
+  let ccsym' = [ (l,r),v | (l,r),v <- cc_vs; Term.size l >= Term.size r ] in
   let rdc = new Rewriter.reducibility_checker ccsym' in
   rdc#init ();
   let require_red st =
@@ -489,24 +488,20 @@ let c_red_size ctx ccr =
   L.iter require_red ccr
 ;;
 
-let c_red_size ctx = A.take_time A.t_cred (c_red_size ctx)
+let c_red_size ctx ccr = A.take_time A.t_cred (c_red_size ctx ccr)
 
-let c_cpred ctx cc =
-  Hashtbl.clear reducible;
-  let ccsym = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
+let c_cpred ctx cc_vs =
   (* create indices *)
-  let rdc = new Rewriter.reducibility_checker ccsym in
+  let rdc = new Rewriter.reducibility_checker cc_vs in
   rdc#init ();
-  let ovl = new Overlapper.overlapper_with ccsym in
+  let ovl = new Overlapper.overlapper_with cc_vs in
   ovl#init ();
   (* create constraints *)
-  let rule = C.find_rule in
   let red st = big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
-  let c2 rl =
-    let rl_var = rule rl in
+  let c2 (rl,rl_var) =
     [ rl_var <&> rl_var' <=>> (red st) | st,rl_var' <- ovl#cps rl ]
   in
-  let cs = List.concat [c2 rl | rl <- ccsym] in
+  let cs = List.concat [c2 rlv | rlv <- cc_vs] in
   L.iter (fun c -> ignore (assert_weighted c 1)) cs;
 ;;
 
@@ -559,7 +554,7 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
    | S.Red -> c_red ctx ccl
    | S.Empty -> ()
    | S.Comp -> c_comp ctx ccl
-   | S.RedSize -> c_red_size ctx ccl
+   | S.RedSize -> c_red_size ctx ccl ccsymlvs
  in L.iter assert_c (constraints ());
  let assert_mc = function
    | S.Oriented -> c_maxcomp ctx ccl
@@ -567,7 +562,7 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
    | S.MaxRed -> c_max_red ctx ccl
    | S.MinCPs -> c_min_cps ctx ccl
    | S.GoalRed -> c_max_goal_red ctx ccl gs
-   | S.CPsRed -> c_cpred ctx ccl
+   | S.CPsRed -> c_cpred ctx ccsymlvs
    | S.MaxEmpty -> ()
  in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())
 ;;
@@ -592,8 +587,6 @@ let max_k ctx cc gs =
         let c = if use_maxsat () then get_cost m else 0 in
         let t = Unix.gettimeofday () in
 
-        (*let is_rl n = eval m (C.find_rule n) && not (Rule.is_dp n) in
-        let rr = [ n | n <- cc_symm; is_rl (Lit.terms n) ] in*)
         let add_rule (n,v) rls =
           let ts = Lit.terms n in
           if eval m v && not (Rule.is_dp ts) then (n,v) :: rls else rls
@@ -621,7 +614,7 @@ let max_k ctx cc gs =
    A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx) cc_symml;
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
-   search_constraints ctx ([ Lit.terms n | n <- NS.to_list cc ], cc_symml) gs;
+   search_constraints ctx ([ Lit.terms n | n <- NS.to_list cc ], cc_symml_vars) gs;
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
