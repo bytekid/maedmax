@@ -45,12 +45,15 @@ let do_unordered _ =
 let options = Arg.align 
   [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");*)
-   ("--auto", Arg.Set settings.auto,
-    " use heuristic settings (automatic mode)");
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
     " print problem characteristics");
-    ("--concon", Arg.Unit do_concon,
-     " satisfiability-preferring strategy");
+   ("--aql", Arg.Unit (fun _ -> settings.strategy := S.strategy_aql;
+                                settings.k := (fun _ -> 3)),
+    " use heuristics for AQL examples");
+   ("--auto", Arg.Set settings.auto,
+    " use heuristic settings (automatic mode)");
+   ("--concon", Arg.Unit do_concon,
+    " satisfiability-preferring strategy");
    ("--cpf", Arg.Set Settings.do_proof,
     " output certifiable CPF proof");
    ("--cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
