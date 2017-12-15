@@ -10,7 +10,7 @@ type t_term =
  | Dg of orders (* dependency graph without SCCs *)
  | DgScc of (int * orders) (* dependency graph with k SCCs *)
 
-type t_constraint = Empty | Red | Comp
+type t_constraint = Empty | Red | Comp | RedSize
 type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
                         GoalRed | MinCPs
 type limit = IterationLimit of int | TimeLimit of float

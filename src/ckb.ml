@@ -458,7 +458,8 @@ let is_reducible ctx cc (s,t) =
 ;;
 let is_reducible ctx cc = A.take_time A.t_tmp2 (is_reducible ctx cc)
 
-let rlred ctx ccs (s,t) =
+let rlred ctx cc (s,t) =
+  let ccs = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
   let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
@@ -472,11 +473,15 @@ let rlred ctx ccs (s,t) =
   big_or ctx [ C.find_rule (Lit.terms n) | n <- ccs; redcbl (Lit.terms n) ]
 ;;
 
-(* TODO: this heuristic uses rules only in one direction *)
-let c_red ctx cc =
+let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
+let c_red ctx = A.take_time A.t_cred (c_red ctx)
+
+(* this heuristic uses rules only in one direction *)
+let c_red_size ctx cc =
   let ccr = List.map Lit.terms cc in
-  let ccsym = (*L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) ccr*) ccr in
-  let rdc = new Rewriter.reducibility_checker ccsym in
+  let ccsym = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) ccr ccr in
+  let ccsym' = [ l,r | l,r <- ccsym; Term.size l >= Term.size r ] in
+  let rdc = new Rewriter.reducibility_checker ccsym' in
   rdc#init ();
   let require_red st =
     let r = big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
@@ -485,8 +490,7 @@ let c_red ctx cc =
   L.iter require_red ccr
 ;;
 
-(*let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc*)
-let c_red ctx = A.take_time A.t_cred (c_red ctx)
+let c_red_size ctx = A.take_time A.t_cred (c_red_size ctx)
 
 let c_cpred ctx cc =
   Hashtbl.clear reducible;
@@ -499,12 +503,7 @@ let c_cpred ctx cc =
   ovl#init ();
   (* create constraints *)
   let rule = C.find_rule in
-  let red st = 
-    let t = Unix.gettimeofday () in
-    let r = big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
-    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
-    r
-  in
+  let red st = big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
   let c2 rl =
     let rl_var = rule rl in
     [ rl_var <&> rl_var' <=>> (red st) | st,rl_var' <- ovl#cps rl ]
@@ -563,6 +562,7 @@ let search_constraints ctx cc gs =
    | S.Red -> c_red ctx ccl
    | S.Empty -> ()
    | S.Comp -> c_comp ctx ccl
+   | S.RedSize -> c_red_size ctx ccl
  in L.iter assert_c (constraints ());
  let assert_mc = function
    | S.Oriented -> c_maxcomp ctx ccl
@@ -588,17 +588,26 @@ let max_k ctx cc gs =
       if A.take_time A.t_sat sat_call ctx then (
         let m = get_model ctx in
         let c = if use_maxsat () then get_cost m else 0 in
-        let is_rl n = eval m (C.find_rule n) && not (Rule.is_dp n) in
-        let rr = [ n | n <- cc_symm; is_rl (Lit.terms n) ] in
+        let t = Unix.gettimeofday () in
+
+        (*let is_rl n = eval m (C.find_rule n) && not (Rule.is_dp n) in
+        let rr = [ n | n <- cc_symm; is_rl (Lit.terms n) ] in*)
+        let add_rule n rls =
+          let ts = Lit.terms n in
+          let v = C.find_rule ts in
+          if eval m v && not (Rule.is_dp ts) then (n,v) :: rls else rls
+        in
+        let rr = List.fold_right add_rule cc_symm []  in
+        A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
         let order =
           if !(settings.unfailing) then Strategy.decode 0 m s
           else Order.default
         in
         if !(settings.unfailing) && !Settings.do_assertions then (
           let ord n = let l,r = Lit.terms n in order#gt l r && not (order#gt r l) in
-          assert (L.for_all ord rr));
-        require (!! (big_and ctx [ C.find_rule (Lit.terms r) | r <- rr ]));
-        max_k ((rr, c, order) :: acc) ctx cc (n-1))
+          assert (L.for_all ord (List.map fst rr)));
+        require (!! (big_and ctx [ v | _,v <- rr ]));
+        max_k ((List.map fst rr, c, order) :: acc) ctx cc (n-1))
      else (
        if debug () then F.printf "no further TRS found\n%!"; 
        if (n = k && L.length !(settings.strategy) > 1) then

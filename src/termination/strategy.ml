@@ -71,7 +71,8 @@ let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11);
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
 let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
 let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max]
-let strategy_aql = [ts_cfsn, [Red],[Oriented; CPsRed], max]
+let strategy_aql = [ts_cfsn, [RedSize],[Oriented; CPsRed], max;
+                    ts_cfsn, [],[Oriented; CPsRed], max]
 let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max]
 
 let strategy_auto = [
@@ -114,7 +115,13 @@ let term_to_string =
  | DgScc (k,os) -> "DgScc ("^(string_of_int k)^", "^ (osstr os) ^ ")"
 ;;
 
-let c_to_string = function Empty -> "None" | Red -> "Red" | Comp -> "Comp"
+let c_to_string = function
+    Empty -> "None"
+  | Red -> "Red"
+  | Comp -> "Comp"
+  | RedSize -> "RedSize"
+;;
+
 let mc_to_string = function 
     MaxEmpty -> "None"
   | MaxRed -> "MaxRed"
