@@ -468,11 +468,24 @@ let rlred ctx ccs (s,t) =
       let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
       let b = is_rule rl && (red t || red s) in
       Hashtbl.add redc (j, i) b; b)
-  in big_or ctx [ C.find_rule (Lit.terms n) | n <- ccs; redcbl (Lit.terms n) ]
+  in
+  big_or ctx [ C.find_rule (Lit.terms n) | n <- ccs; redcbl (Lit.terms n) ]
 ;;
 
-let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc
+(* TODO: this heuristic uses rules only in one direction *)
+let c_red ctx cc =
+  let ccr = List.map Lit.terms cc in
+  let ccsym = (*L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) ccr*) ccr in
+  let rdc = new Rewriter.reducibility_checker ccsym in
+  rdc#init ();
+  let require_red st =
+    let r = big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
+    require r
+  in
+  L.iter require_red ccr
+;;
 
+(*let c_red ctx cc = L.iter (fun n -> require (rlred ctx cc (Lit.terms n))) cc*)
 let c_red ctx = A.take_time A.t_cred (c_red ctx)
 
 let c_cpred ctx cc =
