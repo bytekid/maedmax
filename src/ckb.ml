@@ -427,8 +427,8 @@ let store_trss ctx =
 ;;
 
 let c_maxcomp ctx cc =
- let oriented (l,r) = C.find_rule (l,r) <|> (C.find_rule (r,l)) in
- L.iter (fun rl -> assert_weighted (oriented rl) 1) cc
+ let oriented ((l,r),v) = v <|> (C.find_rule (r,l)) in
+ L.iter (fun ((l,r),v) -> if l > r then assert_weighted (oriented ((l,r),v)) 1) cc
 ;;
 
 let c_not_oriented ctx cc =
@@ -557,7 +557,7 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
    | S.RedSize -> c_red_size ctx ccl ccsymlvs
  in L.iter assert_c (constraints ());
  let assert_mc = function
-   | S.Oriented -> c_maxcomp ctx ccl
+   | S.Oriented -> c_maxcomp ctx ccsymlvs
    | S.NotOriented -> c_not_oriented ctx ccl
    | S.MaxRed -> c_max_red ctx ccl
    | S.MinCPs -> c_min_cps ctx ccl
