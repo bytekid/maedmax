@@ -7,3 +7,5 @@ val init : (Yices.context * int) -> (Signature.sym * int) list -> Yicesx.t
 
 val decode_print: int -> Yices.model -> unit
 
+val decode: int -> Yices.model -> Order.t
+

@@ -400,8 +400,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       List.for_all (fun e -> not (orientable e)) ee then
       Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order !(settings.gs)
     else if rr @ ee = [] || (sat <> None && goals_ground) then (
-      if ee = [] then
-        Some (SAT, Completion rr)
+      if ee = [] then Some (SAT, Completion rr)
       else if ieqs = [] then
         Some (SAT, GroundCompletion (rr, ee, order))
       else None
@@ -457,9 +456,9 @@ let is_reducible ctx cc (s,t) =
     b
   )
 ;;
+let is_reducible ctx cc = A.take_time A.t_tmp2 (is_reducible ctx cc)
 
-let rlred ctx cc (s,t) =
-  let ccs = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
+let rlred ctx ccs (s,t) =
   let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
@@ -478,15 +477,39 @@ let c_red ctx = A.take_time A.t_cred (c_red ctx)
 
 let c_cpred ctx cc =
   Hashtbl.clear reducible;
-  let ccsymm = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
-  let rs = [ Lit.terms n | n <- ccsymm; Rule.is_rule (Lit.terms n) ] in
-  let rule, red = C.find_rule, is_reducible ctx ccsymm in
-  let c2 = [ rule rl <&> (rule rl') <=>> (red st) | rl <- rs; rl' <- rs;
-                                             st <- O.nontrivial_cps rl rl' ] in
-  L.iter (fun c -> ignore (assert_weighted c 2)) c2;
+  let ccsym' = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
+  let ccsym = List.map Lit.terms ccsym' in
+  (* create indices *)
+  let rdc = new Rewriter.reducibility_checker ccsym in
+  rdc#init ();
+  let ovl = new Overlapper.overlapper_with ccsym in
+  ovl#init ();
+  (* create constraints *)
+  let rule = C.find_rule in
+  let red st = 
+    let t = Unix.gettimeofday () in
+    let r = big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
+    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
+    r
+  in
+  let c2 rl =
+    let rl_var = rule rl in
+    [ rl_var <&> rl_var' <=>> (red st) | st,rl_var' <- ovl#cps rl ]
+  in
+  let cs = List.concat [c2 rl | rl <- ccsym] in
+  L.iter (fun c -> ignore (assert_weighted c 1)) cs;
 ;;
 
 let c_cpred ctx = A.take_time A.t_ccpred (c_cpred ctx)
+
+let c_min_cps ctx cc =
+  let ccsymm = L.fold_left (fun ccs n -> Lit.flip n :: ccs) cc cc in
+  let rs = [ Lit.terms n | n <- ccsymm; Rule.is_rule (Lit.terms n) ] in
+  let rule = C.find_rule in
+  let c2 = [ !! (rule rl <&> (rule rl')) | rl <- rs; rl' <- rs;
+                                            st <- O.nontrivial_cps rl rl' ] in
+  L.iter (fun c -> ignore (assert_weighted c 1)) c2;
+;;
 
 let c_max_red ctx cc =
   L.iter (fun n -> assert_weighted (rlred ctx cc (Lit.terms n)) 1) cc
@@ -532,6 +555,7 @@ let search_constraints ctx cc gs =
    | S.Oriented -> c_maxcomp ctx ccl
    | S.NotOriented -> c_not_oriented ctx ccl
    | S.MaxRed -> c_max_red ctx ccl
+   | S.MinCPs -> c_min_cps ctx ccl
    | S.GoalRed -> c_max_goal_red ctx ccl gs
    | S.CPsRed -> c_cpred ctx ccl
    | S.MaxEmpty -> ()
@@ -648,6 +672,7 @@ let detect_shape es =
     | Zolfo -> settings.n := 10
     | Xeno -> (
       settings.reduce_AC_equations_for_CPs := true;
+      settings.size_age_ratio := 60;
       settings.n := 10
     )
     | Elio when fs_count > 3 -> settings.n := 10
@@ -736,12 +761,8 @@ let rec phi ctx aa gs =
     let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
-    let t = Unix.gettimeofday () in
     let gos = overlaps_on rew rr aa_for_ols ovl gs in
-    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
-    let t = Unix.gettimeofday () in
     let gcps = reduced rew gos in (* goal CPs *)
-    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
     let gg = fst (select_goals 2 (NS.diff gcps gs)) in
     store_remaining_nodes ctx rest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in

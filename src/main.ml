@@ -82,11 +82,12 @@ let options = Arg.align
        else if s = "olpokbo" then settings.strategy := S.strategy_ordered
        else if s = "kbo" then settings.strategy := S.strategy_kbo
        else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
+       else if s = "maxcompkbo" then settings.strategy := S.strategy_maxcomp_kbo
        else if s = "okbauto" then settings.strategy := S.strategy_ordered
        (*else if s = "mpol" then settings.strategy := S.strategy_mpol
        else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
-       else if s = "ordered" then settings.strategy := S.strategy_ordered
-       else if s = "temp" then settings.strategy := S.strategy_temp*)
+       else if s = "ordered" then settings.strategy := S.strategy_ordered*)
+       else if s = "temp" then settings.strategy := S.strategy_temp
        else failwith "unsupported option for -M"),
     "<mode> strategy (olpo, okbo, olpokbo)");
    ("--checksub", Arg.Int (fun n -> settings.check_subsumption := n),
@@ -149,7 +150,7 @@ let call () =
   in add_arg 0
 ;;
 
-let success_code = function UNSAT _ -> "UNSAT" | SAT -> "SAT"
+let success_code = function UNSAT -> "UNSAT" | SAT -> "SAT"
 
 let json_settings settings s k =
  let s = "strategy", `String s in

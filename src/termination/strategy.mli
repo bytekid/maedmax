@@ -3,6 +3,7 @@ type t = Settings.termination_strategy
 val strategy_red : t
 val strategy_maxcomp : t
 val strategy_maxcomp_lpo : t
+val strategy_maxcomp_kbo : t
 val strategy_lpo : t
 val strategy_kbo : t
 val strategy_mpol : t

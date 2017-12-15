@@ -12,7 +12,7 @@ type t_term =
 
 type t_constraint = Empty | Red | Comp
 type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
-                        GoalRed
+                        GoalRed | MinCPs
 type limit = IterationLimit of int | TimeLimit of float
 type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * limit
 type termination_strategy = t_setting list

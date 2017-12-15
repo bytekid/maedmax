@@ -135,3 +135,38 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
     | Term.F (_, ts) -> List.for_all self#is_nf ts
   ;;
 end
+
+
+class reducibility_checker (eqs : Rules.t) = object (self)
+
+val red_table : (Term.t, Yicesx.t list) H.t = H.create 256
+val mutable index = FingerprintIndex.empty
+
+method init () =
+  let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
+  let idx = [ l, ((l,r), Cache.find_rule (l,r)) | l,r <- eqs; is_rule (l,r) ] in
+  index <- FingerprintIndex.create idx
+
+method reducible_rule (l,r) =
+  let t = Unix.gettimeofday () in
+  let res = self#reducible_term l @ (self#reducible_term r) in
+  Analytics.t_tmp2 := !Analytics.t_tmp2 +. (Unix.gettimeofday () -. t);
+  res
+;;
+
+(* Returns rules that reduce the term [t]. *)
+method reducible_term t = 
+  try H.find red_table t with
+  Not_found -> match t with
+    | Term.V _ -> []
+    | Term.F(_,ts) ->
+      let root_matches = self#matches t in
+      List.concat (root_matches :: [self#reducible_term ti | ti <- ts])
+;;
+
+(* Finds all rules that match at root. *)
+method matches t =
+  let rs = FingerprintIndex.get_matches t index in
+  [ v | (l,r),v <- rs; Subst.is_instance_of t l ]
+;;
+end

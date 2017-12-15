@@ -36,6 +36,7 @@ let ts_dpn = Dp (Seq [Cfsn; LPO])
 let ts_dg = Dg (Seq [Cfsn; LPO])
 let ts_dgk = DgScc (2, Seq [Cfsn; LPO])
 let ts_lpo = Orders (Seq [LPO])
+let ts_cfsn = Orders (Seq [Cfsn])
 let ts_kbo = Orders (Seq [KBO])
 let ts_lpokbo = Orders (Choice (LPO, KBO))
 let ts_mpol = Orders (Seq [MPol])
@@ -44,6 +45,7 @@ let ts_mpol = Orders (Seq [MPol])
 let max = IterationLimit 10000
 let strategy_maxcomp = [ts_dpn, [],[Oriented], max]
 let strategy_maxcomp_lpo = [ts_lpo, [],[Oriented], max]
+let strategy_maxcomp_kbo = [ts_kbo, [],[Oriented], max]
 
 let strategy_red = [ts_dpn, [Red],[], max]
 let strategy_lpo = [ts_lpo, [Red; Comp],[CPsRed], max]
@@ -69,7 +71,7 @@ let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11);
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
 let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
 let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max]
-let strategy_temp = [ts_kbo, [],[MaxRed], max]
+let strategy_temp = [ts_cfsn, [],[Oriented; CPsRed], max]
 
 let strategy_auto = [
  (ts_lpo, [Red; Comp], [CPsRed], max);
@@ -113,8 +115,13 @@ let term_to_string =
 
 let c_to_string = function Empty -> "None" | Red -> "Red" | Comp -> "Comp"
 let mc_to_string = function 
- MaxEmpty -> "None" | MaxRed -> "MaxRed" | CPsRed -> "CPRed"  |
- Oriented -> "Oriented" | NotOriented -> "NotOriented" | GoalRed -> "GoalRed"
+    MaxEmpty -> "None"
+  | MaxRed -> "MaxRed"
+  | MinCPs -> "MinCPs"
+  | CPsRed -> "CPRed"
+  | Oriented -> "Oriented"
+  | NotOriented -> "NotOriented"
+  | GoalRed -> "GoalRed"
 ;;
 
 let setting_to_string (t, c, mc, i) =
@@ -460,14 +467,16 @@ let decode j m s =
  let dec_ord ?(af=false) i = function
   | LPO -> Lpo.decode i m
   | KBO -> Kbo.decode i m
-  | _ -> failwith "Strategy.decode_term_cmp: order not implemented"
+  | Cfs -> Cfs.decode i m
+  | Cfsn -> Cfsn.decode i m
+  | _ -> failwith "Strategy.decode: order not implemented"
  in
  match s with
     Orders (Seq (o :: _)) -> dec_ord (j+1) o
   | Orders (Choice (o1,o2)) ->
     if eval m (Hashtbl.find choice_vars j) then dec_ord (j+1) o1
     else dec_ord (j+1) o2
-  | _ -> failwith "Strategy.decode_term_cmp: not implemented"
+  | _ -> failwith "Strategy.decod: not implemented"
 ;;
 
 let get_termination = function

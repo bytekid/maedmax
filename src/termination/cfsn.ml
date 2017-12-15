@@ -60,18 +60,34 @@ let init (ctx,k) fs =
  big_and ctx (List.map add fs)
 ;;
 
-let decode_print k m = 
- let dec (f, a) =
-  let v = Hashtbl.find weights (k,f) in
-  let fn = Signature.get_fun_name f in
-  Format.printf " w(%s) = %i\n%!" fn (eval_int_var m v)
- in 
- if eval m (the !all_weak) then
-  Format.printf "(no symbol count decrease)\n "
- else (
-  Format.printf "symbol count decrease: @\n ";
-  List.iter dec !funs 
-  )
+let eval k m =
+  let w f = try eval_int_var m (Hashtbl.find weights (k,f)) with _ -> 0 in
+  [ (f,a), w f | f,a <- !funs ]
+;;
+
+let print fw = 
+  Format.printf "function symbol weights:\n%!";
+  let name = Signature.get_fun_name in
+  List.iter (fun ((f,_),w) -> Format.printf "  w(%s) = %d\n" (name f) w) fw;
+  Format.printf "\n%!"
+;;
+
+let decode_print k m = let ws = eval k m in print ws
+
+let decode k m =
+  let ws = eval k m in
+  let gt s t = false
+  in
+  let bot =  match [ c | c,a <- !funs; a = 0] with
+      [] -> None
+    | c :: cs -> Some c
+  in
+  object
+    method bot = bot;;
+    method gt = gt;;
+    method print = fun _ -> print ws;;
+    method to_xml = Xml.Element("cfs", [], [])
+  end
 ;;
 
 let clear () = 

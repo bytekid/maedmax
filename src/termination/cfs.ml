@@ -9,7 +9,7 @@ open Yicesx
 
 (*** GLOBALS *****************************************************************)
 (* signature *)
-let funs = ref []
+let funs : (Signature.sym * int) list ref = ref []
 (* map function symbol and strategy stage to bool whether its counted *)
 let decreasing : (int * Signature.sym, Yicesx.t) Hashtbl.t = Hashtbl.create 32
 let all_weak : Yicesx.t option ref = ref None  
@@ -40,20 +40,20 @@ let dec (ctx,k) f =
 
 let gt (ctx,k) s t =
   let np = !! (passthru ()) in
-  np <&> (big_or ctx [ dec (ctx,k) f | f <- !funs; strict_decrease (s,t) f ])
+  np <&> (big_or ctx [ dec (ctx,k) f | f,_ <- !funs; strict_decrease (s,t) f ])
 ;;
 
 let ge (ctx,k) s t =
   let pass = !! (passthru ()) in
-  pass <|> (big_or ctx [ dec (ctx,k) f | f <- !funs; weak_decrease (s,t) f ])
+  pass <|> (big_or ctx [ dec (ctx,k) f | f,_ <- !funs; weak_decrease (s,t) f ])
 ;;
 
 let init (ctx,k) fs = 
  all_weak := Some (mk_fresh_bool_var ctx); (* passthru, eg if R duplicating *)
- funs := List.map fst fs; 
+ funs := fs; 
  let zero, one = mk_num ctx 0, mk_num ctx 1 in
  (* only one function symbol may decrease *)
- one <>=> (sum ctx [ite (dec (ctx,k) f) one zero | f <- !funs ])
+ one <>=> (sum ctx [ite (dec (ctx,k) f) one zero | f,_ <- !funs ])
 ;;
 
 let decode_print k m = 
@@ -74,4 +74,25 @@ let decode_print k m =
   with Not_found ->
    Format.printf "none\n%!"
   )
+;;
+
+let decode k m =
+  let is_decreasing (f,_) = 
+   try eval m (Hashtbl.find decreasing (k,f))
+   with Not_found -> false
+  in
+  let gt s t =
+    try strict_decrease (s,t) (fst (List.find is_decreasing !funs))
+    with Not_found -> false
+  in
+  let bot =  match [ c | c,a <- !funs; a = 0] with
+      [] -> None
+    | c :: cs -> Some c
+  in
+  object
+    method bot = bot;;
+    method gt = gt;;
+    method print = fun _ -> decode_print k m;;
+    method to_xml = Xml.Element("cfs", [], [])
+  end
 ;;
