@@ -401,7 +401,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order !(settings.gs)
     else if rr @ ee = [] || (sat <> None && goals_ground) then (
       if ee = [] then Some (SAT, Completion rr)
-      else if ieqs = [] then
+      else if ieqs = [] && List.for_all (fun e -> not(Rule.is_ground e)) ee then
         Some (SAT, GroundCompletion (rr, ee, order))
       else None
     )
@@ -720,9 +720,11 @@ let set_iteration_stats aa gs =
 let store_trs ctx j rr cost =
   let rr = [ Lit.terms r | r <- rr ] in
   let rr_index = C.store_trs rr in
-  (* for rewriting actually reduced TRS is used; have to store *)
+  (* for rewriting actually reduced TRS may be used; have to store *)
   let rr_reduced =
-    if !(Settings.do_proof) then interreduce rr else Variant.reduce_encomp rr
+    if not !(settings.reduce_trss) then rr
+    else if !(Settings.do_proof) then interreduce rr
+    else Variant.reduce_encomp rr
   in
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)

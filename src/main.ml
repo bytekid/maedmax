@@ -48,7 +48,8 @@ let options = Arg.align
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
     " print problem characteristics");
    ("--aql", Arg.Unit (fun _ -> settings.strategy := S.strategy_aql;
-                                settings.k := (fun _ -> 3)),
+                                settings.reduce_trss := false;
+                                settings.k := (fun _ -> 4)),
     " use heuristics for AQL examples");
    ("--auto", Arg.Set settings.auto,
     " use heuristic settings (automatic mode)");
