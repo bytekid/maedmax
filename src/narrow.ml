@@ -3,6 +3,8 @@ module L = List
 module T = Term
 module R = Rule
 module S = Settings
+(*** MODULES *****************************************************************)
+open Settings
 
 (*** GLOBALS *****************************************************************)
 let settings = S.default
