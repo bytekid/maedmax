@@ -413,19 +413,6 @@ let succeeds ctx re rew cc ie =
 ;;
 
 (* * FIND TRSS  * * *  * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-(* logical vars for new TRSs *)
-let store_trss ctx =
-  let store n _ =
-    if not (Hashtbl.mem C.ht_trsvars n) then
-      let rr = L.map C.find_rule (C.trs_of_index n) in
-      if rr <> [] then (
-        let v = mk_fresh_bool_var ctx in
-        Hashtbl.add C.ht_trsvars n v;
-        require (v <=> (big_and1 rr))
-      )
- in Hashtbl.iter store C.ht_itrss
-;;
-
 let c_maxcomp ctx cc =
  let oriented ((l,r),v) = v <|> (C.find_rule (r,l)) in
  L.iter (fun ((l,r),v) -> if l > r then assert_weighted (oriented ((l,r),v)) 1) cc
@@ -585,14 +572,12 @@ let max_k ctx cc gs =
       if A.take_time A.t_sat sat_call ctx then (
         let m = get_model ctx in
         let c = if use_maxsat () then get_cost m else 0 in
-        let t = Unix.gettimeofday () in
 
         let add_rule (n,v) rls =
           let ts = Lit.terms n in
           if eval m v && not (Rule.is_dp ts) then (n,v) :: rls else rls
         in
         let rr = List.fold_right add_rule cc_symm_vars []  in
-        A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
         let order =
           if !(settings.unfailing) then Strategy.decode 0 m s
           else Order.default
@@ -762,7 +747,9 @@ let rec phi ctx aa gs =
     else aa
   in
   let process (j, aa, gs) (rr, c, order) =
+    let t = Unix.gettimeofday () in
     let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in (* interreduce *)
+    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
     let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
@@ -773,6 +760,7 @@ let rec phi ctx aa gs =
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps, ovl = overlaps rew rr aa_for_ols in
     let cps = reduced rew cps in (* rewrite CPs *)
+    (*A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);*)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
     let gos = overlaps_on rew rr aa_for_ols ovl gs in
