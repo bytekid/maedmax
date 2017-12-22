@@ -269,6 +269,38 @@ let show_proof (es,gs) res =
   let p = proof_string (es,gs) res in Format.printf "%s\n" p
 ;;
 
+let interactive_mode proof =
+  let rewriter = match proof with
+    | Completion rr ->
+      let rew = new Rewriter.rewriter rr !(settings.ac_syms) Order.default in
+      rew#init ();
+      rew
+    | GroundCompletion (rr,ee,o) ->
+      let rew = new Rewriter.rewriter rr !(settings.ac_syms) o in
+      rew#init ();
+      rew#add ee;
+      rew
+    | _ -> failwith "No decision procedure, interactive mode not possible."
+  in
+  let decision_proc l =
+    let s,t = Literal.terms l in
+    let joined = fst (rewriter#nf s) = fst (rewriter#nf t) in
+    (joined && Literal.is_equality l) || not (joined || Literal.is_equality l)
+  in
+  Format.printf "OK\n%!";
+  let check_eq s =
+    let l = Read.equation_or_inequality s in
+    Format.printf "%s\n%!" (if decision_proc l then "YES" else "NO")
+  in
+  let rec check _ =
+    Format.printf "Enter equation or 'exit' to stop:\n%!";
+    let s = read_line () in
+    if s = "exit" then
+      exit 0
+    else (check_eq s; check ())
+  in check ()
+;;
+
 let () =
   do_ordered ();
   Arg.parse options 
@@ -277,12 +309,16 @@ let () =
   let json = !(settings.json) in
   match !filenames with
   | [f] -> 
-      let (es,gs) as input = Read.read f in
+      let (es,gs) as input = Read.file f in
+      if !(Settings.interactive) && gs <> [] then
+        failwith "Input for interactive mode is not supposed to contain goals";
       if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
-	      let answer, proof = Ckb.ckb settings input in
-        if json then (
+        let answer, proof = Ckb.ckb settings input in
+        if !(Settings.interactive) then
+          interactive_mode proof
+        else if json then (
          Timer.stop timer;
          let secs = Timer.length ~res:Timer.Seconds timer in
          let proofstr =

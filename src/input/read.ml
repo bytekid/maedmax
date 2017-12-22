@@ -51,6 +51,14 @@ let rec read_tptp filename =
   with Sys_error s ->
     (eprintf "Error:@.%s@." s; exit 1)
 
-let read filename = 
+let file filename = 
   if Filename.check_suffix filename "trs"  then fst (read_trs filename), []
   else read_tptp filename
+
+let equation_or_inequality s =
+  let lexbuf = from_string s in
+  try
+    TptpParser.equation_or_inequality TptpLexer.token lexbuf
+  with Parsing.Parse_error ->
+    (syntax_error lexbuf.lex_curr_p; exit 1)
+;; 
