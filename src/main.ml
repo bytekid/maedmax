@@ -62,6 +62,8 @@ let options = Arg.align
     " output CPF proof plus debug output");
    ("-D", Arg.Int (fun d -> settings.d := d),
     " print debugging output");
+   ("--interactive", Arg.Set Settings.interactive,
+    " enter interactive mode once a complete system was found");
    ("--json", Arg.Set settings.json,
     " output result and stats in JSON format");
    ("-I", Arg.Int (fun n -> Settings.inst_depth := n),

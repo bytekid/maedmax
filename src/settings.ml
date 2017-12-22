@@ -100,6 +100,7 @@ let do_debug = ref false
 let do_proof = ref false
 let do_proof_debug = ref false
 let is_ordered = ref false
+let interactive = ref false
 
 let inst_depth : int ref = ref 2
 
