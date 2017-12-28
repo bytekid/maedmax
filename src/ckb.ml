@@ -788,10 +788,17 @@ let init_settings fs es gs =
  settings.signature := Rules.signature (es @ gs);
  settings.d := !(fs.d);
  A.iterations := 0;
- settings.n := !(fs.n);
- settings.strategy := !(fs.strategy);
- settings.auto := !(fs.auto);
- settings.tmp := !(fs.tmp);
+ if List.length es > 50 then (
+   settings.strategy := Strategy.strategy_aql;
+   settings.reduce_trss := false;
+   settings.k := (fun _ -> 4);
+   settings.auto := false)
+ else (
+   settings.n := !(fs.n);
+   settings.strategy := !(fs.strategy);
+   settings.auto := !(fs.auto);
+   settings.tmp := !(fs.tmp);
+   if !(fs.auto) then detect_shape es);
  settings.es := es;
  settings.gs := gs;
  start_time := Unix.gettimeofday ();
@@ -807,11 +814,6 @@ let init_settings fs es gs =
  if !(settings.reduce_AC_equations_for_CPs) then (
    let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
    acx_rules := [ Lit.flip r | r <- acxs ] @ acxs);
- if !(fs.auto) then detect_shape es;
- if List.length es > 50 then (
-   settings.strategy := Strategy.strategy_aql;
-   settings.reduce_trss := false;
-   settings.k := (fun _ -> 4))
 ;;
 
 let remember_state es gs =
