@@ -112,12 +112,8 @@ let rec get_oldest_node (aa,rew) =
    | n :: ns ->
      all_nodes := ns;
      let s,t = Lit.terms n in
-     if fst (rew#nf s) = fst (rew#nf t) || NS.mem aa n then (
-       (*if fst (rew#nf s) = fst (rew#nf t) then
-         F.printf " ... discard/joinable %a \n" Lit.print n
-       else
-         F.printf " ... discard/present %a \n" Lit.print n;*)
-       get_oldest_node (aa,rew))
+     if fst (rew#nf s) = fst (rew#nf t) || NS.mem aa n then
+       get_oldest_node (aa,rew)
      else Some n
 ;;
 
@@ -811,7 +807,11 @@ let init_settings fs es gs =
  if !(settings.reduce_AC_equations_for_CPs) then (
    let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
    acx_rules := [ Lit.flip r | r <- acxs ] @ acxs);
- if !(fs.auto) then detect_shape es
+ if !(fs.auto) then detect_shape es;
+ if List.length es > 50 then (
+   settings.strategy := Strategy.strategy_aql;
+   settings.reduce_trss := false;
+   settings.k := (fun _ -> 4))
 ;;
 
 let remember_state es gs =

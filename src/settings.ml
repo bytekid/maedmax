@@ -68,7 +68,7 @@ let tmp = ref false
 
 (* settings *)
 let default = {
- auto      = ref false;
+ auto      = ref true;
  ac_syms   = ref [];
  only_c_syms   = ref [];
  signature = ref [];

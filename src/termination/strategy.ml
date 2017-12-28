@@ -71,7 +71,8 @@ let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11);
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
 let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
 let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max]
-let strategy_aql = [ts_cfsn, [RedSize],[Oriented; CPsRed], max;
+let strategy_aql = [ts_kbo, [], [MaxRed], IterationLimit 12;
+                    ts_cfsn, [RedSize],[Oriented; CPsRed], max;
                     ts_cfsn, [],[Oriented; CPsRed], max]
 let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max]
 
