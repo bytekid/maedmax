@@ -170,6 +170,6 @@ method reducible_term t =
 (* Finds all rules that match at root. *)
 method matches t =
   let rs = FingerprintIndex.get_matches t index in
-  [ v | (l,r),v <- rs; Subst.is_instance_of t l ]
+  [ v | (l,r),v <- rs (*; Subst.is_instance_of t l*) ]
 ;;
 end
