@@ -272,10 +272,12 @@ let show_proof (es,gs) res =
 let interactive_mode proof =
   let rewriter = match proof with
     | Completion rr ->
+      Format.printf "Deciding equational theory.\n%!";
       let rew = new Rewriter.rewriter rr !(settings.ac_syms) Order.default in
       rew#init ();
       rew
     | GroundCompletion (rr,ee,o) ->
+    Format.printf "Deciding ground theory over given signature.\n%!";
       let rew = new Rewriter.rewriter rr !(settings.ac_syms) o in
       rew#init ();
       rew#add ee;
