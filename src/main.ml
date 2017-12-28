@@ -2,6 +2,7 @@
 module S = Strategy
 module F = Format
 module Lit = Literal
+module Var = Variant
 
 (*** OPENS *******************************************************************)
 open Format
@@ -216,16 +217,18 @@ let print_analysis es gs =
 ;;         
 
 let clean es0 =
-  let reduce rr = Listx.unique (Variant.reduce rr) in
+  let reduce rr =
+    if List.length rr < 200 then Listx.unique (Var.reduce rr) else rr
+  in
   let es0n = [Lit.terms (Lit.normalize e) | e <- es0 ] in
   let clean rr ee =
     let nf = Rewriting.nf rr in
     let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
     let ee'' = Rules.subsumption_free ee' in
-    let rr' = Variant.reduce_encomp rr in
+    let rr' = if List.length rr < 200 then Var.reduce_encomp rr else rr in
     let rr_pre =
       if not !(settings.keep_orientation) then []
-      else Listset.diff [ r | r <- rr; List.mem (Variant.normalize_rule r) es0n ] rr'
+      else Listset.diff [ r | r <- rr;List.mem (Var.normalize_rule r) es0n ] rr'
     in
     (rr' @ rr_pre, ee'')
   in function

@@ -74,7 +74,7 @@ class overlapper_with (trs : (Rule.t * Yicesx.t) list) = object (self)
 
   method init () =
     let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
-    index <- FingerprintIndex.create [ l,((l,r),v) | (l,r),v <- trs; is_rule (l,r) ]
+    index <- FingerprintIndex.create [ fst lr,(lr,v) | lr,v <- trs; is_rule lr ]
   ;;
 
   (* Returns terms unifiable with t. Lookup in table, otherwise use index. *)

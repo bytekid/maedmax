@@ -56,6 +56,8 @@ let termination_strategy _ =
   | (s,_, _,_) :: _ -> s
 ;;
 
+let dps_used _ = Strategy.has_dps (termination_strategy ())
+
 let constraints _ = 
  match !(settings.strategy) with 
   | [] -> failwith "no constraints found"
@@ -346,8 +348,8 @@ let saturated ctx (rr,ee) rewriter cc =
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
   let eqs = [(*normalize*) (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n] in
-  (*let eqs' = Listset.diff eqs ([ t,s | s,t <- ee ] @ ee) in*)
-  Ground.all_joinable ctx str sys eqs xsig d
+  let eqs' = Listset.diff eqs rr in (* heuristic ... *)
+  Ground.all_joinable ctx str sys eqs' xsig d
 ;;
 
 let rewrite_seq rew (s,t) (rss,rst) =
@@ -439,7 +441,6 @@ let is_reducible ctx cc (s,t) =
     b
   )
 ;;
-let is_reducible ctx cc = A.take_time A.t_tmp2 (is_reducible ctx cc)
 
 let rlred ctx cc (s,t) =
   let ccs = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
@@ -474,7 +475,7 @@ let c_red_size ctx ccr cc_vs =
 let c_red_size ctx ccr = A.take_time A.t_cred (c_red_size ctx ccr)
 
 let c_cpred ctx cc_vs =
-  (* create indices *)
+  (* create indices, cc_vs is already symmetric *)
   let rdc = new Rewriter.reducibility_checker cc_vs in
   rdc#init ();
   let ovl = new Overlapper.overlapper_with cc_vs in
@@ -561,6 +562,7 @@ let max_k ctx cc gs =
   let cc_symml_vars = [ Lit.terms n,v | n,v <- cc_symm_vars ] in
   if debug () then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
+  let no_dps = not (dps_used ()) in
   let rec max_k acc ctx cc n =
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
     else (
@@ -570,10 +572,13 @@ let max_k ctx cc gs =
         let c = if use_maxsat () then get_cost m else 0 in
 
         let add_rule (n,v) rls =
-          let ts = Lit.terms n in
-          if eval m v && not (Rule.is_dp ts) then (n,v) :: rls else rls
+          if eval m v && (no_dps || not (Rule.is_dp (Lit.terms n))) then
+            (n,v) :: rls
+          else rls
         in
+        let t = Unix.gettimeofday () in
         let rr = List.fold_right add_rule cc_symm_vars []  in
+        A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
         let order =
           if !(settings.unfailing) then Strategy.decode 0 m s
           else Order.default
@@ -589,6 +594,7 @@ let max_k ctx cc gs =
          raise (Restart (select_for_restart cc));
        acc))
    in
+   let t = Unix.gettimeofday () in
    if has_comp () then
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
@@ -596,6 +602,7 @@ let max_k ctx cc gs =
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
    search_constraints ctx ([ Lit.terms n | n <- NS.to_list cc ], cc_symml_vars) gs;
+   A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
    let trss = max_k [] ctx cc k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
@@ -745,9 +752,7 @@ let rec phi ctx aa gs =
     else aa
   in
   let process (j, aa, gs) (rr, c, order) =
-    let t = Unix.gettimeofday () in
     let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in (* interreduce *)
-    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
     let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
@@ -758,7 +763,6 @@ let rec phi ctx aa gs =
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps, ovl = overlaps rew rr aa_for_ols in
     let cps = reduced rew cps in (* rewrite CPs *)
-    (*A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);*)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
     let gos = overlaps_on rew rr aa_for_ols ovl gs in
@@ -778,7 +782,6 @@ let rec phi ctx aa gs =
     phi ctx aa' gs'
   with Success r -> r
 ;;
-
 
 let init_settings fs es gs =
  let acs = Ac.symbols es in

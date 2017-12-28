@@ -152,6 +152,13 @@ let cache t f k =
  with Not_found -> let v = f k in Hashtbl.add t k v; v
 ;;
 
+let has_dps = function
+   | Dp _
+   | Dg _
+   | DgScc _ -> true
+   | _ -> false
+;;
+
 (* Asserts initial constraints for stage j and all s -> t in rs, applying a
    case distinction on the strategy s *)
 let init s j ctx rs =

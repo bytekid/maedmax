@@ -29,6 +29,8 @@ val get_termination : t -> Settings.t_term
 
 val to_string : t -> string
 
+val has_dps : Settings.t_term -> bool
+
 val init : Settings.t_term -> int -> Yices.context -> Rules.t -> unit
 
 val assert_constraints : Settings.t_term -> int -> Yices.context -> Rules.t ->
