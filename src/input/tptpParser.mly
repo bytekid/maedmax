@@ -13,7 +13,7 @@ let syntax_error msg =
   let p = symbol_start_pos () in
   Format.eprintf "File %S at line %d, character %d:@.%s@." 
     p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol + 1) msg;
-  exit 1
+  failwith "Syntax error"
 
 let make_literal (e,eq) = if eq then L.make_axiom e else L.make_neg_axiom e
 

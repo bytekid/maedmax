@@ -60,5 +60,5 @@ let equation_or_inequality s =
   try
     TptpParser.equation_or_inequality TptpLexer.token lexbuf
   with Parsing.Parse_error ->
-    (syntax_error lexbuf.lex_curr_p; exit 1)
+    ((*syntax_error lexbuf.lex_curr_p;*) failwith "parse error")
 ;; 

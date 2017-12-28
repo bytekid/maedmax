@@ -295,11 +295,12 @@ let interactive_mode proof =
     Format.printf "%s\n%!" (if decision_proc l then "YES" else "NO")
   in
   let rec check _ =
-    Format.printf "Enter equation or 'exit' to stop:\n%!";
-    let s = read_line () in
-    if s = "exit" then
-      exit 0
-    else (check_eq s; check ())
+    try
+      Format.printf "Enter equation or 'exit' to stop:\n%!";
+      let s = read_line () in
+      if s = "exit" then exit 0
+      else (check_eq s; check ())
+    with _ -> check ()
   in check ()
 ;;
 
