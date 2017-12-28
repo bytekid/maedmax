@@ -47,10 +47,10 @@ let options = Arg.align
     " use AC-completion");*)
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
     " print problem characteristics");
-   (*("--aql", Arg.Unit (fun _ -> settings.strategy := S.strategy_aql;
+   ("--aql", Arg.Unit (fun _ -> (*settings.strategy := S.strategy_aql;
                                 settings.reduce_trss := false;
-                                settings.k := (fun _ -> 4)),
-    " use heuristics for AQL examples");*)
+                                settings.k := (fun _ -> 4)*) ()),
+    " use heuristics for AQL examples");
    ("--noauto", Arg.Clear settings.auto,
     " use heuristic settings (automatic mode)");
    ("--concon", Arg.Unit do_concon,
