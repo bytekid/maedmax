@@ -476,6 +476,10 @@ let c_red_size ctx ccr = A.take_time A.t_cred (c_red_size ctx ccr)
 
 let c_cpred ctx cc_vs =
   (* create indices, cc_vs is already symmetric *)
+  let cc_vs =
+    if not !(settings.large) then cc_vs
+    else  [(l,r),v | (l,r),v <- cc_vs; Term.size l >= Term.size r ]
+  in
   let rdc = new Rewriter.reducibility_checker cc_vs in
   rdc#init ();
   let ovl = new Overlapper.overlapper_with cc_vs in
@@ -791,7 +795,8 @@ let init_settings fs es gs =
  settings.signature := Rules.signature (es @ gs);
  settings.d := !(fs.d);
  A.iterations := 0;
- if List.length es > 50 then (
+ if List.length es >= 90 then (
+   settings.large := true;
    settings.strategy := Strategy.strategy_aql;
    settings.reduce_trss := false;
    settings.k := (fun _ -> 4);
