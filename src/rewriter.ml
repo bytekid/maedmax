@@ -167,8 +167,7 @@ method reducible_term t =
     in H.add red_table t rls; rls)
 ;;
 
-(* Finds rules that match at root (nonlinearity may cause false positives! -
-  but current use is heuristical) *)
+(* Finds rules that match at root *)
 method matches t =
   let rs = FingerprintIndex.get_matches t index in
   [ v | (l,r),v <- rs; Subst.is_instance_of t l ]
