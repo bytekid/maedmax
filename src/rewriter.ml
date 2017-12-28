@@ -156,21 +156,21 @@ method reducible_rule (l,r) =
 
 (* Returns rules that reduce the term [t]. *)
 method reducible_term t = 
-  (*try H.find red_table t with
-  Not_found -> *)(
+  try H.find red_table t with
+  Not_found -> (
     let rls =
     match t with
       | Term.V _ -> []
       | Term.F(_,ts) ->
         let root_matches = self#matches t in
         List.concat (root_matches :: [self#reducible_term ti | ti <- ts])
-    in (*H.add red_table t rls;*) rls)
+    in H.add red_table t rls; rls)
 ;;
 
 (* Finds rules that match at root (nonlinearity may cause false positives! -
   but current use is heuristical) *)
 method matches t =
   let rs = FingerprintIndex.get_matches t index in
-  [ v | (l,r),v <- rs (*; Subst.is_instance_of t l*) ]
+  [ v | (l,r),v <- rs; Subst.is_instance_of t l ]
 ;;
 end
