@@ -157,11 +157,14 @@ method reducible_rule (l,r) =
 (* Returns rules that reduce the term [t]. *)
 method reducible_term t = 
   try H.find red_table t with
-  Not_found -> match t with
-    | Term.V _ -> []
-    | Term.F(_,ts) ->
-      let root_matches = self#matches t in
-      List.concat (root_matches :: [self#reducible_term ti | ti <- ts])
+  Not_found -> (
+    let rls =
+    match t with
+      | Term.V _ -> []
+      | Term.F(_,ts) ->
+        let root_matches = self#matches t in
+        List.concat (root_matches :: [self#reducible_term ti | ti <- ts])
+    in H.add red_table t rls; rls)
 ;;
 
 (* Finds all rules that match at root. *)
