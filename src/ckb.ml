@@ -403,6 +403,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       if ee = [] then Some (SAT, Completion rr)
       else if ieqs = [] && List.for_all (fun e -> not(Rule.is_ground e)) ee then
         Some (SAT, GroundCompletion (rr, ee, order))
+      else if List.length ieqs = 1 && NS.is_empty gs then
+        Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order ieqs
       else None
     )
     else None)
