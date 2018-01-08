@@ -265,11 +265,31 @@ let select' ?(only_size=true) aarew k cc thresh =
 let axs _ = !(settings.axioms)
 
 let select_for_restart cc =
+  let big (l,r) = Pervasives.max (Term.size l) (Term.size r) > 65 in
+  let deep (l,r) = Pervasives.max (Term.depth l) (Term.depth r) > 10 in
+  let bigl l = big (Lit.terms l) in
+  let deepl l = deep (Lit.terms l) in
+  let is_big es = List.exists bigl es && List.exists deepl es in
+  let fats es = [List.find bigl es; List.find deepl es] in
+  let drule n =
+    let l,r = Lit.terms n in
+    Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
+  in
+  let dup es = List.exists drule (es @ [Lit.flip e | e <- es ]) in
+  let fdup es = List.find drule (es @ [Lit.flip e | e <- es ]) in
   let k = !(A.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
-  let ths = Listset.diff (A.theory_equations (NS.to_list cc)) (axs ()) in
-  let ths' = if shape_changed cc then ths else [] in
+  let ccl = NS.to_list cc in
+  let ths = Listset.diff (A.theory_equations ccl) (axs ()) in
+  let ths' =
+    if not (shape_changed cc) then []
+    (* piombo *)
+    else if not (is_big (axs ())) && is_big ccl then (fats ccl) @ ths
+    else ths
+  in
   fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
+
+  ;;
 
 let select rew cc =
   let thresh = !(settings.size_bound_equations) in
@@ -648,7 +668,8 @@ let log_max_trs j rr rr' c =
       let shape = A.problem_shape (to_eqs es) in
       if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape then (
         if debug () then
-          Format.printf "restart (new shape detected)\n%!";
+          Format.printf "restart (from %s new shape %s detected)\n%!"
+          (Settings.shape_to_string !(A.shape)) (Settings.shape_to_string shape);
         true)
     else
      (* no progress measure *)
