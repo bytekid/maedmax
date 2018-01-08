@@ -1,7 +1,9 @@
 module O = Overlap
 module T = Trace
 
-type t = { terms: Rule.t; is_goal: bool; is_equality: bool }
+open Settings
+
+type t = Settings.literal
 
 let make ts e g = {terms = ts; is_goal = g; is_equality = e }
 

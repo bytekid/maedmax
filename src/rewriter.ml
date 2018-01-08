@@ -141,11 +141,13 @@ class reducibility_checker (eqs : (Rule.t * Yicesx.t) list) = object (self)
 
 val red_table : (Term.t, Yicesx.t list) H.t = H.create 256
 val mutable index = FingerprintIndex.empty
+val mutable checker = None
 
-method init () =
+method init (rdc : reducibility_checker option) =
   let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
   let idx = [ l, ((l,r),v) | (l,r),v <- eqs; is_rule (l,r) ] in
-  index <- FingerprintIndex.create idx
+  index <- FingerprintIndex.create idx;
+  checker <- rdc
 
 method reducible_rule (l,r) =
   let t = Unix.gettimeofday () in
@@ -159,12 +161,15 @@ method reducible_term t =
   try H.find red_table t with
   Not_found -> (
     let rls =
-    match t with
-      | Term.V _ -> []
-      | Term.F(_,ts) ->
-        let root_matches = self#matches t in
-        List.concat (root_matches :: [self#reducible_term ti | ti <- ts])
-    in H.add red_table t rls; rls)
+      let rls1 = match checker with Some c -> c#reducible_term t | _ -> [] in
+      let rls2 = match t with
+        | Term.V _ -> []
+        | Term.F(_,ts) ->
+          let root_matches = self#matches t in
+          List.concat (root_matches :: [self#reducible_term ti | ti <- ts])
+      in rls2 @ rls1
+    in
+    H.add red_table t rls; rls)
 ;;
 
 (* Finds rules that match at root *)

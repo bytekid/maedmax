@@ -261,7 +261,8 @@ let select' ?(only_size=true) aarew k cc thresh =
  (aa,pp)
 ;;
 
-let axs _ = [ Lit.make_axiom e | e <- !(settings.es) ]
+(* there might be inequalities *)
+let axs _ = !(settings.axioms)
 
 let select_for_restart cc =
   let k = !(A.restarts) * 2 in
@@ -347,7 +348,7 @@ let saturated ctx (rr,ee) rewriter cc =
   let d = !(settings.d) in
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
-  let eqs = [(*normalize*) (Lit.terms n) | n <- NS.to_list cc; Lit.is_equality n] in
+  let eqs = [ Lit.terms n | n <- NS.to_list cc; Lit.is_equality n ] in
   let eqs' = Listset.diff eqs rr in (* heuristic ... *)
   Ground.all_joinable ctx str sys eqs' xsig d
 ;;
@@ -365,7 +366,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   if debug () then
     Format.printf "start success check\nRR:\n%a\nCC:\n%a\n%!"
       Rules.print [ Lit.terms r | r <- rr] NS.print cc;
-  let rr,ee = [ Lit.terms r | r <- rr],[ Lit.terms e | e <- NS.to_list ee] in
+  let rr = [ Lit.terms r | r <- rr] in
+  let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let ok g = let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v in
@@ -391,7 +393,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
     let order = match sat with None -> rewriter#order | Some o -> o in
     let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
     let orientable (s,t) = order#gt s t || order#gt t s in
-    if L.exists joinable ieqs then (* joinable inwquality axiom *)
+    if L.exists joinable ieqs then (* joinable inequality axiom *)
       Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
     (* if an equation is orientable, wait one iteration ... *)
     else if sat <> None && not goals_ground &&
@@ -464,7 +466,7 @@ let c_red ctx = A.take_time A.t_cred (c_red ctx)
 let c_red_size ctx ccr cc_vs =
   let ccsym' = [ (l,r),v | (l,r),v <- cc_vs; Term.size l >= Term.size r ] in
   let rdc = new Rewriter.reducibility_checker ccsym' in
-  rdc#init ();
+  rdc#init None;
   let require_red st =
     let r = big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
     require r
@@ -474,10 +476,17 @@ let c_red_size ctx ccr cc_vs =
 
 let c_red_size ctx ccr = A.take_time A.t_cred (c_red_size ctx ccr)
 
+(* globals to create CPred constraints faster *)
+let new_nodes = ref [];;
+let reducibility_checker = ref (new Rewriter.reducibility_checker []);;
+
 let c_cpred ctx cc_vs =
   (* create indices, cc_vs is already symmetric *)
-  let rdc = new Rewriter.reducibility_checker cc_vs in
-  rdc#init ();
+  let rls = [ Lit.terms n | n <- !new_nodes; Lit.is_equality n ] in
+  let nn_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
+  let rdc = new Rewriter.reducibility_checker nn_vs in
+  rdc#init (Some !reducibility_checker);
+
   let ovl = new Overlapper.overlapper_with cc_vs in
   ovl#init ();
   (* create constraints *)
@@ -487,6 +496,7 @@ let c_cpred ctx cc_vs =
   in
   let cs = List.concat [c2 rlv | rlv <- cc_vs] in
   L.iter (fun c -> ignore (assert_weighted c 1)) cs;
+  reducibility_checker := rdc;
 ;;
 
 let c_cpred ctx = A.take_time A.t_ccpred (c_cpred ctx)
@@ -525,7 +535,7 @@ let c_comp ctx ns =
    require (C.find_eq st <=>> (big_or1 [rule_var st; rule_var (t,s); red st]));
  in
  (* initial equations have to be considered *)
- require (all_eqs !(settings.es));
+ require (all_eqs [Lit.terms l | l <- !(settings.axioms); Lit.is_equality l]);
  L.iter considered [ l,r | l,r <- ns; not (l=r) ];
 ;;
 
@@ -554,7 +564,8 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
 (* find k maximal TRSs *)
 let max_k ctx cc gs =
   let k = !(settings.k) !(A.iterations) in
-  let cc_symm = NS.to_list (NS.symmetric cc) in 
+  let cc_eq = [ Lit.terms n | n <- NS.to_list cc; Lit.is_equality n ] in
+  let cc_symm = [n | n <- NS.to_list (NS.symmetric cc); Lit.is_equality n] in 
   let cc_symml = [Lit.terms c | c <- cc_symm] in
   L.iter (fun n -> ignore (C.store_rule_var ctx n)) cc_symml;
   (* lookup is not for free: get these variables only once *)
@@ -563,7 +574,7 @@ let max_k ctx cc gs =
   if debug () then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
   let no_dps = not (dps_used ()) in
-  let rec max_k acc ctx cc n =
+  let rec max_k acc ctx n =
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
     else (
       let sat_call = if use_maxsat () then max_sat else check in
@@ -587,7 +598,7 @@ let max_k ctx cc gs =
           let ord n = let l,r = Lit.terms n in order#gt l r && not (order#gt r l) in
           assert (L.for_all ord (List.map fst rr)));
         require (!! (big_and ctx [ v | _,v <- rr ]));
-        max_k ((List.map fst rr, c, order) :: acc) ctx cc (n-1))
+        max_k ((List.map fst rr, c, order) :: acc) ctx (n-1))
      else (
        if debug () then F.printf "no further TRS found\n%!"; 
        if (n = k && L.length !(settings.strategy) > 1) then
@@ -601,9 +612,9 @@ let max_k ctx cc gs =
    A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx) cc_symml;
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
-   search_constraints ctx ([ Lit.terms n | n <- NS.to_list cc ], cc_symml_vars) gs;
+   search_constraints ctx (cc_eq, cc_symml_vars) gs;
    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
-   let trss = max_k [] ctx cc k in
+   let trss = max_k [] ctx k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
 ;;
@@ -751,7 +762,7 @@ let rec phi ctx aa gs =
     if check_subsumption 2 && nth_iteration 3 then NS.subsumption_free aa
     else aa
   in
-  let process (j, aa, gs) (rr, c, order) =
+  let process (j, aa, gs, aa_new) (rr, c, order) =
     let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in (* interreduce *)
     let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
     rew#init ();
@@ -772,26 +783,29 @@ let rec phi ctx aa gs =
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
     match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) ieqs gs with
        Some r -> raise (Success r)
-     | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs)
+     | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs, sel @ aa_new)
   in
   try
     let rrs = max_k ctx aa gs in
     let s = Unix.gettimeofday () in
-    let _, aa', gs' = L.fold_left process (0, aa, gs) rrs in
+    let _, aa', gs', aa_new = L.fold_left process (0, aa, gs,[]) rrs in
+    new_nodes := aa_new;
     A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. s);
     phi ctx aa' gs'
   with Success r -> r
 ;;
 
-let init_settings fs es gs =
- let acs = Ac.symbols es in
+let init_settings fs axs gs =
+ settings.axioms := axs;
+ let axs = [ Lit.terms a | a <- axs ] in
+ let acs = Ac.symbols axs in
  settings.ac_syms := acs;
- let cs = Commutativity.symbols es in
+ let cs = Commutativity.symbols axs in
  settings.only_c_syms := Listset.diff cs acs;
- settings.signature := Rules.signature (es @ gs);
+ settings.signature := Rules.signature (axs @ gs);
  settings.d := !(fs.d);
  A.iterations := 0;
- if List.length es >= 90 then (
+ if List.length axs >= 90 then (
    settings.large := true;
    settings.strategy := Strategy.strategy_aql;
    settings.reduce_trss := false;
@@ -802,19 +816,17 @@ let init_settings fs es gs =
    settings.strategy := !(fs.strategy);
    settings.auto := !(fs.auto);
    settings.tmp := !(fs.tmp);
-   if !(fs.auto) then detect_shape es);
- settings.es := es;
+   if !(fs.auto) then detect_shape axs);
  settings.gs := gs;
  start_time := Unix.gettimeofday ();
  last_time := Unix.gettimeofday ();
  last_mem := A.memory ();
  Settings.is_ordered := !(settings.unfailing);
  if !(Settings.do_proof) then
-   Trace.add_initials es;
+   Trace.add_initials axs;
  if debug () then
    F.printf "AC syms: %s \n%!"
-     (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) ""
-     (Ac.symbols es));
+     (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) "" acs);
  if !(settings.reduce_AC_equations_for_CPs) then (
    let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
    acx_rules := [ Lit.flip r | r <- acxs ] @ acxs);
@@ -842,11 +854,12 @@ let rec ckb fs (es, gs) =
  let gs0 = L.map Lit.normalize gs in
  all_nodes := es0;
  try
-  init_settings fs [ Lit.terms e | e <- es0] [ Lit.terms g | g <- gs0 ];
+  init_settings fs es0 [ Lit.terms g | g <- gs0 ];
   let cas = [ Ac.cassociativity f | f <- !(settings.ac_syms)] in
   let es0 = [ Lit.make_axiom (Variant.normalize_rule rl) | rl <- cas ] @ es0 in
   let ctx = mk_context () in
   let ns0 = NS.of_list es0 in
+  new_nodes := es0;
   let ss = Listx.unique (t_strategies ()) in
   L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms n | n <- gs0@es0 ]) ss;
   (if !(settings.keep_orientation) then

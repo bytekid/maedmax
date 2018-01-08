@@ -21,13 +21,16 @@ type termination_strategy = t_setting list
 type shape = NoShape | Boro | Carbonio | Elio | Silicio | Ossigeno | Piombo |
              Xeno | Zolfo
 
+
+type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
+
 type t = {
  auto     : bool ref; (* automatic mode *)
  ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  only_c_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
  signature: (Signature.sym * int) list ref;
  d        : int ref ; (* debug mode *)
- es       : Rules.t ref ;
+ axioms   : literal list ref ;
  json     : bool ref; (* output json result and statistics *)
  gs       : Rules.t ref ;
  k        : (int -> int) ref;  (* k TRSs are chosen in an iteration *)
@@ -74,7 +77,7 @@ let default = {
  only_c_syms   = ref [];
  signature = ref [];
  d         = ref 0;
- es        = ref [] ;
+ axioms    = ref [] ;
  json      = ref false;
  gs        = ref [] ;
  k         = ref k_default;
