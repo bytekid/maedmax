@@ -110,7 +110,7 @@ let mk_problem st i = {
 let contradictory_constraints sys ctx p =
   let cs = order_to_conditions (p.var_order) in
   let cs_rem st = Listx.remove st cs in
-  let contradict (s,t) = S.cond_gt sys.strategy 1 ctx (cs_rem (s,t)) t s in
+  let contradict (s,t) = S.cond_gt sys.strategy 0 ctx (cs_rem (s,t)) t s in
   check (Yicesx.big_or ctx [ contradict c | c <- cs ])
 ;;
 
@@ -182,7 +182,7 @@ let ordered_ac_step sys ctx conds (l,r) (u,c0) =
     else if no_order_check conds x' y' then u, c0 (* false/no step *)
     else ( 
     (*if !debug then Format.printf "   SAT check %a %!" Rule.print (x', y');*)
-    let c = Strategy.cond_gt sys.strategy 1 ctx conds x' y' in
+    let c = Strategy.cond_gt sys.strategy 0 ctx conds x' y' in
     let c' = yices_answer ctx c0 <&> c in
     if check_constraints sys.strategy sys.trs c' <> None then (
       (*if !debug then Format.printf "yes \n%!";*)

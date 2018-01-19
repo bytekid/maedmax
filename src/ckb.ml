@@ -271,12 +271,12 @@ let select_for_restart cc =
   let deepl l = deep (Lit.terms l) in
   let is_big es = List.exists bigl es && List.exists deepl es in
   let fats es = [List.find bigl es; List.find deepl es] in
-  let drule n =
+  (*let drule n =
     let l,r = Lit.terms n in
     Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
   in
   let dup es = List.exists drule (es @ [Lit.flip e | e <- es ]) in
-  let fdup es = List.find drule (es @ [Lit.flip e | e <- es ]) in
+  let fdup es = List.find drule (es @ [Lit.flip e | e <- es ]) in*)
   let k = !(A.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
   let ccl = NS.to_list cc in
@@ -616,6 +616,8 @@ let max_k ctx cc gs =
           if !(settings.unfailing) then Strategy.decode 0 m s
           else Order.default
         in
+        if !S.generate_order then
+          order#print_params ();
         if !(settings.unfailing) && !Settings.do_assertions then (
           let ord n = let l,r = Lit.terms n in order#gt l r && not (order#gt r l) in
           assert (L.for_all ord (List.map fst rr)));
@@ -656,6 +658,14 @@ let log_max_trs j rr rr' c =
    Rules.print (Variant.rename_rules rr')
 ;;
 
+
+
+let limit_reached t =
+  match strategy_limit () with
+    | IterationLimit i when !(A.iterations) > i -> true
+    | TimeLimit l when t > l -> true
+    | _ -> false
+;;
 (* towards main control loop *)
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
@@ -680,20 +690,15 @@ let log_max_trs j rr rr' c =
      if rep && debug () then F.printf "restart (repeated iteration state)\n%!";
      (* iteration/size bound*)
      let running_time = (Unix.gettimeofday () -. !(start_time)) in
-     let limit =
-       match strategy_limit () with
-         | IterationLimit i when !(A.iterations) > i -> true
-         | TimeLimit l when running_time > l -> true
-         | _ -> false
-     in
      (* estimate exponential blowup *)
      let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
      let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
      let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
      let blowup = !(A.iterations) > 6 && is_exp eqcounts in
      if blowup && debug () then F.printf "restart (blowup)\n%!";
-     if limit && debug () then F.printf "restart (limit reached)\n";
-     rep || limit || blowup
+     if limit_reached running_time && debug () then
+       F.printf "restart (limit reached)\n";
+     rep || limit_reached running_time || blowup
    ;;
 
 
@@ -778,6 +783,14 @@ let equations_for_overlaps irr all =
     NS.to_list (eqs_for_overlaps irr')
 ;;
 
+let check_order_generation success order =
+  let running_time = (Unix.gettimeofday () -. !(start_time)) in
+  if !S.generate_order &&
+      (success || limit_reached running_time || running_time > 30.) then (
+    order#print_params ();
+    exit 0)
+;;
+
 let rec phi ctx aa gs =
   if do_restart aa gs then raise (Restart (select_for_restart aa));
   set_iteration_stats aa gs;
@@ -788,6 +801,7 @@ let rec phi ctx aa gs =
   let process (j, aa, gs, aa_new) (rr, c, order) =
     let rr_red = C.redtrs_of_index (store_trs ctx j rr c) in (* interreduce *)
     let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
+    check_order_generation false order;
     rew#init ();
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     let gs = NS.add_all (reduced rew gs) gs in (* rewrite goals wrt new TRS *)
@@ -805,7 +819,10 @@ let rec phi ctx aa gs =
     store_remaining_nodes ctx rest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
     match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) ieqs gs with
-       Some r -> raise (Success r)
+       Some r ->
+       if !S.generate_order then
+         (check_order_generation true order; failwith "order generated")
+       else raise (Success r)
      | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs, sel @ aa_new)
   in
   try
@@ -839,7 +856,7 @@ let init_settings fs axs gs =
    settings.strategy := !(fs.strategy);
    settings.auto := !(fs.auto);
    settings.tmp := !(fs.tmp);
-   if !(fs.auto) then detect_shape axs);
+   if !(fs.auto)  then detect_shape axs);
  settings.gs := gs;
  start_time := Unix.gettimeofday ();
  last_time := Unix.gettimeofday ();

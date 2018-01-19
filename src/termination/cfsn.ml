@@ -86,7 +86,8 @@ let decode k m =
     method bot = bot;;
     method gt = gt;;
     method print = fun _ -> print ws;;
-    method to_xml = Xml.Element("cfs", [], [])
+    method to_xml = Xml.Element("cfs", [], []);;
+    method print_params = Order.default#print_params;;
   end
 ;;
 

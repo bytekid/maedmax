@@ -106,7 +106,7 @@ let do_proof = ref false
 let do_proof_debug = ref false
 let is_ordered = ref false
 let interactive = ref false
-
+let generate_order = ref false
 let inst_depth : int ref = ref 2
 
 let shape_to_string = function

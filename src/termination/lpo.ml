@@ -295,6 +295,17 @@ let decode_xml prec =
   Xml.Element("pathOrder", [], [ w0; pw ] )
 ;;
 
+let print_params = function
+    [] -> ()
+  | ((f,_),p) :: fp ->
+    Format.printf "-t LPO ";
+    if fp <> [] then (
+      Format.printf "--precedence=\"%s" (name f);
+      List.iter (fun ((f,_),_) -> Format.printf "<%s" (name f)) fp;
+      Format.printf "\"\n%!"
+      )
+  ;;
+
 let decode k m =
   let gt = decode_term_gt k m in
   let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
@@ -308,6 +319,7 @@ let decode k m =
     method gt = gt;;
     method print = fun _ -> print_prec prec;;
     method to_xml = decode_xml prec
+    method print_params = fun _ -> print_params prec;;
   end
 ;;
 

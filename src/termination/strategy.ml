@@ -75,6 +75,8 @@ let strategy_aql = [ts_cfsn, [RedSize],[Oriented; CPsRed], max;
                     ts_cfsn, [],[Oriented; CPsRed], max]
 let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max]
 
+let strategy_order_generation = [ (ts_lpokbo, [], [MaxRed], IterationLimit 5);]
+
 let strategy_auto = [
  (ts_lpo, [Red; Comp], [CPsRed], max);
  (ts_dpn, [Red; Comp], [CPsRed], max);
@@ -159,6 +161,11 @@ let has_dps = function
    | _ -> false
 ;;
 
+let get_choice_var j =
+  try Hashtbl.find choice_vars j
+  with _ -> failwith "Strategy.get_choice_var: Not_found"
+;;
+
 (* Asserts initial constraints for stage j and all s -> t in rs, applying a
    case distinction on the strategy s *)
 let init s j ctx rs =
@@ -241,7 +248,7 @@ let order_choice_constraints ctx j rs (o1, o2) =
  let constr lr =
   try Hashtbl.find constraints (lr,j) with Not_found -> (
    let j' = j+1 in
-   let choice = try Hashtbl.find choice_vars j with _ -> failwith "no choice var" in
+   let choice = get_choice_var j in
    let c' = (choice <&> (gt j' lr o1)) <|> (!!choice <&> (gt j' lr o2)) in
    let c = (s ctx j lr) <=>> c' in
    Hashtbl.add constraints (lr,j) c; c)
@@ -455,7 +462,7 @@ Format.printf "Problem:\n"; Cache.decode_print m 0;
  match s with
     Orders (Seq os) -> List.iter dec_ord (index ~i:(j+1) os)
   | Orders (Choice (o1,o2)) ->
-    let choice = try Hashtbl.find choice_vars j with _ -> failwith "no choice var" in
+    let choice = get_choice_var j in
     if eval m choice then dec_ord (j+1,o1)
     else dec_ord (j+1,o2)
   | Dp (Seq os) ->
@@ -489,8 +496,7 @@ let decode j m s =
  match s with
     Orders (Seq (o :: _)) -> dec_ord (j+1) o
   | Orders (Choice (o1,o2)) ->
-    if eval m (Hashtbl.find choice_vars j) then dec_ord (j+1) o1
-    else dec_ord (j+1) o2
+    if eval m (get_choice_var j) then dec_ord (j+1) o1 else dec_ord (j+1) o2
   | _ -> failwith "Strategy.decod: not implemented"
 ;;
 
@@ -508,7 +514,8 @@ let cond_gt o j c cs s t =
   match o with
     | Orders(Seq(o :: _)) -> ocgt o j c cs s t
     | Orders (Choice (o1,o2)) ->
-      let choice = Hashtbl.find choice_vars j in
-      (choice <&> (ocgt o1 j c cs s t)) <|> (!!choice <&> (ocgt o2 j c cs s t))
+      let choice = get_choice_var j in
+      (choice <&> (ocgt o1 (j+1) c cs s t)) <|>
+      (!!choice <&> (ocgt o2 (j+1) c cs s t))
     | _ -> failwith "Strategy.cond_gt: not implemented"
 ;;

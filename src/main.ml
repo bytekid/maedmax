@@ -109,6 +109,11 @@ let options = Arg.align
     "<n> every <n> iterations, orient as many equations as possible");
    ("--full-CPs-with-axioms", Arg.Set settings.full_CPs_with_axioms,
     " compute CPs with axioms in both directions");
+    ("--generate-order", Arg.Unit (fun _ ->
+      Settings.generate_order := true;
+      settings.auto := false;
+      settings.strategy := S.strategy_order_generation),
+     " order generation mode");
    ("--reduceAC-CPs", Arg.Set settings.reduce_AC_equations_for_CPs,
     " do not use ACx equations for CPs");
    ("--sizeage", Arg.Int (fun n -> settings.size_age_ratio := n), 

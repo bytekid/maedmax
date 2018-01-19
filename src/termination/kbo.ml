@@ -182,6 +182,23 @@ let print = function
     Format.printf "\n%!"
 ;;
 
+
+
+let print_params = function
+    [] -> ()
+  | ((f,_),p,w) :: fpw ->
+    Format.printf "-t KBO6 ";
+    let name = Signature.get_fun_name in
+    if fpw <> [] then (
+      Format.printf "--precedence=\"%s" (name f);
+      List.iter (fun ((f,_),i,_) -> Format.printf "<%s" (name f)) fpw;
+      Format.printf "\" %!"
+      );
+    Format.printf "--order-weights=\"%s:%d" (name f) w;
+    List.iter (fun ((f,_),_,w) -> Format.printf ",%s:%d" (name f) w) fpw;
+    Format.printf "\"\n%!"
+;;
+
 let decode_print k m = print (eval k m)
 
 let decode_xml fpws =
@@ -209,6 +226,7 @@ let decode k m =
     method bot = bot;;
     method gt = gt;;
     method print = fun _ -> print fpw;;
-    method to_xml = decode_xml fpw
+    method to_xml = decode_xml fpw;;
+    method print_params = fun _ -> print_params fpw;;
   end
 ;;
