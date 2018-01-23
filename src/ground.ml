@@ -72,7 +72,7 @@ let get_model_decode c strategy =
   let a =
     if Yicesx.check ctx then
       let m = Yicesx.get_model ctx in
-      Some (Strategy.decode 0 m strategy)
+      Some (S.decode 0 m strategy)
     else None
   in
   Yicesx.pop ctx;
@@ -182,7 +182,7 @@ let ordered_ac_step sys ctx conds (l,r) (u,c0) =
     else if no_order_check conds x' y' then u, c0 (* false/no step *)
     else ( 
     (*if !debug then Format.printf "   SAT check %a %!" Rule.print (x', y');*)
-    let c = Strategy.cond_gt sys.strategy 0 ctx conds x' y' in
+    let c = S.cond_gt sys.strategy 0 ctx conds x' y' in
     let c' = yices_answer ctx c0 <&> c in
     if check_constraints sys.strategy sys.trs c' <> None then (
       (*if !debug then Format.printf "yes \n%!";*)

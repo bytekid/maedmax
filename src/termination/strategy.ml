@@ -512,7 +512,7 @@ let cond_gt o j c cs s t =
     | _ -> failwith "Strategy.cond_gt: not implemented"
   in
   match o with
-    | Orders(Seq(o :: _)) -> ocgt o j c cs s t
+    | Orders(Seq(o :: _)) -> ocgt o (j+1) c cs s t
     | Orders (Choice (o1,o2)) ->
       let choice = get_choice_var j in
       (choice <&> (ocgt o1 (j+1) c cs s t)) <|>
