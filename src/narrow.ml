@@ -17,24 +17,50 @@ let pstr = function
   | p -> L.fold_left (fun s i -> s ^ (string_of_int i)) "" p
 ;;
 
-let narrow_forward_at_with ((s,t),(ps,pt)) p (l,r) =
+let rec nf rr (s,ps) =
+  let nf_at_with p (t,pt) (l,r) =
+    try
+      let u = Rewriting.step_at_with t p (l,r) in
+      let pt' = L.filter (fun q -> not (Listx.is_prefix p q)) pt in
+      let pu = Listx.unique (pt' @ [ p @ q | q <- T.function_positions r ]) in
+      (u,pu)
+    with _ -> (t,pt)
+  in
+  let nf_at t_pt p = List.fold_left (nf_at_with p) t_pt rr in
+  let s_ps' = List.fold_left nf_at (s,ps) (T.function_positions s) in
+  if s_ps' = (s,ps) then (s,ps) else nf rr s_ps'
+;;
+
+let nf2 rr ((s,t),(ps,pt)) =
+  let s',ps' = nf rr (s,ps) in
+  let t',pt' = nf rr (t,pt) in
+  ((s',t'),(ps',pt'))
+;;
+
+(* basic narrowing *)
+let narrow_forward_at_with rr ((s,t),(ps,pt)) p (l,r) =
   let s_p = T.subterm_at p s in
   try
     let subst = T.substitute (Subst.mgu s_p l) in
-    (*if debug () then
-      Format.printf "forward narrow %a with %a at %s\n%!" T.print s
-        R.print (l,r) (pstr p);*)
     let s' = T.replace (subst s) (subst r) p in
     let ps' = L.filter (fun q -> not (Listx.is_prefix p q)) ps in
     let ps' = Listx.unique (ps' @ [ p @ q | q <- T.function_positions r ]) in
     let st', keep_dir = Variant.normalize_rule_dir (s',subst t) in
     let pst = if keep_dir then (ps',pt) else (pt,ps') in
-    [(st', pst)]
+    if debug () then
+      Format.printf "forward narrow (%a,%a) with %a at %s to (%a,%a)\n%!"
+        T.print s T.print t
+        R.print (l,r) (pstr p)
+        T.print (fst st') T.print (snd st');
+    let uv,ps_uv = nf2 rr (st',pst) in
+    if debug () then
+      Format.printf "rewrite to (%a,%a)\n%!" T.print (fst uv) T.print (snd uv);
+    [(uv,ps_uv)]
   with _ -> []
 ;;
 
 let narrow_at rr st p =
-  L.concat (L.map (fun rl -> narrow_forward_at_with st p (R.rename rl)) rr)
+  L.concat (L.map (fun rl -> narrow_forward_at_with rr st p (R.rename rl)) rr)
 ;;
 
 let merge ((s,t),(ps,pt)) ((s',t'),(ps',pt')) =
