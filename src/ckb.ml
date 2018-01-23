@@ -45,6 +45,7 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
 
 (* maintain list of created nodes to speed up selection by age *)
 let all_nodes = ref []
+let all_goals = ref []
 
 let acx_rules = ref []
 
@@ -108,6 +109,11 @@ let store_remaining_nodes ctx ns =
     all_nodes := L.rev_append (L.rev !all_nodes) (NS.sort_size ns)
 ;;
 
+let store_remaining_goals ctx ns =
+    let ns = NS.smaller_than !(settings.size_bound_equations) ns in
+    all_goals := L.rev_append (L.rev !all_goals) (NS.sort_size ns)
+;;
+
 let rec get_oldest_node (aa,rew) =
   match !all_nodes with
      [] -> None
@@ -116,6 +122,17 @@ let rec get_oldest_node (aa,rew) =
      let s,t = Lit.terms n in
      if fst (rew#nf s) = fst (rew#nf t) || NS.mem aa n then
        get_oldest_node (aa,rew)
+     else Some n
+;;
+
+let rec get_oldest_goal (gg,rew) =
+  match !all_goals with
+     [] -> None
+   | n :: ns ->
+     all_goals := ns;
+     let s,t = Lit.terms n in
+     if fst (rew#nf s) = fst (rew#nf t) || NS.mem gg n then
+       get_oldest_goal (gg,rew)
      else Some n
 ;;
 
@@ -296,18 +313,19 @@ let select rew cc =
   A.take_time A.t_select (select' ~only_size:false rew 0 cc) thresh
 ;;
 
-let select_goals' k gg thresh =
+let select_goals' grew k gg thresh =
  let acs = !(settings.ac_syms) in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
- let gg_a = fst (Listx.split_at_most k sorted) in
+ let g_old = match get_oldest_goal grew with Some g -> [g] | _ -> [] in
+ let gg_a =  g_old @ (fst (Listx.split_at_most k sorted)) in
  let gg_p = NS.diff_list gg gg_a in 
  if debug () then log_select gg gg_a;
  (gg_a, gg_p)
 ;;
 
-let select_goals k cc =
-  A.take_time A.t_select (select_goals' k cc) !(settings.size_bound_goals)
+let select_goals grew k cc =
+  A.take_time A.t_select (select_goals' grew k cc) !(settings.size_bound_goals)
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -815,8 +833,9 @@ let rec phi ctx aa gs =
     let sel, rest = select (aa,rew) nn in
     let gos = overlaps_on rew rr aa_for_ols ovl gs in
     let gcps = reduced rew gos in (* goal CPs *)
-    let gg = fst (select_goals 2 (NS.diff gcps gs)) in
+    let gg, grest = select_goals (gs,rew) 2 (NS.diff gcps gs) in
     store_remaining_nodes ctx rest;
+    store_remaining_goals ctx grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
     match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) ieqs gs with
        Some r ->
