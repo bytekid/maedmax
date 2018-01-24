@@ -325,7 +325,7 @@ let select_goals' grew k gg thresh =
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let g_old =
-  if (A.memory () - !last_mem > 10) then []
+  if true || (A.memory () - !last_mem > 10) then []
   else match get_oldest_goal grew with Some g -> [g] | _ -> []
  in
  let gg_a =  g_old @ (fst (Listx.split_at_most k sorted)) in
