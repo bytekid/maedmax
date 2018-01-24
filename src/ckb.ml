@@ -308,6 +308,13 @@ let select_for_restart cc =
 
   ;;
 
+  let select_for_restart cc =
+    let k = !(A.restarts) * 2 in
+    let rew = new Rewriter.rewriter [] [] Order.default in
+    let ths = Listset.diff (A.theory_equations (NS.to_list cc)) (axs ()) in
+    let ths' = if shape_changed cc then ths else [] in
+  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
+
 let select rew cc =
   let thresh = !(settings.size_bound_equations) in
   A.take_time A.t_select (select' ~only_size:false rew 0 cc) thresh
