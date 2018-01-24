@@ -54,7 +54,7 @@ let acx_rules = ref []
 let termination_strategy _ = 
  match !(settings.strategy) with 
   | [] -> failwith "no termination strategy found"
-  | (s,_, _,_) :: _ -> s
+  | (s,_, _,_,_) :: _ -> s
 ;;
 
 let dps_used _ = Strategy.has_dps (termination_strategy ())
@@ -62,19 +62,25 @@ let dps_used _ = Strategy.has_dps (termination_strategy ())
 let constraints _ = 
  match !(settings.strategy) with 
   | [] -> failwith "no constraints found"
-  | (_,cs,_,_) :: _ -> cs
+  | (_,cs,_,_,_) :: _ -> cs
 ;;
 
 let max_constraints _ =
  match !(settings.strategy) with
   | [] -> failwith "no max constraints found"
-  | (_,_,ms,_) :: _ -> ms
+  | (_,_,ms,_,_) :: _ -> ms
 ;;
 
 let strategy_limit _ = 
  match !(settings.strategy) with 
   | [] -> failwith "empty strategy list"
-  | (_, _, _, i) :: _ -> i
+  | (_, _, _, i,_) :: _ -> i
+;;
+
+let selection_mode _ = 
+ match !(settings.strategy) with 
+  | [] -> failwith "empty strategy list"
+  | (_, _, _, _, s) :: _ -> s
 ;;
 
 let use_maxsat _ = max_constraints () <> []
@@ -95,7 +101,7 @@ let pop_strategy _ =
   | _ :: ss -> settings.strategy := ss
 ;;
 
-let t_strategies _ = L.map (fun (ts,_,_,_) -> ts) !(settings.strategy)
+let t_strategies _ = L.map (fun (ts,_,_,_,_) -> ts) !(settings.strategy)
 
 let normalize = Variant.normalize_rule
 
@@ -325,7 +331,7 @@ let select_goals' grew k gg thresh =
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let g_old =
-  if (A.memory () - !last_mem > 10) then []
+  if true || (A.memory () - !last_mem > 10) then []
   else match get_oldest_goal grew with Some g -> [g] | _ -> []
  in
  let gg_a =  g_old @ (fst (Listx.split_at_most k sorted)) in

@@ -9,12 +9,15 @@ type t_term =
  | Dp of orders (* dependency pairs followed by orders *)
  | Dg of orders (* dependency graph without SCCs *)
  | DgScc of (int * orders) (* dependency graph with k SCCs *)
+ 
+ type selection = Size | SizeAge of int
 
 type t_constraint = Empty | Red | Comp | RedSize
 type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
                         GoalRed | MinCPs
 type limit = IterationLimit of int | TimeLimit of float
-type t_setting = t_term * (t_constraint list) * (t_max_constraint list) * limit
+type t_setting =
+  t_term * (t_constraint list) * (t_max_constraint list) * limit * selection
 type termination_strategy = t_setting list
 
 (* heuristically detected problem shape *)

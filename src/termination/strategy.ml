@@ -43,50 +43,51 @@ let ts_mpol = Orders (Seq [MPol])
 
 (* overall strategies *)
 let max = IterationLimit 10000
-let strategy_maxcomp = [ts_dpn, [],[Oriented], max]
-let strategy_maxcomp_lpo = [ts_lpo, [],[Oriented], max]
-let strategy_maxcomp_kbo = [ts_kbo, [],[Oriented], max]
+let strategy_maxcomp = [ts_dpn, [],[Oriented], max, Size]
+let strategy_maxcomp_lpo = [ts_lpo, [],[Oriented], max, Size]
+let strategy_maxcomp_kbo = [ts_kbo, [],[Oriented], max, Size]
 
-let strategy_red = [ts_dpn, [Red],[], max]
-let strategy_lpo = [ts_lpo, [Red; Comp],[CPsRed], max]
-let strategy_kbo = [ts_kbo, [Red; Comp],[CPsRed], max]
-let strategy_mpol = [ts_mpol, [Red; Comp],[CPsRed], max]
-let strategy_comp = [ts_dpn, [Red; Comp], [], max]
-let strategy_cpred = [ts_dpn, [Red], [CPsRed], max]
-let strategy_dp = [ts_dpn, [Red; Comp], [CPsRed], max]
-let strategy_dg = [ts_dg, [Red; Comp], [CPsRed], max]
-let strategy_dgk = [ts_dgk, [Red; Comp], [CPsRed], max]
-let strategy_not_oriented = [ ts_dpn, [Red; Comp], [NotOriented], max]
-let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed], max);
-                    (ts_dp, [Comp], [MaxRed], max)]
-let strategy_ordered = [ (ts_kbo, [], [MaxRed], IterationLimit 8);
-                         (ts_lpo, [], [MaxRed], IterationLimit 12);
-                         (ts_kbo, [], [MaxRed], IterationLimit 41);
-                         (ts_kbo, [], [Oriented], IterationLimit 10);
-                         (ts_lpo, [], [MaxRed], IterationLimit 50); 
-                         (ts_kbo, [], [MaxRed], IterationLimit 70);]
-let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11);
-                         (ts_kbo, [], [MaxRed], IterationLimit 100);
-                         (ts_lpo, [], [MaxRed], IterationLimit 200); ]
-let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max]
-let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max]
-let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max]
-let strategy_aql = [ts_cfsn, [RedSize],[Oriented; CPsRed], max;
-                    ts_cfsn, [],[Oriented; CPsRed], max]
-let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max]
+let strategy_red = [ts_dpn, [Red],[], max, Size]
+let strategy_lpo = [ts_lpo, [Red; Comp],[CPsRed], max, Size]
+let strategy_kbo = [ts_kbo, [Red; Comp],[CPsRed], max, Size]
+let strategy_mpol = [ts_mpol, [Red; Comp],[CPsRed], max, Size]
+let strategy_comp = [ts_dpn, [Red; Comp], [], max, Size]
+let strategy_cpred = [ts_dpn, [Red], [CPsRed], max, Size]
+let strategy_dp = [ts_dpn, [Red; Comp], [CPsRed], max, Size]
+let strategy_dg = [ts_dg, [Red; Comp], [CPsRed], max, Size]
+let strategy_dgk = [ts_dgk, [Red; Comp], [CPsRed], max, Size]
+let strategy_not_oriented = [ ts_dpn, [Red; Comp], [NotOriented], max, Size]
+let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed], max, Size);
+                    (ts_dp, [Comp], [MaxRed], max, Size)]
+let strategy_ordered = [ (ts_kbo, [], [MaxRed], IterationLimit 8, SizeAge 10);
+                         (ts_lpo, [], [MaxRed], IterationLimit 12, Size);
+                         (ts_kbo, [], [MaxRed], IterationLimit 41, Size);
+                         (ts_kbo, [], [Oriented], IterationLimit 10, Size);
+                         (ts_lpo, [], [MaxRed], IterationLimit 50, Size); 
+                         (ts_kbo, [], [MaxRed], IterationLimit 70, Size);]
+let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11, Size);
+                         (ts_kbo, [], [MaxRed], IterationLimit 100, Size);
+                         (ts_lpo, [], [MaxRed], IterationLimit 200, Size); ]
+let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max, Size]
+let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max, Size]
+let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max, Size]
+let strategy_aql = [ts_cfsn, [RedSize],[Oriented; CPsRed], max, Size;
+                    ts_cfsn, [],[Oriented; CPsRed], max, Size]
+let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max, Size]
 
-let strategy_order_generation = [ (ts_lpokbo, [], [MaxRed], IterationLimit 5);]
+let strategy_order_generation =
+  [ (ts_lpokbo, [], [MaxRed], IterationLimit 5, Size); ]
 
 let strategy_auto = [
- (ts_lpo, [Red; Comp], [CPsRed], max);
- (ts_dpn, [Red; Comp], [CPsRed], max);
- (ts_lpo, [Comp], [MaxRed], max)
+ (ts_lpo, [Red; Comp], [CPsRed], max, Size);
+ (ts_dpn, [Red; Comp], [CPsRed], max, Size);
+ (ts_lpo, [Comp], [MaxRed], max, Size)
 ]
 
 let strategy_auto2 = [
- (ts_lpo, [Comp], [MaxRed], max);
- (ts_dpn, [Red; Comp], [CPsRed], max);
- (ts_lpo, [Red], [], max)
+ (ts_lpo, [Comp], [MaxRed], max, Size);
+ (ts_dpn, [Red; Comp], [CPsRed], max, Size);
+ (ts_lpo, [Red], [], max, Size)
 ]
 
 
@@ -134,14 +135,15 @@ let mc_to_string = function
   | GoalRed -> "GoalRed"
 ;;
 
-let setting_to_string (t, c, mc, i) =
+let setting_to_string (t, c, mc, i, s) =
+ let sel = match s with SizeAge i -> "S/A " ^ (string_of_int i) | _ -> "Size" in
  let limit =
    match i with
     | IterationLimit i -> string_of_int i ^ " cycles"
     | TimeLimit l -> string_of_float l ^ "s"
  in
  "(" ^ (term_to_string t) ^ ", " ^(Listx.to_string c_to_string ", " c) ^ ", " ^
-   (Listx.to_string mc_to_string ", " mc) ^ ", " ^ limit ^")"
+   (Listx.to_string mc_to_string ", " mc) ^ ", " ^ limit ^", " ^ sel ^ ")"
 ;;
 
 let to_string = Listx.to_string setting_to_string ", "
@@ -501,7 +503,7 @@ let decode j m s =
 ;;
 
 let get_termination = function
-   (ts, _, _, _) :: _ -> ts
+   (ts, _, _, _, _) :: _ -> ts
   | _ -> failwith "Strategy.get_termination: empty settings list"
 ;;
 
