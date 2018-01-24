@@ -318,7 +318,7 @@ let select_goals' grew k gg thresh =
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let g_old =
-  if A.memory () - !last_mem > 10 then []
+  if true || (A.memory () - !last_mem > 10) then []
   else match get_oldest_goal grew with Some g -> [g] | _ -> []
  in
  let gg_a =  g_old @ (fst (Listx.split_at_most k sorted)) in
@@ -687,40 +687,43 @@ let limit_reached t =
     | TimeLimit l when t > l -> true
     | _ -> false
 ;;
+
 (* towards main control loop *)
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
-   let do_restart es gs =
-    if A.memory () > 6000 then (
-      if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
-      true)
-    else
-      let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
-      let shape = A.problem_shape (to_eqs es) in
-      if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape then (
-        if debug () then
-          Format.printf "restart (from %s new shape %s detected)\n%!"
-          (Settings.shape_to_string !(A.shape)) (Settings.shape_to_string shape);
-        true)
-    else
-     (* no progress measure *)
-     let h = Hashtbl.hash (NS.size es, es, gs) in
-     let rep = L.for_all ((=) h) !hash_iteration in
-     hash_iteration := h :: !hash_iteration;
-     hash_iteration := Listx.take_at_most 20 !hash_iteration;
-     if rep && debug () then F.printf "restart (repeated iteration state)\n%!";
-     (* iteration/size bound*)
-     let running_time = (Unix.gettimeofday () -. !(start_time)) in
-     (* estimate exponential blowup *)
-     let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
-     let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
-     let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
-     let blowup = !(A.iterations) > 6 && is_exp eqcounts in
-     if blowup && debug () then F.printf "restart (blowup)\n%!";
-     if limit_reached running_time && debug () then
-       F.printf "restart (limit reached)\n";
-     rep || limit_reached running_time || blowup
-   ;;
+let do_restart es gs =
+if A.memory () > 6000 then (
+  if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
+  true)
+else
+  let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
+  let shape = A.problem_shape (to_eqs es) in
+  if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape &&
+    A.problem_shape (List.map Lit.terms (select_for_restart es @ !(settings.axioms))) = shape
+   then (
+    if debug () then
+      Format.printf "restart (from %s new shape %s detected)\n%!"
+      (Settings.shape_to_string !(A.shape)) (Settings.shape_to_string shape);
+    true)
+else
+  (* no progress measure *)
+  let h = Hashtbl.hash (NS.size es, es, gs) in
+  let rep = L.for_all ((=) h) !hash_iteration in
+  hash_iteration := h :: !hash_iteration;
+  hash_iteration := Listx.take_at_most 20 !hash_iteration;
+  if rep && debug () then F.printf "restart (repeated iteration state)\n%!";
+  (* iteration/size bound*)
+  let running_time = (Unix.gettimeofday () -. !(start_time)) in
+  (* estimate exponential blowup *)
+  let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
+  let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
+  let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
+  let blowup = !(A.iterations) > 6 && is_exp eqcounts in
+  if blowup && debug () then F.printf "restart (blowup)\n%!";
+  if limit_reached running_time && debug () then
+    F.printf "restart (limit reached)\n";
+  rep || limit_reached running_time || blowup
+;;
 
 
 let detect_shape es =
@@ -923,7 +926,7 @@ let rec ckb fs (es, gs) =
   let ns0 = NS.of_list es0 in
   new_nodes := es0;
   let ss = Listx.unique (t_strategies ()) in
-  L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms n | n <- gs0@es0 ]) ss;
+  L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms n | n <- gs0 @ es0 ]) ss;
   (if !(settings.keep_orientation) then
     let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
     let es' = [ if d then e else R.flip e | e,d <- es ] in
