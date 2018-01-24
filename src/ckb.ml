@@ -390,7 +390,7 @@ let saturated ctx (rr,ee) rewriter cc =
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
   let eqs = [ Lit.terms n | n <- NS.to_list cc; Lit.is_equality n ] in
-  let eqs' = Listset.diff eqs rr in (* heuristic ... *)
+  let eqs' = List.filter (fun e -> not (List.mem e rr)) eqs in
   Ground.all_joinable ctx str sys eqs' xsig d
 ;;
 
