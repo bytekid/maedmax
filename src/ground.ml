@@ -356,24 +356,29 @@ let lookup trs es st =
 ;;
 
 let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
-  debug := d;
-  extended_signature := xsig;
-  let sys = mk_sys trs es acsyms fs str in
-  let check constr st =
-    if constr = False then False
-    else (
-      if d > 0 then Format.printf "check joinability of %a \n%!" Rule.print st;
-      let c = if lookup trs es st then constr (* st is joinable *)
-       else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))
-      in
-    c)
-  in
-  let j = match List.fold_left check True sts with
-    | True -> Some ord
-    | False -> None 
-    | Maybe c -> check_decode_constraints str trs c
-  in 
-  if d > 0 then
-    Format.printf "all equations are joinable: %s\n%!" (if j <> None then "YES" else "NO");
-  j
+  if List.length sts > 10 then None
+  else (
+    debug := d;
+    extended_signature := xsig;
+    let sys = mk_sys trs es acsyms fs str in
+    let check constr st =
+      if constr = False then False
+      else (
+        if d > 0 then Format.printf "check joinability of %a \n" Rule.print st;
+        if Rule.size st > 15 then False
+        else let c =
+        if lookup trs es st then constr (* st is joinable *)
+        else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))
+        in
+      c)
+    in
+    let j = match List.fold_left check True sts with
+      | True -> Some ord
+      | False -> None 
+      | Maybe c -> check_decode_constraints str trs c
+    in 
+    if d > 0 then
+      Format.printf "all equations are joinable: %s\n%!"
+        (if j <> None then "YES" else "NO");
+    j)
 ;;
