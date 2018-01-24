@@ -711,7 +711,8 @@ if A.memory () > 6000 then (
 else
   let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
   let shape = A.problem_shape (to_eqs es) in
-  if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape
+  if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape &&
+    shape <> Piombo
    then (
     if debug () then
       Format.printf "restart (from %s new shape %s detected)\n%!"
