@@ -201,11 +201,8 @@ let ac_nf ctx sys conds f u =
   | p :: ps ->
     let u0 = subterm_at p u in
     let u1 = nf sys.trs u0 in
-    (*if u1 <> u0 then Format.printf "  R step from %a to %a \n%!" Term.print u0 Term.print u1;*)
     let u2, c2 = ordered_ac_step sys ctx conds (Ac.commutativity f) (u1,c) in
-    (*if u1 <> u2 then Format.printf "  commutativity step from %a to %a \n%!" Term.print u1 Term.print u2;*)
     let u3, c3 = ordered_ac_step sys ctx conds (Ac.cassociativity f) (u2,c2) in
-    (*if u3 <> u2 then Format.printf "  cassociativity step from %a to %a \n%!" Term.print u2 Term.print u3;*)
     if u0 = u3 then ac_nf c u ps
     else let u' = replace u u3 p in
     ac_nf c3 u' (positions u')
@@ -244,7 +241,8 @@ let order_extensible ord (s,t) =
 
 let rec joinable ctx sys p =
   let p' = {p with s = nf sys.trs p.s; t = nf sys.trs p.t; } in
-  if r_joinable ctx sys p || (e_instance ctx sys p) || (e_instance ctx sys p') then True
+  if r_joinable ctx sys p || (e_instance ctx sys p) || (e_instance ctx sys p')
+    then True
   else if sys.acsyms <> [] then ac_joinable ctx sys p
   else instance_joinable ctx sys p None
   (*let j0 = joinable_args ctx sys p in
@@ -277,7 +275,8 @@ and ac_joinable ctx sys p =
     List.fold_left jcheck False sys.acsyms
 
 and ac_joinable_for ctx sys p f =
-  if !debug > 1 then Format.printf "%s. check f joinability of %a wrt %!" p.id Rule.print (p.s,p.t);
+  if !debug > 1 then
+  Format.printf "%s. check f joinability: %a wrt %!" p.id Rule.print (p.s,p.t);
   if not (List.exists (Rule.variant (Ac.associativity f)) sys.trs)  ||
     not (order_extensible p.var_order (p.s, p.t)) ||
     (Term.is_variable p.s && Term.is_variable p.t)
@@ -295,7 +294,8 @@ and ac_joinable_for ctx sys p f =
 
 and ac_joinable_for_ord ctx sys p f =
   if !debug > 1 then (
-    Format.printf "%s. check AC joinability of %a wrt %!\n%!" p.id Rule.print (p.s,p.t);
+    Format.printf "%s. check AC joinability of %a wrt %!\n%!"
+      p.id Rule.print (p.s,p.t);
     print_order p.var_order;
     Format.printf "\n%!");
   let s,t = p.s, p.t in
@@ -309,7 +309,8 @@ and ac_joinable_for_ord ctx sys p f =
   else (
     let s', t' = nf sys.trs s, nf sys.trs t in
     if !debug > 1 then 
-      Format.printf "  Eq is %a = %a going for instantiation\n%!" Term.print s' Term.print t';
+      Format.printf "  Eq is %a = %a going for instantiation\n%!"
+        Term.print s' Term.print t';
     if contradictory_constraints sys ctx p then True 
     else
       let zs = List.concat [ variables x | x <- p.var_order; is_variable x ] in
