@@ -359,6 +359,7 @@ let lookup trs es st =
 let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
   if List.length sts > 10 then None
   else (
+    let t = Unix.gettimeofday () in
     debug := d;
     extended_signature := xsig;
     let sys = mk_sys trs es acsyms fs str in
@@ -381,5 +382,7 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
     if d > 0 then
       Format.printf "all equations are joinable: %s\n%!"
         (if j <> None then "YES" else "NO");
+    let tdiff = Unix.gettimeofday () -. t in
+    Analytics.t_gjoin_check := !(Analytics.t_gjoin_check) +. tdiff;
     j)
 ;;
