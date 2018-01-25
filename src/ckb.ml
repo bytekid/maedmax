@@ -136,10 +136,7 @@ let rec get_oldest_goal (gg,rew) =
      [] -> None
    | n :: ns ->
      all_goals := ns;
-     let s,t = Lit.terms n in
-     if NS.mem gg n then
-       get_oldest_goal (gg,rew)
-     else Some n
+     if NS.mem gg n then get_oldest_goal (gg,rew) else Some n
 ;;
 
 let shape_changed es =
