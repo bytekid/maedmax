@@ -640,9 +640,7 @@ let max_k ctx cc gs =
             (n,v) :: rls
           else rls
         in
-        let t = Unix.gettimeofday () in
         let rr = List.fold_right add_rule cc_symm_vars []  in
-        A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
         let order =
           if !(settings.unfailing) then Strategy.decode 0 m s
           else Order.default
@@ -660,7 +658,6 @@ let max_k ctx cc gs =
          raise (Restart (select_for_restart cc));
        acc))
    in
-   let t = Unix.gettimeofday () in
    if has_comp () then
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
@@ -668,7 +665,6 @@ let max_k ctx cc gs =
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
    search_constraints ctx (cc_eq, cc_symml_vars) gs;
-   A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
    let trss = max_k [] ctx k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss

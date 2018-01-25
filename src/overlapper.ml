@@ -5,6 +5,7 @@ module Sig = Signature
 module O = Overlap
 module V = Variant
 module Lit = Literal
+module A = Analytics
 
 type term_cmp = Term.t -> Term.t -> bool
 
@@ -39,15 +40,18 @@ class overlapper (trs : Literal.t list) = object (self)
 
   method cp_at rli rlo p = (* rli is inner, rlo is outer *)
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
-    else
-      match O.overlap_between_at (Lit.terms rli) (Lit.terms rlo) p with
+    else (
+      let t = Unix.gettimeofday () in
+      let o = O.overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
+      A.t_tmp1 := !(A.t_tmp1) +. (Unix.gettimeofday () -. t);
+      match o with
         | None -> None
         | Some o ->
           let s,t = O.cp_of_overlap o in
           let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
           let is_goal = Lit.is_goal rlo in
           if s = t && is_equality && not is_goal then None
-          else Some (Lit.make (V.normalize_rule (s,t)) is_equality is_goal)
+          else Some (Lit.make (V.normalize_rule (s,t)) is_equality is_goal))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)
@@ -92,7 +96,10 @@ class overlapper_with (trs : (Rule.t * Yicesx.t) list) = object (self)
   ;;
 
   method cp_at rli rlo p = (* rli is inner, rlo is outer *)
-    match O.overlap_between_at rli rlo p with
+  let t = Unix.gettimeofday () in
+  let o = O.overlap_between_at rli rlo p  in
+  A.t_tmp1 := !(A.t_tmp1) +. (Unix.gettimeofday () -. t);
+    match o with
       | None -> None
       | Some o ->
         let s,t = O.cp_of_overlap o in
