@@ -137,7 +137,7 @@ let rec get_oldest_goal (gg,rew) =
    | n :: ns ->
      all_goals := ns;
      let s,t = Lit.terms n in
-     if fst (rew#nf s) = fst (rew#nf t) || NS.mem gg n then
+     if NS.mem gg n then
        get_oldest_goal (gg,rew)
      else Some n
 ;;
