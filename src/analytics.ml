@@ -92,7 +92,8 @@ let is_applicative es =
  List.length bs = 1 && List.for_all (fun (_,a) -> a = 0) rest
 ;;
 
-let duplicating_rule (l,r) = Rule.is_duplicating (l,r)
+let really_duplicating_rule (l,r) = Rule.is_duplicating (l,r)
+
 let duplicating_rule (l,r) =
   Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
 

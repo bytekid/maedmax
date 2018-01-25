@@ -912,7 +912,9 @@ let init_settings fs axs gs =
 
 let remember_state es gs =
  let h = Hashtbl.hash (termination_strategy (), es,gs) in
- if h = !hash_initial then raise Fail;
+ if h = !hash_initial then
+   (*raise Fail;*)
+   settings.n := Pervasives.max (!(settings.n) + 1) 15;
  hash_initial := h
 ;;
 
