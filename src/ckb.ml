@@ -160,7 +160,7 @@ let rewrite rewriter (cs : NS.t) =
    match Lit.rewriter_nf_with n rewriter with
     | None -> (NS.add n irrdcbl, news) (* no progress here *)
     | Some (nnews, rs) -> ((* if terms got equal, nnew is empty *)
-        if nnews <> [] then
+        if !(Settings.do_proof) && nnews <> [] then
           add_rewrite_trace (Lit.terms n) rs (Lit.terms (L.hd nnews));
         irrdcbl, NS.add_list nnews news)
  in NS.fold rewrite cs (NS.empty (), NS.empty ())
