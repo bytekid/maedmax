@@ -60,13 +60,6 @@ class overlapper (trs : Literal.t list) = object (self)
     let rs = self#unifiables (Term.subterm_at p l) in
     let add os = function None -> os | Some o -> o :: os in
     List.fold_left add [] [ self#cp_at rl' rl p | rl' <- rs ]
-(*
-    let os' = [ O.overlap_between_at rl (l,r) p | rl <- rs ] in
-    let add os = function None -> os | Some o -> o :: os in
-    let cps = [ O.cp_of_overlap o,o | o <- List.fold_left add [] os' ] in
-    let os = [ (s,t),o | (s,t),o <- cps; s <> t ] in
-    let res = [ Lit.make (V.normalize_rule (fst o)) is_eq is_goal | o <- os] in
-    res*)
   ;;
 end
 
