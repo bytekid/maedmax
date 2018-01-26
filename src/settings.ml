@@ -21,8 +21,8 @@ type t_setting =
 type termination_strategy = t_setting list
 
 (* heuristically detected problem shape *)
-type shape = NoShape | Boro | Carbonio | Elio | Silicio | Ossigeno | Piombo |
-             Xeno | Zolfo
+type shape = NoShape | Boro | Calcio | Carbonio | Elio | Silicio | Ossigeno |
+            Piombo | Xeno | Zolfo
 
 
 type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
@@ -115,6 +115,7 @@ let inst_depth : int ref = ref 2
 let shape_to_string = function
     NoShape -> "none"
   | Boro -> "boro"
+  | Calcio -> "calcio"
   | Carbonio -> "carbonio"
   | Elio -> "elio"
   | Silicio -> "silicio"

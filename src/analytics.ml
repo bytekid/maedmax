@@ -110,6 +110,9 @@ let problem_shape es =
   let max_term_size = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
   let rmax (l,r) = Pervasives.max (Term.depth l) (Term.depth r) in
   let max_term_depth = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
+  let max_term_arity = L.fold_left max 0 [ a | _,a <- Rules.signature es ] in
+  let es_size = L.fold_left (+) 0 [Rule.size e | e <- es] in 
+  let es_count = List.length es in
   let app = is_applicative es in
   let dup = is_duplicating es in
   let mon = Theory.Monoid.count es > 0 in
@@ -130,10 +133,12 @@ let problem_shape es =
     Carbonio (* COL003-* *)
   else if (not app && not distrib && acs > 1 && lat && not mon) then
     Silicio (* lattice *)
-  else if (not app && not dup && not distrib && acs = 0 && cs = 0 && not mon) then
+  else if (not app && not dup && not distrib && acs = 0 && cs=0 && not mon) then
     Elio (* no structure detected *)
   else if (dup && not app && acs = 0 && cs > 1 && not mon) then
     Boro (* commutative symbols, duplication *)
+  else if (dup && max_term_arity > 4 && es_count > 25 && es_size > 200) then
+    Calcio (* large problems *)
   else
     NoShape
 ;;

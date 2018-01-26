@@ -327,8 +327,9 @@ let select_goals' grew k gg thresh =
  let acs = !(settings.ac_syms) in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
+ let s = !(A.shape) in
  let g_old =
-  if selection_mode () = Size || !(A.shape) = Elio then []
+  if (selection_mode () = Size || s = Elio) && not (s = Calcio) then []
   else match get_oldest_goal grew with Some g -> [g] | _ -> []
  in
  let gg_a =  g_old @ (fst (Listx.split_at_most k sorted)) in
@@ -755,6 +756,7 @@ let detect_shape es =
       settings.n := 12;
       settings.size_age_ratio := 80;
     | Carbonio
+    | Calcio
     | NoShape -> settings.n := 6
     | Elio -> settings.n := 6
     | Boro -> (
