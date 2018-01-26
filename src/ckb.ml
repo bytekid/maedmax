@@ -140,7 +140,7 @@ let rec get_oldest_goal (gg,rew) =
 ;;
 
 let shape_changed es =
-  let shape = A.problem_shape (List.map Lit.terms (NS.to_list es)) in
+  let shape = A.problem_shape (L.map Lit.terms (NS.to_list es)) in
   !(settings.auto) && shape <> !(A.shape) && shape <> NoShape
 ;;
 
@@ -289,14 +289,14 @@ let select_for_restart cc =
   let deep (l,r) = Pervasives.max (Term.depth l) (Term.depth r) > 10 in
   let bigl l = big (Lit.terms l) in
   let deepl l = deep (Lit.terms l) in
-  let is_big es = List.exists bigl es && List.exists deepl es in
-  let fats es = [List.find bigl es; List.find deepl es] in
+  let is_big es = L.exists bigl es && L.exists deepl es in
+  let fats es = [L.find bigl es; L.find deepl es] in
   (*let drule n =
     let l,r = Lit.terms n in
     Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
   in
-  let dup es = List.exists drule (es @ [Lit.flip e | e <- es ]) in
-  let fdup es = List.find drule (es @ [Lit.flip e | e <- es ]) in*)
+  let dup es = L.exists drule (es @ [Lit.flip e | e <- es ]) in
+  let fdup es = L.find drule (es @ [Lit.flip e | e <- es ]) in*)
   let k = !(A.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
   let ccl = NS.to_list cc in
@@ -356,7 +356,7 @@ let cps rew n1 n2 =
     try Hashtbl.find cp_cache (n1,n2)
     with Not_found -> (
       let cps = Lit.cps n1 n2 in
-      if !(settings.d) >= 2 && List.length cps > 0 then
+      if !(settings.d) >= 2 && L.length cps > 0 then
         Format.printf "CPs between %a and %a: %a\n%!" Lit.print n1 Lit.print n2
           NS.print_list cps;
       Hashtbl.add cp_cache (n1,n2) cps;
@@ -401,7 +401,7 @@ let saturated ctx (rr,ee) rewriter cc =
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
   let eqs = [ Lit.terms n | n <- NS.to_list cc; Lit.is_equality n ] in
-  let eqs' = List.filter (fun e -> not (List.mem e rr)) eqs in
+  let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
   Ground.all_joinable ctx str sys eqs' xsig d
 ;;
 
@@ -420,6 +420,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       Rules.print [ Lit.terms r | r <- rr] NS.print cc;
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
+  if debug () then
+    Format.printf "EE:%a\n%!" Rules.print ee;
   rewriter#add_more ee;
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let ok g = let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v in
@@ -440,26 +442,25 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       let sigma = Subst.mgu s t in
       let s',t' = Rule.substitute sigma (s,t) in
       Some (UNSAT, Proof ((s,t),rewrite_seq rewriter (s',t') ([],[]), sigma)))
-  else (
-    let sat = saturated ctx (rr,ee) rewriter cc in
-    let order = match sat with None -> rewriter#order | Some o -> o in
-    let goals_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
-    let orientable (s,t) = order#gt s t || order#gt t s in
-    if L.exists joinable ieqs then (* joinable inequality axiom *)
-      Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
-    (* if an equation is orientable, wait one iteration ... *)
-    else if sat <> None && not goals_ground &&
-      List.for_all (fun e -> not (orientable e)) ee then
-      Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order !(settings.gs)
-    else if rr @ ee = [] || (sat <> None && goals_ground) then (
-      if ee = [] then Some (SAT, Completion rr)
-      else if ieqs = [] && List.for_all (fun e -> not(Rule.is_ground e)) ee then
-        Some (SAT, GroundCompletion (rr, ee, order))
-      else if List.length ieqs = 1 && NS.is_empty gs then
-        Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order ieqs
-      else None
-    )
-    else None)
+  else if L.exists joinable ieqs then (* joinable inequality axiom *)
+    Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
+  else  match saturated ctx (rr,ee) rewriter cc with
+    | None -> if rr @ ee = [] then Some (SAT, Completion []) else None
+    | Some order ->
+      let gs_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
+      let orientable (s,t) = order#gt s t || order#gt t s in
+      (* if an equation is orientable, wait one iteration ... *)
+      if not gs_ground && L.for_all (fun e -> not (orientable e)) ee then
+        Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order !(settings.gs)
+      else if not (rr @ ee = [] || gs_ground) then None
+      else (
+        if ee = [] then Some (SAT, Completion rr)
+        else if ieqs = [] && L.for_all (fun e ->not(Rule.is_ground e)) ee then
+          Some (SAT, GroundCompletion (rr, ee, order))
+        else if L.length ieqs = 1 && NS.is_empty gs then
+          Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order ieqs
+        else None
+      )
 ;;
 
 let succeeds ctx re rew cc ie =
@@ -548,7 +549,7 @@ let c_cpred ctx cc_vs =
   let c2 (rl,rl_var) =
     [ rl_var <&> rl_var' <=>> (red st) | st,rl_var' <- ovl#cps rl ]
   in
-  let cs = List.concat [c2 rlv | rlv <- cc_vs] in
+  let cs = L.concat [c2 rlv | rlv <- cc_vs] in
   L.iter (fun c -> ignore (assert_weighted c 1)) cs;
   reducibility_checker := rdc;
 ;;
@@ -641,7 +642,7 @@ let max_k ctx cc gs =
             (n,v) :: rls
           else rls
         in
-        let rr = List.fold_right add_rule cc_symm_vars []  in
+        let rr = L.fold_right add_rule cc_symm_vars []  in
         let order =
           if !(settings.unfailing) then Strategy.decode 0 m s
           else Order.default
@@ -650,9 +651,9 @@ let max_k ctx cc gs =
           order#print_params ();
         if !(settings.unfailing) && !Settings.do_assertions then (
           let ord n = let l,r = Lit.terms n in order#gt l r && not (order#gt r l) in
-          assert (L.for_all ord (List.map fst rr)));
+          assert (L.for_all ord (L.map fst rr)));
         require (!! (big_and ctx [ v | _,v <- rr ]));
-        max_k ((List.map fst rr, c, order) :: acc) ctx (n-1))
+        max_k ((L.map fst rr, c, order) :: acc) ctx (n-1))
      else (
        if debug () then F.printf "no further TRS found\n%!"; 
        if (n = k && L.length !(settings.strategy) > 1) then
@@ -703,7 +704,7 @@ if A.memory () > 6000 then (
   if debug () then F.printf "restart (memory limit of 6GB reached)\n%!";
   true)
 else
-  let to_eqs ns = List.map Lit.terms (NS.to_list ns) in
+  let to_eqs ns = L.map Lit.terms (NS.to_list ns) in
   let shape = A.problem_shape (to_eqs es) in
   if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape &&
     shape <> Piombo
@@ -878,7 +879,7 @@ let init_settings fs axs gs =
  settings.signature := Rules.signature (axs @ gs);
  settings.d := !(fs.d);
  A.iterations := 0;
- if List.length axs >= 90 then (
+ if L.length axs >= 90 then (
    settings.large := true;
    settings.strategy := Strategy.strategy_aql;
    settings.reduce_trss := false;
