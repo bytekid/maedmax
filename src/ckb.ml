@@ -422,7 +422,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
   if debug () then
     Format.printf "EE:%a\n%!" Rules.print ee;
-  rewriter#add_more ee;
+  rewriter#add_more [e | e <- ee; Rule.size e < 20];
   let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
   let ok g = let u,v = Lit.terms g in joinable (u,v) || Subst.unifiable u v in
   if NS.exists ok gs then (
@@ -447,6 +447,16 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   else  match saturated ctx (rr,ee) rewriter cc with
     | None -> if rr @ ee = [] then Some (SAT, Completion []) else None
     | Some order ->
+      
+      try
+        rewriter#add_more ee;
+        let joinable (s,t) = fst (rewriter#nf s) = fst (rewriter#nf t) in
+        let ok g = let u,v = Lit.terms g in joinable (u,v) in
+        let s,t = Lit.terms (L.find ok (NS.to_list gs)) in
+        assert (joinable (s,t));
+        let (_, rss), (_,rst) = rewriter#nf s, rewriter#nf t in
+        Some (UNSAT, Proof ((s,t),rewrite_seq rewriter (s,t) (rss,rst),[]))
+      with Not_found -> (
       let gs_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
       let orientable (s,t) = order#gt s t || order#gt t s in
       (* if an equation is orientable, wait one iteration ... *)
@@ -460,7 +470,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
         else if L.length ieqs = 1 && NS.is_empty gs then
           Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order ieqs
         else None
-      )
+      ))
 ;;
 
 let succeeds ctx re rew cc ie =
