@@ -6,6 +6,7 @@ module O = Overlap
 module V = Variant
 module Lit = Literal
 module A = Analytics
+module Trc = Trace
 
 type term_cmp = Term.t -> Term.t -> bool
 
@@ -51,7 +52,12 @@ class overlapper (trs : Literal.t list) = object (self)
           let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
           let is_goal = Lit.is_goal rlo in
           if s = t && is_equality && not is_goal then None
-          else Some (Lit.make (V.normalize_rule (s,t)) is_equality is_goal))
+          else (
+            let st' = V.normalize_rule (s,t) in
+            if !(Settings.do_proof) then
+              (if is_goal then Trc.add_overlap_goal else Trc.add_overlap) st' o;
+            try Some (Lit.make st' is_equality is_goal)
+            with Lit.Too_large -> None))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)

@@ -740,8 +740,13 @@ let detect_shape es =
   if debug () then
     F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
   let fs_count = L.length (Rules.signature es) in
+  Settings.max_eq_size := 60;
+  Settings.max_goal_size := 60;
   match shape with
-    | Piombo
+    | Piombo ->
+      Settings.max_eq_size := 2600;
+      Settings.max_goal_size := 200;
+      settings.n := 10
     | Zolfo -> settings.n := 10
     | Xeno -> (
       settings.reduce_AC_equations_for_CPs := true;
@@ -846,6 +851,7 @@ let rec phi ctx aa gs =
     let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps, ovl = overlaps rew rr aa_for_ols in
+    (*let cps = NS.filter (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in*)
     let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in

@@ -111,6 +111,8 @@ let is_ordered = ref false
 let interactive = ref false
 let generate_order = ref false
 let inst_depth : int ref = ref 2
+let max_eq_size : int ref = ref 2500
+let max_goal_size : int ref = ref 100
 
 let shape_to_string = function
     NoShape -> "none"

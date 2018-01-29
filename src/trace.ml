@@ -116,12 +116,16 @@ let add_overlap_goal eq (rl1,p,rl2,_) = gadd eq (CP (rl1,p,rl2))
 
 let add_rewrite_goal eq eq0 steps = gadd eq (Rewrite (eq0,steps))
 
+let max_eq_size = ref 0;;
+let max_goal_size = ref 0;;
+
 let ancestors eqs = 
   let rec ancestors acc = function
     | [] -> acc
     | eq :: eqs ->
       try
         let eq = Variant.normalize_rule eq in
+        max_eq_size := max !max_eq_size (Rule.size eq);
         if List.mem eq (List.map fst acc) then
           ancestors acc eqs
         else
@@ -333,6 +337,7 @@ let trace_for eqs =
    separately). *)
 let rec goal_ancestors rule_acc gconv_acc g o =
   try
+    max_goal_size := max !max_goal_size (Rule.size g);
     let (v,w), keep_gdir = Variant.normalize_rule_dir g in
     let delta =
       match gconv_acc with

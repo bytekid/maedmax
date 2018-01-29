@@ -274,7 +274,10 @@ let proof_string ?(readable=true) (es,gs) =
 ;;
 
 let show_proof (es,gs) res =
+  (*Literal.print_sizes ();*)
   let p = proof_string (es,gs) res in Format.printf "%s\n" p
+  (*Format.printf "max equation: %d\nmax goal: %d\n%!"
+    !Trace.max_eq_size !Trace.max_goal_size *)
 ;;
 
 let interactive_mode proof =

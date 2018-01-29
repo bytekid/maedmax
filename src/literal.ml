@@ -5,7 +5,31 @@ open Settings
 
 type t = Settings.literal
 
-let make ts e g = {terms = ts; is_goal = g; is_equality = e }
+exception Too_large
+
+let sizes : (int, int*int) Hashtbl.t = Hashtbl.create 100
+
+let print_sizes _ = 
+  let show (k,(v,vg)) = Format.printf "size %d: (%d,%d)\n%!" k v vg in
+  let sz = Hashtbl.fold (fun k v l -> (k,v)::l) sizes [] in
+  List.iter show (List.sort (fun (a,_) (b,_) -> compare a b) sz)
+;;
+
+let print ppf l =
+  let eq = if l.is_equality then "=" else "!=" in
+  let eq = eq ^ (if l.is_goal then "G" else "") in
+  Format.fprintf ppf "%a %s %a" Term.print (fst l.terms) eq Term.print (snd l.terms)
+;;
+
+let killed = ref 0
+
+let make ts e g =
+  let sz = Rule.size ts in
+  (*let c,cg = try Hashtbl.find sizes s with _ -> (0,0) in
+  Hashtbl.replace sizes s (if g then (c,cg+1) else (c+1,cg));*)
+  if g && sz > !Settings.max_goal_size (*||
+     (not g) && sz > !Settings.max_eq_size*) then (killed := !killed + 1; raise Too_large)
+  else {terms = ts; is_goal = g; is_equality = e }
 
 let terms l = l.terms
 
@@ -48,7 +72,8 @@ let cps l l' =
       let add ((s,t),o) =
         if s<>t then trace (Variant.normalize_rule (s,t)) o
       in List.iter add os);
-    [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+    try [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+    with Too_large -> []
 ;;
 
 let pcps rew l l' =
@@ -65,7 +90,8 @@ let pcps rew l l' =
       let add ((s,t),o) =
         if s<>t then trace (Variant.normalize_rule (s,t)) o
       in List.iter add os);
-    [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+    try [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+    with Too_large -> []
 ;;
 
 let rewriter_nf_with l rewriter =
@@ -81,23 +107,20 @@ let rewriter_nf_with l rewriter =
     Some([], rls))
   else if Rule.equal ts (s',t') then None
   else (
-    let st' = Variant.normalize_rule (s',t') in
-    if !(Settings.do_proof) then
-      (if l.is_goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
-    (* preserve goal/equality status *)
-    Some ([ make st' l.is_equality l.is_goal ], rls))
+    try
+      let st' = Variant.normalize_rule (s',t') in
+      let g = make st' l.is_equality l.is_goal in
+      if !(Settings.do_proof) then
+        (if l.is_goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
+      (* preserve goal/equality status *)
+      Some ([ g ], rls)
+    with Too_large -> None)
 ;;
   
 let joins l trs =
   let _, s' = Rewriting.nf_with trs (fst l.terms) in
   let _, t' = Rewriting.nf_with trs (snd l.terms) in
   s' = t'
-;;
-
-let print ppf l =
-  let eq = if l.is_equality then "=" else "!=" in
-  let eq = eq ^ (if l.is_goal then "G" else "") in
-  Format.fprintf ppf "%a %s %a" Term.print (fst l.terms) eq Term.print (snd l.terms)
 ;;
 
 let is_ac_equivalent l fs = Theory.Ac.equivalent fs l.terms
