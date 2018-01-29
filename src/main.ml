@@ -204,6 +204,7 @@ let print_json_term yes f =
 ;;
 
 let print_res answer res =
+  Format.printf "Killed: %d\n%!" !Literal.killed;
   printf "# SZS status ";
   let answer_str = success_code answer in
   match res with
@@ -274,9 +275,9 @@ let proof_string ?(readable=true) (es,gs) =
 ;;
 
 let show_proof (es,gs) res =
-  (*Literal.print_sizes ();*)
   let p = proof_string (es,gs) res in Format.printf "%s\n" p
-  (*Format.printf "max equation: %d\nmax goal: %d\n%!"
+  (*Literal.print_sizes ();
+  Format.printf "max equation: %d\nmax goal: %d\n%!"
     !Trace.max_eq_size !Trace.max_goal_size *)
 ;;
 

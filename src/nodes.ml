@@ -82,6 +82,11 @@ let filter p ns =
   H.fold (fun n _ ns' -> if not (p n) then H.remove ns' n; ns') ns (H.copy ns)
 ;;
 
+let partition p ns =
+  let add n _ (ps,qs) = (if p n then H.add ps else H.add qs) n true; (ps,qs) in
+  H.fold add ns (empty (), empty ())
+;;
+
 let find p ns = H.fold (fun n _ x -> if p n then Some n else x) ns None
 
 let for_all p ns = H.fold (fun n _ b -> b && p n) ns true

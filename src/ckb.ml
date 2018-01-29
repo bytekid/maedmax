@@ -400,7 +400,7 @@ let saturated ctx (rr,ee) rewriter cc =
   let d = !(settings.d) in
   let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
   let xsig = !(settings.extended_signature) in
-  let eqs = [ Lit.terms n | n <- NS.to_list cc; Lit.is_equality n ] in
+  let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
   let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
   Ground.all_joinable ctx str sys eqs' xsig d
 ;;
@@ -415,9 +415,9 @@ let rewrite_seq rew (s,t) (rss,rst) =
 ;;
 
 let succeeds ctx (rr,ee) rewriter cc ieqs gs =
-  if debug () then
+  (*if debug () then
     Format.printf "start success check\nRR:\n%a\nCC:\n%a\n%!"
-      Rules.print [ Lit.terms r | r <- rr] NS.print cc;
+      Rules.print [ Lit.terms r | r <- rr] NS.print cc;*)
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
   if debug () then
@@ -740,7 +740,7 @@ let detect_shape es =
   if debug () then
     F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
   let fs_count = L.length (Rules.signature es) in
-  Settings.max_eq_size := 60;
+  Settings.max_eq_size := 81;
   Settings.max_goal_size := 60;
   match shape with
     | Piombo ->
@@ -772,6 +772,8 @@ let detect_shape es =
       settings.n := 14;
       settings.size_age_ratio := 70;
       settings.size_bound_equations := 16;
+      Settings.max_eq_size := 20;
+      Settings.max_goal_size := 20;
       settings.strategy := Strategy.strategy_ordered_kbo)
 ;;
 
@@ -850,8 +852,8 @@ let rec phi ctx aa gs =
     (*let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
     let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
     let aa_for_ols = equations_for_overlaps irr aa in
-    let cps, ovl = overlaps rew rr aa_for_ols in
-    (*let cps = NS.filter (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in*)
+    let cps', ovl = overlaps rew rr aa_for_ols in
+    let cps, cps_large = NS.partition (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in
     let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
@@ -861,7 +863,8 @@ let rec phi ctx aa gs =
     store_remaining_nodes ctx rest;
     store_remaining_goals ctx grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
-    match succeeds ctx (rr, irr) rew (NS.add_list (axs ()) cps) ieqs gs with
+    let cc = axs () @ (NS.to_list cps @ (NS.to_list cps_large)) in
+    match succeeds ctx (rr, irr) rew cc ieqs gs with
        Some r ->
        if !S.generate_order then
          (check_order_generation true order; failwith "order generated")
