@@ -744,7 +744,7 @@ let detect_shape es =
   Settings.max_goal_size := 60;
   match shape with
     | Piombo ->
-      Settings.max_eq_size := 2600;
+      Settings.max_eq_size := 4000;
       Settings.max_goal_size := 200;
       settings.n := 10
     | Zolfo -> settings.n := 10
@@ -853,7 +853,8 @@ let rec phi ctx aa gs =
     let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps', ovl = overlaps rew rr aa_for_ols in
-    let cps, cps_large = NS.partition (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in
+    let cps = NS.filter (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in
+    let cps_large = NS.filter (fun cp -> Lit.size cp >= !Settings.max_eq_size) cps' in
     let cps = reduced rew cps in (* rewrite CPs *)
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
