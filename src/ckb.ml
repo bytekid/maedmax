@@ -740,8 +740,8 @@ let detect_shape es =
   if debug () then
     F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
   let fs_count = L.length (Rules.signature es) in
-  Settings.max_eq_size := 81;
-  Settings.max_goal_size := 60;
+  Settings.max_eq_size := 200;
+  Settings.max_goal_size := 100;
   match shape with
     | Piombo ->
       Settings.max_eq_size := 4000;
