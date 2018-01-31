@@ -357,7 +357,7 @@ let lookup trs es st =
 ;;
 
 let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
-  if List.length sts > 15 then None
+  if List.length sts > 50 then None
   else (
     debug := d;
     extended_signature := xsig;
@@ -366,7 +366,7 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
       if constr = False then False
       else (
         if d > 0 then Format.printf "check joinability of %a \n" Rule.print st;
-        if Rule.size st > 15 then False
+        if Rule.size st > 50 then False
         else let c =
         if lookup trs es st then constr (* st is joinable *)
         else constr <&&> joinable ctx sys (mk_problem st !(Settings.inst_depth))
