@@ -208,7 +208,7 @@ let print_res answer res =
   printf "# SZS status ";
   let answer_str = success_code answer in
   match res with
-   | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
+   | Completion trs -> printf "SAT\n\n%a@." print_trs trs;
    | GroundCompletion (rr,ee,order)
    | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
     (printf "%s\n\n%a@." answer_str print_trs rr;

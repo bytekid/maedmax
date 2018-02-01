@@ -647,8 +647,8 @@ let max_k ctx cc gs =
           if !(settings.unfailing) then Strategy.decode 0 m s
           else Order.default
         in
-        if !S.generate_order then
-          order#print_params ();
+        if !S.generate_order then order#print_params ();
+        if debug () then order#print ();
         if !(settings.unfailing) && !Settings.do_assertions then (
           let ord n = let l,r = Lit.terms n in order#gt l r && not (order#gt r l) in
           assert (L.for_all ord (L.map fst rr)));
