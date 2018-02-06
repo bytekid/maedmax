@@ -218,6 +218,14 @@ let rec to_xml = function
     Xml.Element("funapp", [], name :: xs)
 ;;
 
+let rec to_tptp = function
+  | V x -> "X" ^ (get_var_name x)
+  | F(f, []) -> "f" ^ (get_fun_name f)
+  | F(f, t1 :: ts) ->
+    let s = List.fold_left (fun s u -> s ^ "," ^ (to_tptp u)) (to_tptp t1) ts in
+    "f" ^ (get_fun_name f) ^ "(" ^ s ^ ")"
+;;
+
 let similarity_wrt s t =
   let exists p s = try let _ = subterm_at p s in true with _ -> false in
   let same p s t = 

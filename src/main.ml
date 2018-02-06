@@ -111,7 +111,7 @@ let options = Arg.align
     " compute CPs with axioms in both directions");
     ("--generate-order", Arg.Unit (fun _ ->
       Settings.generate_order := true;
-      settings.auto := false;
+      (*settings.auto := false;*)
       settings.strategy := S.strategy_order_generation),
      " order generation mode");
    ("--reduceAC-CPs", Arg.Set settings.reduce_AC_equations_for_CPs,
@@ -128,8 +128,8 @@ let options = Arg.align
     "<t> timeout");
    (*("-termproof", Arg.Set settings.output_tproof,
     " output termination proof");*)
-   ("--tmp", Arg.Int (fun n -> settings.tmp := n),
-    "<n> various purposes");
+   (*("--tmp", Arg.Int (fun n -> settings.tmp := n),
+    "<n> various purposes");*)
    ("--xsig", Arg.Set settings.extended_signature,
     " consider signature plus infinitely many constants (ordered completion)")
  ]
@@ -316,6 +316,34 @@ let interactive_mode proof =
   in check ()
 ;;
 
+let print_waldmeister es =
+  let es = [Lit.terms e | e <- es ] in
+  F.printf "NAME        Example\n%!";
+  F.printf "MODE        PROOF\n%!";
+  F.printf "SORTS       ANY\n%!";
+  let fs = Rules.signature es in
+  let str (f,a) =
+    let n = Signature.get_fun_name f in
+    n ^ ": " ^ (List.fold_left (^) "" (Listx.copy a "ANY ")) ^ "-> ANY\n"
+  in
+  F.printf "SIGNATURE   %s" (List.fold_left (fun s f -> s ^ (str f)) "" fs);
+  F.printf "ORDERING    LPO %s\n%!"
+    (List.fold_left (fun s (f,_) -> s ^ " > " ^(Signature.get_fun_name f))
+     (Signature.get_fun_name (fst (List.hd fs))) (List.tl fs));
+  let vs = Rules.variables es in
+  let vs = match vs with
+     [] -> ""
+   | v0 :: vs' ->
+     let v0s = Signature.get_var_name (List.hd vs) in
+     List.fold_left (fun s v -> s ^ "," ^ Signature.get_var_name v) v0s (List.tl vs)
+  in
+  F.printf "VARIABLES   %s : ANY\n%!" vs;
+  F.printf "EQUATIONS   %!";
+  let print (l,r) = F.printf "            %a = %a\n" Term.print l Term.print r in
+  List.iter print es;
+  F.printf "CONCLUSION   %!\n"
+;;
+
 let () =
   do_ordered ();
   Arg.parse options 
@@ -327,7 +355,9 @@ let () =
       let (es,gs) as input = Read.file f in
       if !(Settings.interactive) && gs <> [] then
         failwith "Input for interactive mode is not supposed to contain goals";
-      if not !only_termination && not !analyze then
+      if !(settings.tmp) > 0then
+        print_waldmeister es
+      else if not !only_termination && not !analyze then
        begin try
         let timer = Timer.start () in
         let answer, proof = Ckb.ckb settings input in

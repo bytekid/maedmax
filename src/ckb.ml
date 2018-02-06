@@ -450,14 +450,16 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       let gs_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
       let orientable (s,t) = order#gt s t || order#gt t s in
       (* if an equation is orientable, wait one iteration ... *)
-      if not gs_ground && L.for_all (fun e -> not (orientable e)) ee then
+      if not gs_ground && L.for_all (fun e -> not (orientable e)) ee &&
+         not !(Settings.do_proof) then (* no proof output in narrowing yet *)
         Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order !(settings.gs)
       else if not (rr @ ee = [] || gs_ground) then None
       else (
         if ee = [] then Some (SAT, Completion rr)
         else if ieqs = [] && L.for_all (fun e ->not(Rule.is_ground e)) ee then
           Some (SAT, GroundCompletion (rr, ee, order))
-        else if L.length ieqs = 1 && NS.is_empty gs then
+        else if L.length ieqs = 1 && NS.is_empty gs &&
+          not !(Settings.do_proof) then (* no proof output in narrowing yet *)
           Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order ieqs
         else None
       )

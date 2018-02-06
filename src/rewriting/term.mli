@@ -80,4 +80,6 @@ val is_embedded : t -> t -> bool
 
 val to_xml : t -> Xml.xml
 
+val to_tptp : t -> string
+
 val similarity : Signature.sym list -> Signature.sym list -> t -> t -> float

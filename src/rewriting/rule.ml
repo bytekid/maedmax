@@ -106,3 +106,8 @@ let to_xml (l,r) =
   let rhs = Xml.Element("rhs", [], [Term.to_xml r]) in
   Xml.Element("rule", [], [lhs; rhs])
 ;;
+
+let to_tptp (l,r) =
+  let ls,rs = Term.to_tptp l, Term.to_tptp r in
+  "cnf(name, axiom,\n    ( " ^ ls ^ " = " ^ rs ^ " ))."
+;;
