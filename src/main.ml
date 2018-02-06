@@ -204,7 +204,6 @@ let print_json_term yes f =
 ;;
 
 let print_res answer res =
-  Format.printf "Killed: %d\n%!" !Literal.killed;
   printf "# SZS status ";
   let answer_str = success_code answer in
   match res with
