@@ -475,6 +475,8 @@ let rec creation_steps acc = function
   | ((s,t),o) :: es -> (match o with
     | Initial -> creation_steps acc es
     | CP (r1, p, r2) ->
+      (* rename *both* (rules not obeying variable condition make problems) *)
+      let r1,r2 = Rule.rename r1, Rule.rename r2 in
       let (r1,p,r2,mgu) as o = the_overlap r1 r2 p in
       let s',t' = O.cp_of_overlap o in
       let ren, keep_dir = rename_to (s',t') (s,t) in
