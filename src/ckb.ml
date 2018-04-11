@@ -940,7 +940,8 @@ let rec ckb fs (es, gs) =
  remember_state es gs;
  (* init state *)
  let ctx = mk_context () in
- let es' = L.map Lit.normalize [e | e <- es; not (Lit.is_trivial e)] in
+ let est = if !(S.do_proof) then [e | e <- es;not (Lit.is_trivial e)] else es in
+let es' = L.map Lit.normalize est in
  let es0 = L.sort Pervasives.compare es' in
  let gs0 = L.map Lit.normalize gs in
  all_nodes := es0;
