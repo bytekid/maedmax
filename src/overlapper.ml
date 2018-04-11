@@ -38,12 +38,21 @@ class overlapper (trs : Literal.t list) = object (self)
     let l = fst (Lit.terms rl) in
     List.concat [ self#cps_at rl p | p <- T.function_positions l ]
   ;;
+  
+  (* as in Overlap module, but without variant optimization *)
+  method overlap_between_at rule1 rule2 p =
+    let l1,r1 = rule1 and l2, r2 = Rule.rename rule2 in
+    try
+      let sigma = Subst.mgu (Term.subterm_at p l2) l1 in
+      Some ((l1, r1), p, (l2, r2), sigma)
+    with Subst.Not_unifiable -> None
+
 
   method cp_at rli rlo p = (* rli is inner, rlo is outer *)
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
     else (
       let t = Unix.gettimeofday () in
-      let o = O.overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
+      let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
       A.t_tmp1 := !(A.t_tmp1) +. (Unix.gettimeofday () -. t);
       match o with
         | None -> None
