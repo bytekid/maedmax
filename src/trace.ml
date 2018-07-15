@@ -119,6 +119,10 @@ let add_rewrite_goal eq eq0 steps = gadd eq (Rewrite (eq0,steps))
 let max_eq_size = ref 0;;
 let max_goal_size = ref 0;;
 
+let variant_free ee = 
+  List.fold_right (fun e ee -> if not (List.exists (Rule.variant e) ee) then e :: ee else ee) ee []
+;; 
+
 let ancestors eqs = 
   let rec ancestors acc = function
     | [] -> acc
@@ -518,7 +522,7 @@ let rec to_collapse (l,r) rs =
       [] -> acc (* reversal happens in caller *)
     | (p,rl,d,v) :: ss ->
       let s = if acc = [] then Collapse ((u,r), v) else SimplifyL ((u,r), v) in
-      F.printf "collapse %a to %a\n%!" Rule.print (u,r) Rule.print (v,r);
+      (*F.printf "collapse %a to %a\n%!" Rule.print (u,r) Rule.print (v,r);*)
       collect (s :: acc) v ss
   in last (l,steps), collect [] l steps
 ;;
@@ -738,7 +742,7 @@ let inference_to_xml step =
     | OrientL (s,t) -> X.Element("orientl", [], [T.to_xml s; T.to_xml t])
     | OrientR (s,t) -> X.Element("orientr", [], [T.to_xml s; T.to_xml t])
     | Compose (st,u) -> X.Element("compose", [], t3_to_xml (st,u))
-    | Collapse (st,u) -> X.Element("collapse", [], t3_to_xml (st,u))
+    | Collapse (st,u) -> X.Element("collapse", [], t3_to_xml (Rule.flip st,u))
   in X.Element("orderedCompletionStep", [], [ to_xml step ])
 ;;
 
@@ -791,6 +795,7 @@ let xml_goal_disproof es0 g_orig ((rr,ee,ord) as res) rst =
 
 let xml_ground_completion ee0 (rr,ee,ord) =
   let steps, (ee',rr') = reconstruct_run ee0 ee rr in
+  let ee' = variant_free ee' in
   let xcproof = X.Element("orderedCompletionProof", [], [ run_to_xml steps ]) in
   let xproof = X.Element("proof", [], [ xcproof ]) in
   let xinput = ordered_completion_input_to_xml ee0 (rr',ee',ord) in

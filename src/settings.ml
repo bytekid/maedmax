@@ -68,7 +68,7 @@ type result = answer * proof
 
 (*** GLOBALS *****************************************************************)
 (* k functions *)
-let k_default = fun i -> if i < 3 then 6 else 2
+let k_default = fun i -> if i < 4 then 4 else 2
 let k2 _ = 2
 
 let tmp = ref false

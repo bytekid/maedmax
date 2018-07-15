@@ -600,7 +600,8 @@ let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
 
 (* constraints to guide search; those get all retracted *)
 let search_constraints ctx (ccl, ccsymlvs) gs =
- let take_max = nth_iteration !(settings.max_oriented) in
+ (* orientable equations are used for CPs in CeTA ... *)
+ let take_max = nth_iteration !(settings.max_oriented) || !(S.do_proof) in
  let assert_c = function
    | S.Red -> c_red ctx ccl
    | S.Empty -> ()
@@ -931,7 +932,7 @@ let remember_state es gs =
 
 (* main ckb function *)
 let rec ckb fs (es, gs) =
-  (* TODO check positive/negative goals??? *)
+ (* TODO check positive/negative goals??? *)
  let eq_ok e = Lit.is_equality e || Lit.is_ground e in
  if not (L.for_all eq_ok es) then raise Fail
  else

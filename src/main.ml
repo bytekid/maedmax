@@ -25,7 +25,7 @@ let strategy = ref []
 
 let do_ordered _ =
   settings.unfailing := true;
-  settings.k := (fun _ -> 2);
+  (*settings.k := (fun _ -> 2);*)
   settings.strategy := S.strategy_ordered
 ;;
 
@@ -354,7 +354,7 @@ let () =
       let (es,gs) as input = Read.file f in
       if !(Settings.interactive) && gs <> [] then
         failwith "Input for interactive mode is not supposed to contain goals";
-      if !(settings.tmp) > 0then
+      if !(settings.tmp) > 0 then
         print_waldmeister es
       else if not !only_termination && not !analyze then
        begin try
