@@ -352,6 +352,7 @@ let () =
   match !filenames with
   | [f] -> 
       let (es,gs) as input = Read.file f in
+      Settings.input_file := Filename.remove_extension (Filename.basename f);
       if !(Settings.interactive) && gs <> [] then
         failwith "Input for interactive mode is not supposed to contain goals";
       if !(settings.tmp) > 0 then

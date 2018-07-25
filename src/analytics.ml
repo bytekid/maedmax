@@ -31,6 +31,7 @@ let time_diffs = ref []
 let mem_diffs = ref []
 let eq_counts = ref []
 let shape = ref NoShape
+let smt_checks = ref 0
 
 (*** FUNCTIONS ***************************************************************)
 let take_time t f x =
@@ -67,6 +68,7 @@ let print () =
   printf "time diffs         %s@." (time_diff_str ());
   printf "memory diffs       %s@." (memory_diff_str ());
   printf "equation counts    %s@." (eq_count_str ());
+  printf "SMT checks          %i@." !smt_checks;
   printf "problem shape      %s@."(Settings.shape_to_string !shape);
   printf "times@.";
   printf " ground join checks %.3f@." !t_gjoin_check;
@@ -193,6 +195,7 @@ let json () =
  let it = "iterations", `Int !iterations in
  let ea = "equalities", `Int !ces in
  let mem = "memory", `Int (memory ()) in
+ let smtc = "SMT checks", `Int !smt_checks in
  let t_ccpred = "time/ccpred", trunc !t_ccpred in
  let t_ccomp = "time/ccomp", trunc !t_ccomp in
  let t_cred = "time/cred", trunc !t_cred in
@@ -208,8 +211,8 @@ let json () =
  let t_cache = "time/cache", trunc !t_cache in
  let res = "restarts", `Int !restarts in
  let shp = "shape", `String (Settings.shape_to_string !shape) in
- let t = `Assoc [it; ea; res; mem; shp; t_ccpred; t_ccomp; t_cred; t_select;
-  t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process; t_sat;
-  t_cache]
+ let t = `Assoc [it; ea; res; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
+  t_select; t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process;
+  t_sat; t_cache]
  in t
 ;;

@@ -18,6 +18,7 @@ val ces : int ref
 val goals : int ref
 val iterations : int ref
 val restarts : int ref
+val smt_checks : int ref
 val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref

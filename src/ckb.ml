@@ -636,6 +636,7 @@ let max_k ctx cc gs =
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
     else (
       let sat_call = if use_maxsat () then max_sat else check in
+      A.smt_checks := !A.smt_checks + 1;
       if A.take_time A.t_sat sat_call ctx then (
         let m = get_model ctx in
         let c = if use_maxsat () then get_cost m else 0 in
@@ -670,6 +671,9 @@ let max_k ctx cc gs =
    push ctx; (* backtrack point for Yices *)
    require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
    search_constraints ctx (cc_eq, cc_symml_vars) gs;
+   let running_time = (Unix.gettimeofday () -. !(start_time)) in
+   if !(Settings.generate_benchmarks) && running_time > 200. then
+     Smtlib.benchmark "intermediate";
    let trss = max_k [] ctx k in
    pop ctx; (* backtrack: get rid of all assertions added since push *)
    trss
@@ -870,6 +874,8 @@ let rec phi ctx aa gs =
     let cc = axs () @ (NS.to_list cps @ (NS.to_list cps_large)) in
     match succeeds ctx (rr, irr) rew cc ieqs gs with
        Some r ->
+       if !(Settings.generate_benchmarks) then
+         Smtlib.benchmark "final";
        if !S.generate_order then
          (check_order_generation true order; failwith "order generated")
        else raise (Success r)
