@@ -91,8 +91,8 @@ let options = Arg.align
        else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
        else if s = "maxcompkbo" then settings.strategy := S.strategy_maxcomp_kbo
        else if s = "okbauto" then settings.strategy := S.strategy_ordered
-       (*else if s = "mpol" then settings.strategy := S.strategy_mpol
-       else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
+       else if s = "linpoly" then settings.strategy := S.strategy_aql
+       (*else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
        else if s = "ordered" then settings.strategy := S.strategy_ordered*)
        else if s = "temp" then settings.strategy := S.strategy_temp
        else failwith "unsupported option for -M"),
