@@ -74,15 +74,7 @@ let options = Arg.align
    ("--kb", Arg.Unit do_unordered,
     " Knuth-Bendix completion (unordered)");
    ("-M", Arg.String (fun s -> 
-       (*if s = "cpred" then settings.strategy := S.strategy_cpred
-       else if s = "comp" then settings.strategy := S.strategy_comp
-       else if s = "dp" then settings.strategy := S.strategy_dp
-       else if s = "dg" then settings.strategy := S.strategy_dg
-       else if s = "dgk" then settings.strategy := S.strategy_dgk*)
        if s = "kbauto" then settings.strategy := S.strategy_auto
-       (*else if s = "auto2" then settings.strategy := S.strategy_auto2
-       else if s = "red" then settings.strategy := S.strategy_red
-       else if s = "no" then settings.strategy := S.strategy_not_oriented*)
        else if s = "lpo" then settings.strategy := S.strategy_lpo
        else if s = "olpo" then settings.strategy := S.strategy_ordered_lpo
        else if s = "okbo" then settings.strategy := S.strategy_ordered_kbo
@@ -92,8 +84,6 @@ let options = Arg.align
        else if s = "maxcompkbo" then settings.strategy := S.strategy_maxcomp_kbo
        else if s = "okbauto" then settings.strategy := S.strategy_ordered
        else if s = "linpoly" then settings.strategy := S.strategy_aql
-       (*else if s = "maxcomp" then settings.strategy := S.strategy_maxcomp
-       else if s = "ordered" then settings.strategy := S.strategy_ordered*)
        else if s = "temp" then settings.strategy := S.strategy_temp
        else failwith "unsupported option for -M"),
     "<mode> strategy (olpo, okbo, olpokbo)");
