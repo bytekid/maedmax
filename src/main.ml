@@ -25,7 +25,7 @@ let strategy = ref []
 
 let do_ordered _ =
   settings.unfailing := true;
-  (*settings.k := (fun _ -> 2);*)
+  settings.k := (fun _ -> 2);
   settings.strategy := S.strategy_ordered
 ;;
 
