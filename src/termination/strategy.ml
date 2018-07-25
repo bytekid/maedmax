@@ -444,7 +444,7 @@ let assert_constraints s j ctx rs =
    This is the only place where the main rule variables (as returned by
    S.find_rule) are constrained. No mirroring. *)
 let bootstrap_constraints j ctx rs =
- big_and ctx [ v <=> (C.get_strict_var ctx (j,rl)) | rl,v <- rs ]
+ big_and ctx [ v <<=>> (C.get_strict_var ctx (j,rl)) | rl,v <- rs ]
 ;;
 
 (* Decodes termination argument associated with strategy s using model m,
