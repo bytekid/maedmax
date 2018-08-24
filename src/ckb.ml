@@ -112,7 +112,8 @@ let store_remaining_nodes ctx ns =
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   (*if !(settings.size_age_ratio) < 100 then*)
     let ns = NS.smaller_than !(settings.size_bound_equations) ns in
-    all_nodes := L.rev_append (L.rev !all_nodes) (NS.sort_size ns);
+    let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
+    all_nodes := L.rev_append (L.rev !all_nodes) ns_sized;
 ;;
 
 let store_remaining_goals ctx ns =
@@ -123,7 +124,7 @@ let store_remaining_goals ctx ns =
 let rec get_oldest_node (aa,rew) =
   match !all_nodes with
      [] -> None
-    | n :: ns -> (
+    | (n, _) :: ns -> (
       try
         all_nodes := ns;
         let s,t = Lit.terms n in
@@ -136,15 +137,15 @@ let rec get_oldest_node (aa,rew) =
       )
 ;;
 
-let get_oldest_node_max max (aa,rew) =
+let get_oldest_node_max max maxmax (aa,rew) =
   let rec get_oldest acc max k =
     if k > 5000 then (
       all_nodes := List.rev acc @ !all_nodes;
-      get_oldest [] (max + 2) 0
+      if max + 2 <= maxmax then get_oldest [] (max + 2) 0 else None
     ) else
       match !all_nodes with
       | [] -> None
-      | n :: ns -> (
+      | ((n, size_n) as na) :: ns -> (
         all_nodes := ns;
         let s,t = Lit.terms n in
         let nfs =
@@ -156,7 +157,7 @@ let get_oldest_node_max max (aa,rew) =
         | Some ((s',rss),(t',rst)) ->
           (* check for subsumption by other literals seems not beneficial *)
           if s' = t' || NS.mem aa n then get_oldest acc max (k+1)
-          else if Lit.size n > max then get_oldest (n :: acc) max (k+1)
+          else if size_n > max then get_oldest (na :: acc) max (k+1)
           else (all_nodes := List.rev acc @ !all_nodes; Some n)
         )
   in
@@ -202,7 +203,7 @@ let rewrite rewriter (cs : NS.t) =
           irrdcbl, NS.add_list nnews news)
   in NS.fold rewrite cs (NS.empty (), NS.empty ())
 ;;  
-   
+
 let rewrite rr = A.take_time A.t_rewrite (rewrite rr)
 
 let reduced rr ns =
@@ -256,14 +257,17 @@ let select_goal_similar ns =
 ;;
 
 let rec get_old_nodes maxsize aarew n =
-  if n = 0 then []
-  else match get_oldest_node_max maxsize aarew with
-  | Some b ->
-    if debug 1 then
-      F.printf "extra age selected: %a  (%i) (%i)\n%!"
-        Lit.print b (Nodes.age b) (Lit.size b);
-    b :: (get_old_nodes maxsize aarew (n - 1))
-  | None -> []
+  let maxmaxsize = maxsize + 6 in
+  let rec get_old_nodes n =
+    if n = 0 then []
+    else match get_oldest_node_max maxsize maxmaxsize aarew with
+    | Some b ->
+      if debug 1 then
+        F.printf "extra age selected: %a  (%i) (%i)\n%!"
+          Lit.print b (Nodes.age b) (Lit.size b);
+      b :: (get_old_nodes (n - 1))
+    | None -> []
+  in get_old_nodes n
 ;;
 
 let selections = ref 0
@@ -947,9 +951,13 @@ let rec phi ctx aa gs =
     check_order_generation false order;
     rew#init ();
     (* TODO: red is often very small, is this rewriting necessary? *)
+    let t = Unix.gettimeofday () in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
-    redcount := !redcount + (NS.size red) ;
+    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
+    redcount := !redcount + (NS.size red);
+    let t = Unix.gettimeofday () in
     let gs = NS.add_all (reduced rew gs) gs in (* rewrite goals wrt new TRS *)
+    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
     (*let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
     let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
@@ -958,13 +966,20 @@ let rec phi ctx aa gs =
     cp_count := !cp_count +  (NS.size cps') ;
     let cps = NS.filter (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in
     let cps_large = NS.filter (fun cp -> Lit.size cp >= !Settings.max_eq_size) cps' in
+    let t = Unix.gettimeofday () in
     let cps = reduced rew cps in (* rewrite CPs *)
+    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track sel (NS.to_list rest) !(A.iterations);
     let gos = overlaps_on rew rr aa_for_ols ovl gs in
-    let gcps = reduced rew gos in (* goal CPs *)
+    let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
+    (*Format.printf "goal pruning: %d -> %d (%d)\n%!"
+      (NS.size gos) (NS.size gcps) !Settings.max_goal_size;*)
+    let t = Unix.gettimeofday () in
+    let gcps = reduced rew gcps in (* goal CPs *)
+    A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
     let gg, grest = select_goals (gs,rew) 2 (NS.diff gcps gs) in
     store_remaining_nodes ctx rest;
     store_remaining_goals ctx grest;
@@ -1059,7 +1074,7 @@ let rec ckb fs (es, gs) =
 let es' = L.map Lit.normalize est in
  let es0 = L.sort Pervasives.compare es' in
  let gs0 = L.map Lit.normalize gs in
- all_nodes := es0;
+ all_nodes := [e, Lit.size e | e <- es0];
  try
   init_settings fs es0 [ Lit.terms g | g <- gs0 ];
   let cas = [ Ac.cassociativity f | f <- !(settings.ac_syms)] in
