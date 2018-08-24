@@ -199,7 +199,7 @@ let print_json_term yes f =
 ;;
 
 let print_res answer res =
-  printf "# SZS status ";
+  printf "%s SZS status " "%";
   let answer_str = success_code answer in
   match res with
    | Completion trs -> printf "SAT\n\n%a@." print_trs trs;
@@ -377,12 +377,14 @@ let () =
     Settings.input_file := Filename.remove_extension (Filename.basename f);
     if !(Settings.interactive) && gs <> [] then
       failwith "Input for interactive mode is not supposed to contain goals";
+    if !(settings.d) > 0 then
+      printf "working on %s\n%!" f;
     if not !only_termination && not !analyze then
       try
         match fst (Timer.run_timed !timeout (run f) input) with
-        | None -> printf "# SZS status Timeout\n%!"
+        | None -> printf "%s SZS status Timeout\n%!" "%"
         | Some _ -> ()
-      with e -> (printf "# SZS status GaveUp\n%!"; raise e)
+      with e -> (printf "%s SZS status GaveUp\n%!" "%"; raise e)
     else if !analyze then
       print_analysis es gs
     else (

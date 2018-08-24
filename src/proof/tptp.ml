@@ -57,7 +57,10 @@ let print_step ppf ?(goal = false) filename eqindex (eqn, o) =
 let print_saturation ppf trs filename =
   let eqindex : (Rule.t, int) H.t = H.create 128 in
   let steps = T.ancestors trs in
-  List.iter (print_step ppf filename eqindex) steps
+  F.fprintf ppf
+    "%s SZS status Satisfiable\n%s SZS output start Saturation@." "%" "%";
+  List.iter (print_step ppf filename eqindex) steps;
+  F.fprintf ppf "@.%s SZS output end Saturation@." "%"
 ;;
 
 let print_goal_proof ppf filename eqs g_orig ((s, t) as st) (rsx, rtx) sigma =
@@ -77,12 +80,15 @@ let print_goal_proof ppf filename eqs g_orig ((s, t) as st) (rsx, rtx) sigma =
   in
   let rls = Listx.unique ([r | r, _ <- rs @ rt] @ grls) in
   let steps = T.ancestors rls in
+  F.fprintf ppf
+    "%s SZS status Unsatisfiable\n%s SZS output start CNFRefutation@." "%" "%";
   let eqindex : (Rule.t, int) H.t = H.create 128 in
   List.iter (print_step ppf filename eqindex) steps;
   List.iter (print_step ppf ~goal:true filename eqindex) gsteps;
   let contradiction, _ = List.hd (List.rev gsteps) in
   F.fprintf ppf "cnf(bot, %s, ($false), inference(cn, [status(thm)], [%s]))."
-    "negated_conjecture" (name eqindex contradiction)
+    "negated_conjecture" (name eqindex contradiction);
+  F.fprintf ppf "@.%s SZS output end CNFRefutation@." "%"
 ;;
 
 let fprint_proof ppf filename (es,gs) = function
@@ -91,7 +97,7 @@ let fprint_proof ppf filename (es,gs) = function
     let g_orig = Literal.terms (List.hd gs) in
     let eqs = List.map Literal.terms es in
     let g = Variant.normalize_rule g_orig in
-    print_goal_proof ppf filename eqs g (s,t) (rs,rt) sigma
+    print_goal_proof ppf filename eqs g (s, t) (rs, rt) sigma
   | Settings.Completion rr ->
     print_saturation ppf rr filename
   | Settings.GroundCompletion (rr,ee,o) -> (* no goal exists *)
