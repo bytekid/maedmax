@@ -54,12 +54,12 @@ let to_string f =
       "(and " ^ (List.fold_left (fun s t -> s ^ (str t) ^ " ")) "" fs ^ ")"
     | Or fs ->
       "(or " ^ (List.fold_left (fun s t -> s ^ (str t) ^ " ")) "" fs ^ ")"
-    | Xor(f1,f2) -> "(xor " ^ (str f1) ^ " " ^ (str f2) ^ ")"
-    | Implies(f1,f2) -> "(implies " ^ (str f1) ^ " " ^ (str f2) ^ ")"
-    | Iff(f1,f2) -> "(= " ^ (str f1) ^ " " ^ (str f2) ^ ")"
-    | Lt(t1,t2) -> "(< " ^ (strt t1) ^ " " ^ (strt t2) ^ ")"
-    | Leq(t1,t2) -> "(<= " ^ (strt t1) ^ " " ^ (strt t2) ^ ")"
-    | Eq(t1,t2) -> "(= " ^ (strt t1) ^ " " ^ (strt t2) ^ ")"
+    | Xor(f1, f2) -> "(xor " ^ (str f1) ^ " " ^ (str f2) ^ ")"
+    | Implies(f1, f2) -> "(implies " ^ (str f1) ^ " " ^ (str f2) ^ ")"
+    | Iff(f1, f2) -> "(= " ^ (str f1) ^ " " ^ (str f2) ^ ")"
+    | Lt(t1, t2) -> "(< " ^ (strt t1) ^ " " ^ (strt t2) ^ ")"
+    | Leq(t1, t2) -> "(<= " ^ (strt t1) ^ " " ^ (strt t2) ^ ")"
+    | Eq(t1, t2) -> "(= " ^ (strt t1) ^ " " ^ (strt t2) ^ ")"
     | BoolVar name -> name
   in str f
 ;; 
@@ -90,14 +90,14 @@ let collect vf vt = List.fold_left (fun acc f -> visit vf vt acc f) []
 
 let bool_vars fs =
   let bvar acc f =
-    match f with BoolVar s when not (List.mem s acc) -> s::acc | _ -> acc
+    match f with BoolVar s when not (List.mem s acc) -> s :: acc | _ -> acc
   in
   collect bvar (fun acc _ -> acc) fs
 ;;
 
 let int_vars fs =
   let ivar acc f =
-    match f with IntVar s when not (List.mem s acc) -> s::acc | _ -> acc
+    match f with IntVar s when not (List.mem s acc) -> s :: acc | _ -> acc
   in
   collect (fun acc _ -> acc) ivar fs
 ;;
@@ -110,33 +110,33 @@ let (!!) = function
 ;;
 
 let (<|>) x y =
-  match x,y with
+  match x, y with
   | True, _
   | _, True -> True
   | False, _ -> y
   | _, False -> x
-  | _ -> Or [x;y]
+  | _ -> Or [x; y]
 ;;
 
 let (<&>) x y =
-  match x,y with
+  match x, y with
   | False, _
   | _, False -> False
   | True, _ -> y
   | _, True -> x
-  | _ -> And [x;y]
+  | _ -> And [x; y]
 ;;
 
 let (<=>>) x y =
-match x,y with
+match x, y with
 | False, _ -> True
-| _ -> Implies(x,y)
+| _ -> Implies(x, y)
 
 let (<+>) x y =
-  match x,y with
+  match x, y with
   | Num 0, _ -> y
   | _, Num 0 -> x
-  | _ -> Plus [x;y]
+  | _ -> Plus [x; y]
 
 let iff x y = Iff(x,y)
 
@@ -182,10 +182,10 @@ let require f =
 ;;
 
 let assert_weighted f n =
-    match !soft_asserts with
-    | [] -> failwith "Smtlib.assert_weighted: no context"
-    | fs :: soft_asserts' -> soft_asserts := ((f,n) :: fs) :: soft_asserts'
-  ;;
+  match !soft_asserts with
+  | [] -> failwith "Smtlib.assert_weighted: no context"
+  | fs :: soft_asserts' -> soft_asserts := ((f,n) :: fs) :: soft_asserts'
+;;
 
 let push _ =
   soft_asserts := [] :: !soft_asserts;
@@ -210,7 +210,7 @@ let write_out out_channel =
   List.iter (fun v -> write (declare "Bool" v)) (bool_vars all);
   List.iter (fun v -> write (declare "Int" v)) (int_vars all);
   List.iter (fun f -> write ("(assert " ^ (to_string f) ^ ")")) hard;
-  let write_soft (f,n) =
+  let write_soft (f, n) =
     let sn = string_of_int n in
     write ("(assert-soft " ^ (to_string f) ^ " :weight " ^ sn ^ ")")
   in
