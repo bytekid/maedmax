@@ -433,24 +433,27 @@ let overlaps rr aa =
  in
  let ovl = new Overlapper.overlapper ns in
  ovl#init ();
- let cps2 = NS.of_list [ cp | n <- ns; cp <- ovl#cps n ] in
+ let cps2 = NS.of_list [cp | n <- ns; cp <- ovl#cps n] in
  cps2, ovl
 ;;
 
 let overlaps rr = A.take_time A.t_overlap (overlaps rr)
 
-(* goal only as outer rule *)
+(* Goal only as outer rule, compute CPs with equations.
+   Use rr only if the goals are not ground (otherwise, goals with rr are
+   covered by rewriting). *)
 let overlaps_on rr aa _ gs =
-  let ns = rr @ aa in
+  let goals_ground = List.for_all Rule.is_ground !(settings.gs) in
+  let ns = if goals_ground then aa else rr @ aa in
   let ovl = new Overlapper.overlapper ns in
   ovl#init ();
   let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
-  let cps2 = NS.of_list [ cp | g <- gs_for_ols; cp <- ovl#cps g ] in
+  let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
   cps2
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let saturated ctx (rr,ee) rewriter cc =
+let saturated ctx (rr, ee) rewriter cc =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
   let d = !(settings.d) in
