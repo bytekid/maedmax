@@ -3,33 +3,28 @@ module L = List
 module T = Term
 module C = Cache
 module Sig = Signature
+module Logic = Settings.Logic
 
 (*** OPENS *******************************************************************)
 open Term
-open Yicesx
+open Logic
 open Arith
 
 (*** GLOBALS *****************************************************************)
-(*let env = ref {sign=[]; w0=mk_num (mk_context ()) 0; wfs=[]}*)
-(* settings for KBO *)
-(*let flags = { af = ref false }*)
-
 (* signature *)
 let funs = ref []
 
 (* map function symbol and strategy stage to variable for weight *)
-let weights : (int * Sig.sym, Yicesx.t) Hashtbl.t 
- = Hashtbl.create 32
+let weights : (int * Sig.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
 
 (* map function symbol and strategy stage to variable for precedence *)
-let precedence : (int * Sig.sym, Yicesx.t) Hashtbl.t 
- = Hashtbl.create 32
+let precedence : (int * Sig.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
 
 (* map function symbol and strategy stage to variable expressing whether
    argument filtering for symbol is list *)
-let af_is_list : (int * Sig.sym, Yicesx.t) Hashtbl.t = Hashtbl.create 32
+let af_is_list : (int * Sig.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
 (* variable whether argument position for symbol is contained in filtering *)
-let af_arg : ((int * Sig.sym) * int, Yicesx.t) Hashtbl.t = Hashtbl.create 64
+let af_arg : ((int * Sig.sym) * int, Logic.t) Hashtbl.t = Hashtbl.create 64
 
 (*** FUNCTIONS ***************************************************************)
 let name = Sig.get_fun_name
@@ -54,50 +49,49 @@ let adm_smt (ctx,k) =
   let ps = [ f,g | f,_ <- !funs; g,_ <- !funs; f <> g ] in
   let total_prec = big_and ctx [ !! (p f <=> (p g)) | f, g <- ps ] in
   let cw0 = big_or ctx [ w k c <=> one | c <- cs ] in
-  let cw0' = if !(Settings.do_proof) then cw0 else mk_true ctx in
+  let cw0' = if !(Settings.do_proof) <> None then cw0 else mk_true ctx in
   big_and1 [ensure_nat; cadm; uadm; total_prec; cw0']
 ;;
     
 let weight (ctx,k) t =
- let rec weight = function
-  | V _ -> mk_one ctx (* w0 = 1 *)
-  | F(f,ss) -> sum1 ((w k f) :: [weight si | si <- ss ])
- in weight t
+  let rec weight = function
+    | V _ -> mk_one ctx (* w0 = 1 *)
+    | F(f,ss) -> sum1 ((w k f) :: [weight si | si <- ss ])
+  in weight t
 ;;
 
 let rec remove_equals ss tt =
   match ss,tt with
-  | [], [] -> [],[]
-  | s::sss, t::ttt -> 
-     if s <> t then ss,tt else remove_equals sss ttt
-  | _ -> failwith "remove_equals: different lengths"
+    | [], [] -> [],[]
+    | s::sss, t::ttt ->
+      if s <> t then ss,tt else remove_equals sss ttt
+    | _ -> failwith "Kbo.remove_equals: different lengths"
 ;;
 
-
 let rec gt (ctx,k) s t =
- if (s = t || not (Rule.is_non_duplicating (s,t))) then mk_false ctx 
- else 
-  let ws, wt = weight (ctx,k) s, weight (ctx,k) t in
-  let cmp = 
-   match s,t with
-    | V _,_ -> mk_false ctx
-    | F(f,ss), V _ -> mk_true ctx (* var condition already checked *)
-    | F(f,ss), F(g,ts) when f = g ->
-     (match remove_equals ss ts with
-      | si :: _, ti :: _ -> gt (ctx,k) si ti
-      | _ -> failwith "ykbo: different lengths")
-    | F(f,ss), F(g,ts) -> (prec k f) <>> (prec k g) 
-   in
-   ws <>> wt <|> ((ws <=> wt) <&> cmp)
+  if (s = t || not (Rule.is_non_duplicating (s,t))) then mk_false ctx
+  else
+    let ws, wt = weight (ctx,k) s, weight (ctx,k) t in
+    let cmp = match s,t with
+     | V _,_ -> mk_false ctx
+     | F(f,ss), V _ -> mk_true ctx (* var condition already checked *)
+     | F(f,ss), F(g,ts) when f = g -> ( match remove_equals ss ts with
+       | si :: _, ti :: _ -> gt (ctx,k) si ti
+       | _ -> failwith "Kbo.gt different lengths")
+     | F(f,ss), F(g,ts) -> (prec k f) <>> (prec k g)
+    in
+    ws <>> wt <|> ((ws <=> wt) <&> cmp)
 ;;
 
 let ge (ctx,k) s t = if s = t then mk_true ctx else gt (ctx,k) s t
 
 let init_kbo (ctx,k) fs =
+  Hashtbl.clear precedence;
+  Hashtbl.clear weights;
   let add (f,_) =
-   let s = "kbo" ^ (name f) ^ (string_of_int k) in
-   Hashtbl.add precedence (k,f) (mk_int_var ctx (s^"p"));
-   Hashtbl.add weights (k,f) (mk_int_var ctx s)
+    let s = "kbo" ^ (name f) ^ (string_of_int k) in
+    Hashtbl.add precedence (k,f) (mk_int_var ctx (s^"p"));
+    Hashtbl.add weights (k,f) (mk_int_var ctx s)
   in List.iter add fs;
   funs := fs;
   adm_smt (ctx,k)
@@ -105,59 +99,58 @@ let init_kbo (ctx,k) fs =
 
 let init c = init_kbo c
 
-
-
 let cond_gt k ctx conds s t =
- let rec gt s t =
-   if List.mem (s,t) conds then mk_true ctx
-   else if (s = t || not (Rule.is_non_duplicating (s,t))) then mk_false ctx 
-   else 
-     let ws, wt = weight (ctx,k) s, weight (ctx,k) t in
-     let cmp = 
-       match s,t with
-         | V _,_ -> mk_false ctx
-         | F(f,ss), V _ -> mk_true ctx (* var condition already checked *)
-         | F(f,ss), F(g,ts) when f = g ->
-           (match remove_equals ss ts with
-             | si :: _, ti :: _ -> gt si ti
-             | _ -> failwith "ykbo: different lengths")
-         | F(f,ss), F(g,ts) -> (prec k f) <>> (prec k g) 
+  let rec gt s t =
+    if List.mem (s,t) conds then mk_true ctx
+    else if (s = t || not (Rule.is_non_duplicating (s,t))) then mk_false ctx
+    else
+      let ws, wt = weight (ctx,k) s, weight (ctx,k) t in
+      let cmp =
+        match s,t with
+          | V _,_ -> mk_false ctx
+          | F(f,ss), V _ -> mk_true ctx (* var condition already checked *)
+          | F(f,ss), F(g,ts) when f = g -> (match remove_equals ss ts with
+            | si :: _, ti :: _ -> gt si ti
+            | _ -> failwith "Kbo.cond_gt: different lengths")
+          | F(f,ss), F(g,ts) -> (prec k f) <>> (prec k g)
      in ws <>> wt <|> ((ws <=> wt) <&> cmp)
   in big_or1 (gt s t :: [ gt u t | (s',u) <- conds; s' = s ])
 ;;
 
-
 let eval_table k m h =
- let add (k',f) x p =
-   if k <> k' then p
-   else (
-     try
-       let v = eval_int_var m x in
-       Hashtbl.add p f v; p
-     with _ -> p)
- in Hashtbl.fold add h (Hashtbl.create 16)
+  let add (k',f) x p =
+    if k <> k' then p
+    else (
+      try
+        let v = eval_int_var m x in
+        Hashtbl.add p f v; p
+      with _ -> p)
+  in Hashtbl.fold add h (Hashtbl.create 16)
 ;;
 
 let decode_term_gt k m =
- let w = Hashtbl.find (eval_table k m weights) in
- let rec weight = function
-  | T.V _ -> 1 (* w0 = 1 *)
-  | T.F (f, ts) -> List.fold_left (fun s ti -> s + (weight ti)) (w f) ts
- in
- let prec = Hashtbl.find (eval_table k m precedence) in
- let rec gt s t =
-  if Term.is_subterm s t || not (Rule.is_non_duplicating (s,t)) then false
-  else if Term.is_subterm t s then true
-  else (
-   let ws, wt = weight s, weight t in
-   let cmp = match s,t with
-    | T.V _, _
-    | _, T.V _  -> false (* no subterm *)
-    | T.F(f,ss), T.F(g,ts) ->
-      let lex (gt_lex,ge) (si,ti) = gt_lex || (ge && gt si ti), ge && si=ti in
-      if f <> g then prec f > prec g
-      else fst (L.fold_left lex (false, true) (List.combine ss ts))
-   in ws > wt || (ws = wt && cmp))
+  let tw = eval_table k m weights in
+  let w = Hashtbl.find tw in
+  let rec weight = function
+    | T.V _ -> 1 (* w0 = 1 *)
+    | T.F (f, ts) -> List.fold_left (fun s ti -> s + (weight ti)) (w f) ts
+  in
+  let tp = eval_table k m precedence in
+  let prec = Hashtbl.find tp in
+  let rec gt s t =
+    if Term.is_subterm s t || not (Rule.is_non_duplicating (s,t)) then false
+    else if Term.is_subterm t s then true
+    else (
+      let ws, wt = weight s, weight t in
+      let cmp = match s,t with
+        | T.V _, _
+        | _, T.V _  -> false (* no subterm *)
+        | T.F(f,ss), T.F(g,ts) ->
+          let lex (gt_lex,ge) (u,v) = gt_lex || (ge && gt u v), ge && u = v in
+          if f <> g then prec f > prec g
+          else fst (L.fold_left lex (false, true) (List.combine ss ts))
+      in
+      ws > wt || (ws = wt && cmp))
   in gt
 ;;
 
@@ -167,22 +160,18 @@ let eval k m =
   List.sort (fun (_,p,_) (_,q,_) -> p - q) [ (f,a), prec f, w f | f,a <- !funs ]
 ;;
 
-let print = function
-    [] -> ()
+let to_string = function
+    [] -> ""
   | ((f,_),p,w) :: fpw ->
-    Format.printf "KBO \n %!";
+    let s = "KBO \n " ^ (name f) in
     let name = Signature.get_fun_name in
-    if fpw <> [] then (
-      Format.printf " %s " (name f);
-      List.iter (fun ((f,_),i,_) -> Format.printf "< %s %!" (name f)) fpw;
-      Format.printf "\n"
-      );
-    Format.printf "  w0 = 1, w(%s) = %d" (name f) w;
-    List.iter (fun ((f,_),_,w) -> Format.printf ", w(%s) = %d" (name f) w) fpw;
-    Format.printf "\n%!"
+    let s = List.fold_left (fun s ((f,_),i,_) -> s ^" < " ^ (name f)) s fpw in
+    let s = s ^ "\n w0 = 1, w(" ^ (name f) ^ ") = " ^ (string_of_int w) in
+    let addw s ((f,_),_,w) = s ^ ", w(" ^ (name f) ^ ") = "^(string_of_int w) in
+    List.fold_left addw s fpw
 ;;
 
-
+let print fpw = Format.printf "%s\n%!" (to_string fpw)
 
 let print_params = function
     [] -> ()
@@ -193,7 +182,7 @@ let print_params = function
       Format.printf "--precedence=\"%s" (name f);
       List.iter (fun ((f,_),i,_) -> Format.printf "<%s" (name f)) fpw;
       Format.printf "\" %!"
-      );
+    );
     Format.printf "--order-weights=\"%s:%d" (name f) w;
     List.iter (fun ((f,_),_,w) -> Format.printf ",%s:%d" (name f) w) fpw;
     Format.printf "\"\n%!"
@@ -214,6 +203,12 @@ let decode_xml fpws =
   Xml.Element("knuthBendixOrder", [], [ w0; pw ] )
 ;;
 
+let encode k fpw ctx =
+  let num = Logic.mk_num ctx in
+  let add ((f,_),p,wf) = prec k f <=> (num p) <&> w k f <=> (num wf) in
+  Logic.big_and ctx (List.map add fpw)
+;;
+
 let decode k m =
   let gt = decode_term_gt k m in
   let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
@@ -223,10 +218,12 @@ let decode k m =
   in
   let fpw = eval k m in
   object
-    method bot = bot;;
-    method gt = gt;;
-    method print = fun _ -> print fpw;;
-    method to_xml = decode_xml fpw;;
-    method print_params = fun _ -> print_params fpw;;
+    method bot = bot
+    method gt = gt
+    method smt_encode ctx = encode k fpw ctx
+    method to_string = to_string fpw
+    method print = fun _ -> print fpw
+    method to_xml = decode_xml fpw
+    method print_params = fun _ -> print_params fpw
   end
 ;;

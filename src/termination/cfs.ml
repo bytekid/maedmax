@@ -1,18 +1,18 @@
 
 (*** MODULES *****************************************************************)
 module C = Cache
+module Logic = Settings.Logic
 
 (*** OPENS *******************************************************************)
 open Term
-open Yices
-open Yicesx
+open Logic
 
 (*** GLOBALS *****************************************************************)
 (* signature *)
 let funs : (Signature.sym * int) list ref = ref []
 (* map function symbol and strategy stage to bool whether its counted *)
-let decreasing : (int * Signature.sym, Yicesx.t) Hashtbl.t = Hashtbl.create 32
-let all_weak : Yicesx.t option ref = ref None  
+let decreasing : (int * Signature.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
+let all_weak : Logic.t option ref = ref None  
 
 (*** FUNCTIONS ***************************************************************)
 let passthru () = match !all_weak with
@@ -56,7 +56,7 @@ let init (ctx,k) fs =
  one <>=> (sum ctx [ite (dec (ctx,k) f) one zero | f,_ <- !funs ])
 ;;
 
-let decode_print k m = 
+let decode_string k m = 
  let dps = [ rl | rl,v <- C.get_all_strict 1; eval m v ] in
  let rls = [ rl | rl,v <- C.get_all_strict 0; eval m v ] in
  let fs = Rules.functions (dps @ rls) in
@@ -65,16 +65,15 @@ let decode_print k m =
   with Not_found -> false
  in
  if eval m (passthru ()) then
-  Format.printf "(no symbol count decrease)\n "
+  "(no symbol count decrease)\n "
  else (
-  Format.printf "symbol count decrease: @\n ";
-  try 
-   let f = List.find is_decreasing fs in
-   Format.printf "%s\n%!" (Signature.get_fun_name f)
-  with Not_found ->
-   Format.printf "none\n%!"
+  "symbol count decrease: @\n " ^
+  try let f = List.find is_decreasing fs in (Signature.get_fun_name f)
+  with Not_found -> "none"
   )
 ;;
+
+let decode_print k m = Format.printf "%s\n%!" (decode_string k m)
 
 let decode k m =
   let is_decreasing (f,_) = 
@@ -90,10 +89,12 @@ let decode k m =
     | c :: cs -> Some c
   in
   object
-    method bot = bot;;
-    method gt = gt;;
-    method print = fun _ -> decode_print k m;;
-    method to_xml = Xml.Element("cfs", [], []);;
-    method print_params = Order.default#print_params;;
+    method bot = bot
+    method gt = gt
+    method smt_encode ctx = Logic.mk_false ctx
+    method to_string = decode_string k m
+    method print = fun _ -> decode_print k m
+    method to_xml = Xml.Element("cfs", [], [])
+    method print_params = Order.default#print_params
   end
 ;;

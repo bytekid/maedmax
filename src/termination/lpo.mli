@@ -1,26 +1,30 @@
 val set_af : unit -> unit
 
-val gt : (Yices.context * int) -> Term.t -> Term.t -> Yicesx.t
+val gt : (Settings.Logic.context * int) -> Term.t -> Term.t -> Settings.Logic.t
 
-val ge : (Yices.context * int) -> Term.t -> Term.t -> Yicesx.t
+val ge : (Settings.Logic.context * int) -> Term.t -> Term.t -> Settings.Logic.t
 
-val gt_af : (Yices.context * int) -> Term.t -> Term.t -> Yicesx.t
+val gt_af : (Settings.Logic.context * int) -> Term.t -> Term.t ->
+  Settings.Logic.t
 
-val ge_af : (Yices.context * int) -> Term.t -> Term.t -> Yicesx.t
+val ge_af : (Settings.Logic.context * int) -> Term.t -> Term.t ->
+  Settings.Logic.t
 
-val init : (Yices.context * int) -> (Signature.sym * int) list -> Yicesx.t
+val init : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
+  Settings.Logic.t
 
-val init_af : (Yices.context * int) -> (Signature.sym * int) list -> Yicesx.t
+val init_af : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
+  Settings.Logic.t
 
-val decode_print: int -> Yices.model -> unit
+val decode_print: int -> Settings.Logic.model -> unit
 
-val decode_term_gt : int -> Yices.model -> (Term.t -> Term.t -> bool)
+val decode_term_gt : int -> Settings.Logic.model -> (Term.t -> Term.t -> bool)
 
-val decode_print_af: int -> Yices.model -> unit
+val decode_print_af: int -> Settings.Logic.model -> unit
 
-val decode: int -> Yices.model -> Order.t
+val decode: int -> Settings.Logic.model -> Order.t
 
 val clear : unit -> unit
 
-val cond_gt : int -> Yices.context -> (Term.t * Term.t) list -> Term.t ->
-              Term.t -> Yicesx.t
+val cond_gt : int -> Settings.Logic.context -> (Term.t * Term.t) list ->
+  Term.t -> Term.t -> Settings.Logic.t

@@ -1,8 +1,9 @@
-val gt : (Yices.context * int) -> Term.t -> Term.t -> Yicesx.t
+val gt : (Settings.Logic.context * int) -> Term.t -> Term.t -> Settings.Logic.t
 
-val ge : (Yices.context * int) -> Term.t -> Term.t -> Yicesx.t
+val ge : (Settings.Logic.context * int) -> Term.t -> Term.t -> Settings.Logic.t
 
-val init : (Yices.context * int) -> (Signature.sym * int) list -> Yicesx.t
+val init : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
+  Settings.Logic.t
 
-val decode_print : int -> Yices.model -> unit
+val decode_print : int -> Settings.Logic.model -> unit
                                        

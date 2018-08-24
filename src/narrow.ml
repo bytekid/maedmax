@@ -17,13 +17,18 @@ let pstr = function
   | p -> L.fold_left (fun s i -> s ^ (string_of_int i)) "" p
 ;;
 
+(* remove all positions >= p from ps and add pq for q a fun pos in r *)
+let propagate_basic_pos p ps r =
+  let ps' = Hashset.filter2new (fun q -> not (Listx.is_prefix p q)) ps in
+  let ps_new = Hashset.of_list [ p @ q | q <- T.function_positions r ] in
+  Hashset.add_all ps_new ps'
+;;
+
 let rec nf rr (s,ps) =
   let nf_at_with p (t,pt) (l,r) =
     try
       let u = Rewriting.step_at_with t p (l,r) in
-      let pt' = L.filter (fun q -> not (Listx.is_prefix p q)) pt in
-      let pu = Listx.unique (pt' @ [ p @ q | q <- T.function_positions r ]) in
-      (u,pu)
+      (u, propagate_basic_pos p pt r)
     with _ -> (t,pt)
   in
   let nf_at t_pt p = List.fold_left (nf_at_with p) t_pt rr in
@@ -31,6 +36,7 @@ let rec nf rr (s,ps) =
   if s_ps' = (s,ps) then (s,ps) else nf rr s_ps'
 ;;
 
+(* rewriting to normal form for both terms *)
 let nf2 rr ((s,t),(ps,pt)) =
   let s',ps' = nf rr (s,ps) in
   let t',pt' = nf rr (t,pt) in
@@ -43,8 +49,7 @@ let narrow_forward_at_with rr ((s,t),(ps,pt)) p (l,r) =
   try
     let subst = T.substitute (Subst.mgu s_p l) in
     let s' = T.replace (subst s) (subst r) p in
-    let ps' = L.filter (fun q -> not (Listx.is_prefix p q)) ps in
-    let ps' = Listx.unique (ps' @ [ p @ q | q <- T.function_positions r ]) in
+    let ps' = propagate_basic_pos p ps r in
     let st', keep_dir = Variant.normalize_rule_dir (s',subst t) in
     let pst = if keep_dir then (ps',pt) else (pt,ps') in
     if debug () then
@@ -65,13 +70,14 @@ let narrow_at rr st p =
 
 let merge ((s,t),(ps,pt)) ((s',t'),(ps',pt')) =
   if R.variant (s,t) (s',t') then
-    (s,t),(Listx.unique (ps@ps'), Listx.unique (pt@pt'))
+    (s,t),(Hashset.add_all ps ps', Hashset.add_all pt pt')
   else if R.variant (t,s) (s',t') then
-    (s',t'),(Listx.unique (pt@ps'), Listx.unique (ps@pt'))
+    (s',t'),(Hashset.add_all pt ps', Hashset.add_all ps pt')
   else ((s',t'),(ps',pt'))
 ;;
 
-let sym_variant ((s,t),_) (st',_) = R.variant (t,s) st' || R.variant (s,t) st'
+(*let sym_variant ((s,t),_) (st',_) = R.variant (t,s) st' || R.variant (s,t) st'*)
+let sym_variant ((s,t),_) (st',_) = (t,s) = st' || (s,t) = st'
 
 let rec add st = function
     [] -> [st]
@@ -82,8 +88,8 @@ let rec add st = function
 let unique = L.fold_left (fun all g -> add g all) []
 
 let narrow rr ((s,t),(ps,pt)) =
-  L.concat ((L.map (narrow_at rr ((s,t),(ps,pt))) ps) @
-  (L.map (narrow_at rr ((t,s),(pt,ps))) pt))
+  L.concat ((Hashset.map_to_list (narrow_at rr ((s,t),(ps,pt))) ps) @
+  (Hashset.map_to_list (narrow_at rr ((t,s),(pt,ps))) pt))
 ;;
 
 let decide rr ee ord gs =
@@ -95,14 +101,15 @@ let decide rr ee ord gs =
   let ee' = L.map patch ee in
   let var_add es n = if not (L.exists (R.variant n) es) then n::es else es in
   let ee' = L.fold_left var_add [] ee' in
-  let ee' = L.filter (fun e -> not (L.exists (fun e' -> R.is_proper_instance e e') ee')) ee' in
+  let ee' = L.filter
+    (fun e -> not (L.exists (fun e' -> R.is_proper_instance e e') ee')) ee' in
   if debug () then (
     Format.printf "EE:\n%a\n%!" Rules.print ee');
   let rr' = rr @ ee' in
 
   let rec decide_by_narrowing all gs =
-  if debug () then (
-    Format.printf "start decide_by_narrowing iteration\n%!";
+  (*if debug () then (
+    Format.printf "%i start decide_by_narrowing iteration\n%!" (List.length gs);
     let psstr ps =
       "{" ^ (L.fold_left (fun s p -> s ^ ", " ^ (pstr p)) "" ps) ^ "}"
     in
@@ -112,26 +119,29 @@ let decide rr ee ord gs =
     Format.printf "all:\n";
     L.iter (fun ((s,t),(ps,pt)) ->
       Format.printf "  (%a,%a) (%s,%s)\n%!" T.print s T.print t
-        (psstr ps) (psstr pt)) all);
+        (psstr ps) (psstr pt)) all);*)
   let unifiable ((s,t),_) = Subst.unifiable s t in
+  let both_empty (ps,pt) = Hashset.is_empty ps && Hashset.is_empty pt in
   if L.exists unifiable gs then (
     if debug () then
       Format.printf "UNSAT, found unifiable equation\n%!";
     Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[])))
-  else if L.for_all (fun (_,(ps,pt)) -> ps @ pt = []) gs then (
+  else if L.for_all (fun (_,pps) -> both_empty pps) gs then (
     Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
   else
     let all' = unique (all @ gs) in
     let remove_gs ((st,(ps,pt)) as np) =
       try
-        let _,(ps',pt') = L.find (fun (st',_) -> R.variant st' st) all' in
-        (st,(Listset.diff ps ps', Listset.diff pt pt'))
+        let _,(ps',pt') = L.find (fun (st',_) -> st' = st) all' in
+        (st,(Hashset.diff ps ps', Hashset.diff pt pt'))
       with Not_found -> np
     in
     let gs' = unique (L.concat (L.map (narrow rr') gs)) in
     let gs' = L.map remove_gs gs' in
-    decide_by_narrowing all' (Listx.unique gs')
+    decide_by_narrowing all' gs'
   in
-  let gs = [(s,t), (T.function_positions s,T.function_positions t)|s,t <- gs] in
-  decide_by_narrowing [] gs
+  let poss t = Hashset.of_list (T.function_positions t) in
+  let gs = [(s,t), (poss s, poss t) | s,t <- gs] in
+  let r = decide_by_narrowing [] gs in
+  r
 ;;

@@ -5,6 +5,7 @@ open Term
 module Sig = Signature
 module Ac = Theory.Ac
 module S = Strategy
+module Logic = Settings.Logic
 
 (*** TYPES *******************************************************************)
 type sys = {
@@ -23,7 +24,7 @@ type problem = {
   id: string
 }
 
-type answer = True | False | Maybe of Yicesx.t
+type answer = True | False | Maybe of Logic.t
 
 exception No_var_order
 
@@ -35,8 +36,8 @@ let debug : int ref = ref 0
 let extended_signature : bool ref = ref false
 
 (*** FUNCTIONS ***************************************************************)
-let (<&>) = Yicesx.(<&>)
-let (<|>) = Yicesx.(<|>)
+let (<&>) = Logic.(<&>)
+let (<|>) = Logic.(<|>)
 
 (* we assume the terms to be given descending: a condition s,t means s > t *)
 let rec order_to_conditions = function
@@ -57,38 +58,38 @@ let extend_var_orders vo (s,t) =
 ;;
 
 let get_model c =
-  let ctx = Yicesx.ctx c in
-  Yicesx.push ctx;
-  Yicesx.require c;
-  let a = if Yicesx.check ctx then Some (Yicesx.get_model ctx) else None in
-  Yicesx.pop ctx;
+  let ctx = Logic.ctx c in
+  Logic.push ctx;
+  Logic.require c;
+  let a = if Logic.check ctx then Some (Logic.get_model ctx) else None in
+  Logic.pop ctx;
   a
 ;;
 
 let get_model_decode c strategy =
-  let ctx = Yicesx.ctx c in
-  Yicesx.push ctx;
-  Yicesx.require c;
+  let ctx = Logic.ctx c in
+  Logic.push ctx;
+  Logic.require c;
   let a =
-    if Yicesx.check ctx then
-      let m = Yicesx.get_model ctx in
+    if Logic.check ctx then
+      let m = Logic.get_model ctx in
       Some (S.decode 0 m strategy)
     else None
   in
-  Yicesx.pop ctx;
+  Logic.pop ctx;
   a
 ;;
 
 let check c = get_model c <> None 
 
 let check_constraints strategy trs c =
-  match get_model (Yicesx.big_and1 (c :: [ Cache.find_rule r | r <- trs ])) with
+  match get_model (Logic.big_and1 (c :: [ Cache.find_rule r | r <- trs ])) with
     Some m -> Some m
   | None -> None
 ;;
 
 let check_decode_constraints s trs c =
-  get_model_decode (Yicesx.big_and1 (c :: [ Cache.find_rule r | r <- trs ])) s
+  get_model_decode (Logic.big_and1 (c :: [ Cache.find_rule r | r <- trs ])) s
 ;;
 
 let mk_sys trs es acsyms fs s = {
@@ -111,7 +112,7 @@ let contradictory_constraints sys ctx p =
   let cs = order_to_conditions (p.var_order) in
   let cs_rem st = Listx.remove st cs in
   let contradict (s,t) = S.cond_gt sys.strategy 0 ctx (cs_rem (s,t)) t s in
-  check (Yicesx.big_or ctx [ contradict c | c <- cs ])
+  check (Logic.big_or ctx [ contradict c | c <- cs ])
 ;;
 
 let (<||>) a b = match a,b with
@@ -131,15 +132,15 @@ let (<&&>) a b = match a,b with
 ;;
 
 let yices_answer ctx = function
-    False -> Yicesx.mk_false ctx
-  | True -> Yicesx.mk_true ctx
+    False -> Logic.mk_false ctx
+  | True -> Logic.mk_true ctx
   | Maybe c -> c
 ;;
 
 let show = function
     True -> Format.printf "True"
   | False -> Format.printf "False"
-  | Maybe c -> Format.printf "Maybe: "; Yicesx.show c 
+  | Maybe c -> Format.printf "Maybe: "; Logic.show c 
 ;;
 
 let print_order = Listx.print Term.print " > "
@@ -243,7 +244,7 @@ let rec joinable ctx sys p =
   let p' = {p with s = nf sys.trs p.s; t = nf sys.trs p.t; } in
   if r_joinable ctx sys p || (e_instance ctx sys p) || (e_instance ctx sys p')
     then True
-  else if !(Settings.do_proof) then False (* CeTA does not support more *)
+  else if !(Settings.do_proof) <> None then False (* CeTA does not support more *)
   else if sys.acsyms <> [] then ac_joinable ctx sys p
   else instance_joinable ctx sys p None
   (*let j0 = joinable_args ctx sys p in

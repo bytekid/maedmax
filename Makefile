@@ -1,4 +1,7 @@
-OCB_FLAGS = -use-ocamlfind -pkg unix -pkg yojson -pkg ocamlyices -pkg xml-light -I src -I src/util -I src/input -I src/logic -I src/rewriting -I src/termination
+OCB_FLAGS = -use-ocamlfind \
+  -pkg unix -pkg yojson -pkg ocamlyices -pkg z3 -pkg xml-light \
+	-I src -I src/util -I src/input -I src/logic -I src/proof -I src/rewriting \
+	-I src/termination
 
 OCB = 		ocamlbuild $(OCB_FLAGS)
 

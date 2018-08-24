@@ -2,25 +2,25 @@
 (*** MODULES *****************************************************************)
 module Sig = Signature
 module C = Cache
+module Logic = Settings.Logic
 
 (*** OPENS *******************************************************************)
 open Term
-open Yices
-open Yicesx
+open Logic
 
 (*** GLOBALS *****************************************************************)
 (* signature *)
 let funs = ref []
 
 (* map function symbol and strategy stage to variable for weight *)
-let weights : (int * Signature.sym, Yicesx.t) Hashtbl.t
+let weights : (int * Signature.sym, Logic.t) Hashtbl.t
  = Hashtbl.create 32
-let w0 : Yicesx.t option ref = ref None
+let w0 : Logic.t option ref = ref None
 
 (* map function symbol and strategy stage to bool whether its counted *)
-let decreasing : (int * Signature.sym, Yicesx.t) Hashtbl.t
+let decreasing : (int * Signature.sym, Logic.t) Hashtbl.t
  = Hashtbl.create 32
-let all_weak : Yicesx.t option ref = ref None  
+let all_weak : Logic.t option ref = ref None  
 
 (*** FUNCTIONS ***************************************************************)
 let w k f = Hashtbl.find weights (k,f)
@@ -65,12 +65,18 @@ let eval k m =
   [ (f,a), w f | f,a <- !funs ]
 ;;
 
-let print fw = 
-  Format.printf "function symbol weights:\n%!";
-  let name = Signature.get_fun_name in
-  List.iter (fun ((f,_),w) -> Format.printf "  w(%s) = %d\n" (name f) w) fw;
-  Format.printf "\n%!"
+let encode k ws ctx =
+  let wv f = Hashtbl.find weights (k,f) in
+  big_and ctx (List.map (fun ((f,_),w) -> wv f <=> (mk_num ctx w)) ws)
 ;;
+
+let to_string fw =
+  let name = Signature.get_fun_name in
+  let addw s ((f,_),w) = s ^ "  w(" ^ (name f) ^ ") = " ^ (string_of_int w) in
+  List.fold_left addw "function symbol weights:\n" fw
+;;
+
+let print fw = Format.printf "%s\n%!" (to_string fw)
 
 let decode_print k m = let ws = eval k m in print ws
 
@@ -83,11 +89,13 @@ let decode k m =
     | c :: cs -> Some c
   in
   object
-    method bot = bot;;
-    method gt = gt;;
-    method print = fun _ -> print ws;;
-    method to_xml = Xml.Element("cfs", [], []);;
-    method print_params = Order.default#print_params;;
+    method bot = bot
+    method gt = gt
+    method smt_encode = encode k ws
+    method to_string = to_string ws
+    method print = fun _ -> print ws
+    method to_xml = Xml.Element("cfs", [], [])
+    method print_params = Order.default#print_params
   end
 ;;
 

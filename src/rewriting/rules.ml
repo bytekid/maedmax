@@ -22,16 +22,6 @@ let signature rules =
 let defined_symbols rules =
   Listx.unique [ Term.root l | l, _ <- rules ]
 
-let is_non_root_overlapping s t = not (Subst.unifiable (Term.rename s) t)
-
-let is_non_overlapping rules =
-  List.for_all (fun (l1, s1, r1) ->
-    List.for_all (fun (l2, r2) -> 
-      ((l1, r1) = (l2, r2) && l1 = s1) ||
-      is_non_root_overlapping s1 l2) rules)
-    [ l1, s1, r1 | l1, r1 <- rules; s1 <- Term.subterms l1;
-      not (Term.is_variable s1) ]
-
 let is_non_duplicating rules = List.for_all Rule.is_non_duplicating rules
 
 let variable_condition rules =

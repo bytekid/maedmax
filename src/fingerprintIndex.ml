@@ -53,6 +53,12 @@ let empty = Leaf []
 
 let is_empty = function Leaf [] -> true | _ -> false
 
+let rec copy = function
+  | Leaf l -> Leaf l
+  | Node h ->
+    let h' = H.create 16 in H.iter (fun f t -> H.add h' f (copy t)) h; Node h'
+;;
+
 let insert trie (term, value) =
   let rec insert fs trie = match fs, trie with
     | [], Leaf rs -> Leaf (value :: rs)

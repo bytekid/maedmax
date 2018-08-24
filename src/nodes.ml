@@ -63,6 +63,11 @@ let sort_size_unif ns =
 let ages = ref 0
 let age_table : (Rule.t,int) Hashtbl.t = Hashtbl.create 256
 
+let reset_age _ =
+  ages := 0;
+  Hashtbl.clear age_table
+;;
+
 let age n =
   try Hashtbl.find age_table (Lit.terms n)
   with Not_found ->
@@ -72,9 +77,24 @@ let age n =
     a
 ;;
 
-let sort_size_age = L.sort (fun n1 n2 ->
-  let d = Rule.size (Lit.terms n1) - Rule.size (Lit.terms n2) in
-  if d <> 0 then d else age n1 - age n2)
+let sort_size_age ns =
+  (*let nsx = List.fold_left (fun l n -> (n, Rule.size (Lit.terms n), age n)::l) [] ns in*)
+  let nsx = List.fold_right (fun n l -> (n, Rule.size (Lit.terms n), age n)::l) ns [] in
+  let cmp (n1,s1,a1) (n2,s2,a2) =
+    let d = s1 - s2 in if d <> 0 then d else a1 - a2
+  in
+  [ n | (n,_,_) <- L.sort cmp nsx ]
+;;
+
+let sort_size_diff ns =
+  let diff n = let s,t = Lit.terms n in abs (Term.size s - Term.size t) in
+  let nsx = [ n, Rule.size (Lit.terms n), diff n | n <- ns ] in
+  (*let nsx = List.fold_right (fun n l -> (n, Rule.size (Lit.terms n), age n)::l) ns [] in*)
+  let cmp (n1,s1,a1) (n2,s2,a2) =
+    let d = s1 - s2 in if d <> 0 then d else a1 - a2
+  in
+  [ n | (n,_,_) <- L.sort cmp nsx ]
+;;
 
 let exists p ns = H.fold (fun n _ b -> b || p n) ns false
 

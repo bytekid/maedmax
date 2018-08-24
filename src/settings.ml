@@ -1,3 +1,6 @@
+(*** MODULES *****************************************************************)
+module Logic = Order.Logic
+
 (*** TYPES *******************************************************************)
 (* Type for reduction order *)
 type order = LPO | KBO | Matrix | Cfs | Cfsn | MPol
@@ -26,6 +29,8 @@ type shape = NoShape | Boro | Calcio | Carbonio | Elio | Silicio | Ossigeno |
 
 
 type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
+
+type proof_format = CPF | TPTP
 
 type t = {
  auto     : bool ref; (* automatic mode *)
@@ -105,8 +110,7 @@ let default = {
 
 let do_assertions = ref false
 let do_debug = ref false
-let do_proof = ref false
-let do_proof_debug = ref false
+let do_proof : proof_format option ref = ref None
 let is_ordered = ref false
 let interactive = ref false
 let generate_order = ref false
@@ -115,6 +119,7 @@ let max_eq_size : int ref = ref 2500
 let max_goal_size : int ref = ref 100
 let input_file = ref ""
 let generate_benchmarks = ref false
+let track_equations : literal list ref = ref []
 
 let shape_to_string = function
     NoShape -> "none"
@@ -128,3 +133,5 @@ let shape_to_string = function
   | Xeno -> "xeno"
   | Zolfo -> "zolfo"
 ;;
+
+let do_proof_debug () = !do_debug && (!do_proof <> None)

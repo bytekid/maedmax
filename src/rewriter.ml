@@ -1,18 +1,27 @@
+(*** MODULES *****************************************************************)
 module T = Term
 module L = List
 module H = Hashtbl
 module Sig = Signature
 module Ac = Theory.Ac
+module Logic = Settings.Logic
 
+(*** TYPES ********************************************************************)
 type term_cmp = Term.t -> Term.t -> bool
 
 exception Not_orientable
+exception Max_term_size_exceeded
 
-class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
+(*** FUNCTIONS ****************************************************************)
+class rewriter (trs : Rules.t) (acs : Sig.sym list) (ord : Order.t) =
   object (self)
 
-  val nf_table : (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t = H.create 256
+  val mutable nf_table: (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t
+    = H.create 256
+  val mutable step_table: (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t
+    = H.create 256
   val mutable index = FingerprintIndex.empty
+  val mutable order = ord
 
   method init () =
     let cs = [ Ac.commutativity f | f <- acs] in
@@ -21,23 +30,41 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
     let rules = [ l,((l,r), true) | l,r <- trs ] in
     index <- FingerprintIndex.create (eqs @ rules)
 
+  method copy_from (r : rewriter) =
+    nf_table <- Hashtbl.copy (r#nf_table);
+    step_table <- Hashtbl.copy (r#step_table);
+    index <- FingerprintIndex.copy (r#index);
+    order <- r#order
+
   method trs = trs
   
+  method acs = acs
+
   method order : Order.t = order
+  
+  method nf_table = nf_table
+  
+  method step_table = step_table
+  
+  method index = index
+
+  method set_order o = order <- o
 
   method add es =
     let cs = [ Ac.commutativity f | f <- acs] in
     let cas = [ Ac.cassociativity f | f <- acs] in
     let es' = es @ [r,l | l,r <- es ] in
+    let es' = [ l,r | l,r <- es'; not (Term.is_subterm l r) ] in
     let eqs = [ l, ((l,r), false)| l,r <- cs @ cas @ es' ] in
     let rules = [ l,((l,r), true) | l,r <- trs ] in
     index <- FingerprintIndex.create (eqs @ rules)
 
   method add_more es =
-    let es' = es @ [r,l | l,r <- es ] in
-    let eqs = [ l, ((l,r), false)| l,r <- es' ] in
+    (* es is already symmetric *)
+    let eqs = [ l, ((l,r), false)| l,r <- es; not (Term.is_subterm l r) ] in
     index <- L.fold_left FingerprintIndex.insert index eqs;
-    Hashtbl.clear nf_table
+    Hashtbl.clear nf_table;
+    Hashtbl.clear step_table
 
   (* Returns tuple (u, rs) of some normal form u of t that was obtained using
      rules rs *)
@@ -45,7 +72,9 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
 
   (* Returns tuple (u, rs@rs') where u is a normal form of t that was obtained
      using rules rs'. Lookup in table, otherwise compute. *)
-  method nf' rs t = 
+  method nf' rs t =
+    if Term.size t > !Settings.max_eq_size then
+      raise Max_term_size_exceeded;
     try let u, urs = H.find nf_table t in u, rs @ urs with
     Not_found -> (
       let u,urs = self#nf_compute t in
@@ -95,7 +124,7 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
   (* Tries to do a parallel step on argument. Returns tuple (s, rs) where either
      s is a parallel-step innermost reduct of t that was obtained using rules rs
      or s=t and rs=[] if t is in normal form. *)
-  method pstep = function
+  method pstep' = function
     | Term.V _ as t -> t, []
     | Term.F (f, ts) ->
       let concat (us,rs) (i,ti) =
@@ -117,6 +146,13 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
         end
   ;;
 
+  method pstep t =
+    try H.find step_table t with
+    Not_found -> (
+      let res = self#pstep' t in
+      H.add step_table t res;
+      res)
+
   (* only to reconstruct rewrite sequences *)
   method rewrite_at_with t rl p =
     let t' = Term.subterm_at p t in
@@ -137,9 +173,9 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (order : Order.t) =
 end
 
 
-class reducibility_checker (eqs : (Rule.t * Yicesx.t) list) = object (self)
+class reducibility_checker (eqs : (Rule.t * Logic.t) list) = object (self)
 
-val red_table : (Term.t, Yicesx.t list) H.t = H.create 256
+val red_table : (Term.t, Logic.t list) H.t = H.create 256
 val mutable index = FingerprintIndex.empty
 val mutable checker = None
 
@@ -150,9 +186,7 @@ method init (rdc : reducibility_checker option) =
   checker <- rdc
 
 method reducible_rule (l,r) =
-  let t = Unix.gettimeofday () in
   let res = self#reducible_term l @ (self#reducible_term r) in
-  Analytics.t_tmp2 := !Analytics.t_tmp2 +. (Unix.gettimeofday () -. t);
   res
 ;;
 

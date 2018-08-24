@@ -36,6 +36,12 @@ let read_trs filename =
 let union2 (xs,ys) (xs',ys') = (xs @ xs',ys @ ys')
 
 let rec read_tptp filename =
+  let fn =
+    if Sys.file_exists filename then filename
+    else match Sys.getenv_opt  "TPTP" with
+     | Some tptp -> Filename.concat tptp filename
+     | None -> raise (Sys_error ("Input file" ^ filename ^ " not found."))
+  in
   let read ch =
     let lexbuf = from_channel ch in
     let lex_curr_p = { lexbuf.lex_curr_p with pos_fname = filename } in
@@ -45,7 +51,7 @@ let rec read_tptp filename =
       (syntax_error lexbuf.lex_curr_p; exit 1)
   in
   try
-    let axs, eqs, gls = open_in_do ~path:filename read in
+    let axs, eqs, gls = open_in_do ~path:fn read in
     let add res a = let res' = read_tptp a in union2 res res' in
     List.fold_left add (eqs,gls) axs
   with Sys_error s ->

@@ -12,8 +12,6 @@ val signature : t -> Signature.t
 
 val defined_symbols : t -> Signature.sym list
 
-val is_non_overlapping : t -> bool
-
 val is_non_duplicating : t -> bool
 
 val is_ground : t -> bool

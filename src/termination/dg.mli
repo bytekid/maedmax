@@ -1,19 +1,21 @@
 val init_without_sccs : unit -> unit
 
-val init_with_sccs : Yices.context -> (Signature.sym * int) list -> int -> int -> Yicesx.t
+val init_with_sccs : Settings.Logic.context -> (Signature.sym * int) list ->
+  int -> int -> Settings.Logic.t
 
-val x_edge : Yices.context -> int -> Rule.t -> Rule.t -> Yicesx.t
+val x_edge : Settings.Logic.context -> int -> Rule.t -> Rule.t ->
+  Settings.Logic.t
 
-val has_edge : Yices.context -> Rule.t -> Rule.t -> Yicesx.t
+val has_edge : Settings.Logic.context -> Rule.t -> Rule.t -> Settings.Logic.t
 
-val has_edge' : Yices.context -> Rule.t -> Rule.t -> Yicesx.t
+val has_edge' : Settings.Logic.context -> Rule.t -> Rule.t -> Settings.Logic.t
 
 val has_edge_bool : Rule.t -> Rule.t -> bool
 
-val x_w : Yices.context -> int -> Signature.sym -> Yicesx.t
+val x_w : Settings.Logic.context -> int -> Signature.sym -> Settings.Logic.t
 
-val x_scc : Yices.context -> int -> Signature.sym -> Yicesx.t
+val x_scc : Settings.Logic.context -> int -> Signature.sym -> Settings.Logic.t
 
-val decode_print : int -> Yices.model -> unit
+val decode_print : int -> Settings.Logic.model -> unit
 
 val uf : Rule.t list -> Signature.sym list list

@@ -6,6 +6,9 @@ open Settings
 (*** MODULES *****************************************************************)
 module L = List
 
+(*** TYPES *******************************************************************)
+type equation_state = Active of int | Passive of int | Unseen
+
 (*** GLOBALS *****************************************************************)
 let t_ccomp = ref 0.0
 let t_ccpred = ref 0.0
@@ -24,52 +27,67 @@ let t_tmp1 = ref 0.0
 let t_tmp2 = ref 0.0
 
 let iterations = ref 0;;
-let ces = ref 0;;
+let equalities = ref 0;;
 let goals = ref 0;;
 let restarts = ref 0
 let time_diffs = ref []
 let mem_diffs = ref []
 let eq_counts = ref []
+let goal_counts = ref []
+let red_counts = ref []
+let cp_counts = ref []
+let trs_sizes = ref []
+let costs = ref []
 let shape = ref NoShape
 let smt_checks = ref 0
 
+let acount = ref 0
+let pcount = ref 0
+let ucount = ref 0
+
+let ac_syms = ref []
+let only_c_syms = ref []
+
+let track_equations_state : (Literal.t * equation_state) list ref = ref []
+
 (*** FUNCTIONS ***************************************************************)
 let take_time t f x =
- let s = Unix.gettimeofday () in
- let res = f x in
- t := !t +. (Unix.gettimeofday () -. s);
- res
+  let s = Unix.gettimeofday () in
+  let res = f x in
+  t := !t +. (Unix.gettimeofday () -. s);
+  res
 
 let memory _ =
   let s = Gc.quick_stat () in
   s.Gc.heap_words * (Sys.word_size / 8 ) / (1024 * 1024)
-;;
 
-let eq_count_str _ =
- List.fold_left (fun s d -> s^" "^(string_of_int d)) "" (List.rev !eq_counts)
-;;
+let int_count_str l =
+  let append s d = s ^ " " ^ (string_of_int d) in
+  List.fold_left append "" (List.rev !l)
 
-let memory_diff_str _ =
- List.fold_left (fun s d -> s^" "^(string_of_int d)) "" (List.rev !mem_diffs)
-;;
-
-let time_diff_str _ =
- let str s d = s ^ " " ^ (string_of_int (int_of_float (d *. 100.))) in
- List.fold_left str "" (List.rev !time_diffs)
-;;
+let float_count_str l =
+  let str f = string_of_float ((floor (100. *.f)) /. 100.) in
+  let append s d = s ^ " " ^ (str d) in
+  List.fold_left append "" (List.rev !l)
 
 let print () =
   printf "\niterations          %i@." !iterations;
-  printf "equalities          %i@." !ces;
+  printf "equalities          %i@." !equalities;
   if !goals > 0 then
     printf "goals               %i@." !goals;
   printf "restarts            %i@." !restarts;
   printf "memory (MB)         %d@." (memory ());
-  printf "time diffs         %s@." (time_diff_str ());
-  printf "memory diffs       %s@." (memory_diff_str ());
-  printf "equation counts    %s@." (eq_count_str ());
+  printf "time diffs         %s@." (float_count_str time_diffs);
+  printf "memory diffs       %s@." (int_count_str mem_diffs);
+  printf "equation counts    %s@." (int_count_str eq_counts);
+  printf "goal counts        %s@." (int_count_str goal_counts);
+  printf "reduction counts   %s@." (int_count_str red_counts);
+  printf "CP counts          %s@." (int_count_str cp_counts);
+  printf "TRS sizes          %s@." (int_count_str trs_sizes);
+  printf "costs              %s@." (int_count_str costs);
+  printf "oracle counts       %i/%i/%i@." !acount !pcount !ucount;
   printf "SMT checks          %i@." !smt_checks;
-  printf "problem shape      %s@."(Settings.shape_to_string !shape);
+  printf "problem shape       %s@."(Settings.shape_to_string !shape);
   printf "times@.";
   printf " ground join checks %.3f@." !t_gjoin_check;
   printf " maxk               %.3f@." !t_maxk;
@@ -87,32 +105,26 @@ let print () =
   printf " tmp1               %.3f@." !t_tmp1;
   printf " tmp2               %.3f@." !t_tmp2;
   printf " normalization      %.3f@." !Variant.t_normalize
-;;
 
 let is_applicative es =
- let bs, rest = List.partition (fun (_,a) -> a = 2) (Rules.signature es) in
- List.length bs = 1 && List.for_all (fun (_,a) -> a = 0) rest
-;;
-
-let really_duplicating_rule (l,r) = Rule.is_duplicating (l,r)
+  let bs, rest = List.partition (fun (_ ,a) -> a = 2) (Rules.signature es) in
+  List.length bs = 1 && List.for_all (fun (_, a) -> a = 0) rest
 
 let duplicating_rule (l,r) =
   Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
 
 let is_duplicating es =
-  List.exists duplicating_rule (es @ [Rule.flip e | e <- es ])
-;;
+  List.exists duplicating_rule (es @ [Rule.flip e | e <- es])
 
 let find_duplicating es =
-  List.find duplicating_rule (es @ [Rule.flip e | e <- es ])
-;;
+  List.find duplicating_rule (es @ [Rule.flip e | e <- es])
 
 let problem_shape es =
-  let rmax (l,r) = Pervasives.max (Term.size l) (Term.size r) in
-  let max_term_size = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
-  let rmax (l,r) = Pervasives.max (Term.depth l) (Term.depth r) in
-  let max_term_depth = L.fold_left Pervasives.max 0 [ rmax e | e <- es] in
-  let max_term_arity = L.fold_left max 0 [ a | _,a <- Rules.signature es ] in
+  let rmax (l, r) = max (Term.size l) (Term.size r) in
+  let max_term_size = L.fold_left max 0 [rmax e | e <- es] in
+  let rmax (l, r) = max (Term.depth l) (Term.depth r) in
+  let max_term_depth = L.fold_left max 0 [rmax e | e <- es] in
+  let max_term_arity = L.fold_left max 0 [ a | _, a <- Rules.signature es ] in
   let es_size = L.fold_left (+) 0 [Rule.size e | e <- es] in 
   let es_count = List.length es in
   let app = is_applicative es in
@@ -123,27 +135,27 @@ let problem_shape es =
   let acs = Theory.Ac.count es in
   let cs = Theory.Commutativity.count es - acs in
   let distrib = Theory.Ring.has_distrib es in
-  if (max_term_size > 65 && max_term_depth > 10) then
-    Piombo (* large terms like in lattices, LAT084-1, LAT392-1, ... *)
-  else if (acs > 0 && dup && distrib && group && lat) then
-    Ossigeno (* GRP166-1, GRP185-3, GRP193-2, GRP184-4 *)
-  else if (acs > 0 && dup && distrib && mon && not app) then
-    Xeno (* relation problems like REL011-2 *)
-  else if (app && not dup && not distrib && acs = 0) then
-    Zolfo (* some groups like GRP119-1 - GRP122-1 *)
-  else if (app && dup && not distrib && acs = 0) then
-    Carbonio (* COL003-* *)
-  else if (not app && not distrib && acs > 1 && lat && not mon) then
-    Silicio (* lattice *)
-  else if (not app && not dup && not distrib && acs = 0 && cs=0 && not mon) then
-    Elio (* no structure detected *)
-  else if (dup && not app && acs = 0 && cs > 1 && not mon) then
-    Boro (* commutative symbols, duplication *)
-  else if (dup && max_term_arity > 4 && es_count > 25 && es_size > 200) then
-    Calcio (* large problems *)
-  else
-    NoShape
-;;
+  let no_prop = not app && not dup && not distrib && acs + cs = 0 && not mon in
+  let large = max_term_arity > 4 && es_count > 25 && es_size > 200 in 
+  (* Piombo: heavy terms like in lattices, LAT084-1, LAT392-1, ... *)
+  if (max_term_size > 65 && max_term_depth > 10) then Piombo
+  (* Ossigeno: GRP166-1, GRP185-3, GRP193-2, GRP184-4 *)
+  else if (acs > 0 && dup && distrib && group && lat) then Ossigeno
+  (* Xeno: relation problems like REL011-2 *)
+  else if (acs > 0 && dup && distrib && mon && not app) then Xeno
+  (* Zolfo: some groups like GRP119-1 - GRP122-1 *)
+  else if (app && not dup && not distrib && acs = 0) then Zolfo
+  (* Carbonio: COL003-* *)
+  else if (app && dup && not distrib && acs = 0) then Carbonio
+  (* Silicio: lattice problems *)
+  else if (not app && not distrib && acs > 1 && lat && not mon) then Silicio
+  (* Elio: no structure detected *)
+  else if no_prop then Elio
+  (* Boro: commutative symbols, duplication *)
+  else if (dup && not app && acs = 0 && cs > 1 && not mon) then Boro
+  (* Calcio: large problems *)
+  else if (dup && large) then Calcio
+  else NoShape
 
 let theory_equations es =
   let theory_relevant l =
@@ -153,10 +165,9 @@ let theory_equations es =
     Theory.Lattice.is_axiom eq || Theory.Ring.is_distributivity eq
   in
   let ths = List.filter theory_relevant es in
-  let esl = [ Literal.terms e | e <- es] in
+  let esl = [Literal.terms e | e <- es] in
   if not (is_duplicating esl) then ths
   else Literal.make_axiom (find_duplicating esl) :: ths
-;;
 
 let analyze es gs =
   let es, ies = List.partition Literal.is_equality es in
@@ -166,11 +177,11 @@ let analyze es gs =
   let eqc = "equality count", `Int (L.length es) in
   let ieqc = "inequality count", `Int (L.length ies) in
   let eqs = "equality size", `Int (L.fold_left (+) 0 [Rule.size e | e <-all]) in
-  let mar = "max arity", `Int (L.fold_left max 0 [ a | _,a <- fs ]) in
+  let mar = "max arity", `Int (L.fold_left max 0 [ a | _, a <- fs ]) in
   let rmax (l,r) = max (Term.size l) (Term.size r) in
-  let mts = "max term size", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
+  let mts = "max term size", `Int (L.fold_left max 0 [rmax e | e <- all]) in
   let rmax (l,r) = max (Term.depth l) (Term.depth r) in
-  let mtd = "max term depth", `Int (L.fold_left max 0 [ rmax e | e <-all]) in
+  let mtd = "max term depth", `Int (L.fold_left max 0 [rmax e | e <- all]) in
   let symcount = "symbol count", `Int (L.length fs) in
   let gc = "goal count", `Int (L.length gs) in
   let app = "is applicative", `Bool (is_applicative all) in
@@ -186,33 +197,125 @@ let analyze es gs =
   let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
   let shp = "shape", `String (Settings.shape_to_string (problem_shape es)) in
-  `Assoc [eqc; ieqc; eqs; mar; symcount; mts; mtd; gc; app; dup;
-          cs; ac; mon; group; agroup; ring; lattice; distrib; shp ]
-;;
+  let assoc =
+    [eqc; ieqc; eqs; mar; symcount; mts; mtd; gc; app; dup;
+    cs; ac; mon; group; agroup; ring; lattice; distrib; shp]
+  in
+  `Assoc assoc
 
 let json () =
- let trunc f = `Float ((float_of_int (truncate (f *. 1000.))) /. 1000.) in
- let it = "iterations", `Int !iterations in
- let ea = "equalities", `Int !ces in
- let mem = "memory", `Int (memory ()) in
- let smtc = "SMT checks", `Int !smt_checks in
- let t_ccpred = "time/ccpred", trunc !t_ccpred in
- let t_ccomp = "time/ccomp", trunc !t_ccomp in
- let t_cred = "time/cred", trunc !t_cred in
- let t_gjoin = "time/ground join checks", trunc !t_gjoin_check in
- let t_maxk = "time/maxk", trunc !t_maxk in
- let t_process = "time/process", trunc !t_process in
- let t_rewrite = "time/rewrite", trunc !t_rewrite in
- let t_select = "time/select", trunc !t_select in
- let t_ovl = "time/overlaps", trunc !t_overlap in
- let t_orient = "time/orientation constraints", trunc !t_orient_constr in
- let t_proj = "time/success checks", trunc !t_success_check in
- let t_sat = "time/sat", trunc !t_sat in
- let t_cache = "time/cache", trunc !t_cache in
- let res = "restarts", `Int !restarts in
- let shp = "shape", `String (Settings.shape_to_string !shape) in
- let t = `Assoc [it; ea; res; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
-  t_select; t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process;
-  t_sat; t_cache]
- in t
+  let trunc f = `Float ((float_of_int (truncate (f *. 1000.))) /. 1000.) in
+  let it = "iterations", `Int !iterations in
+  let ea = "equalities", `Int !equalities in
+  let mem = "memory", `Int (memory ()) in
+  let smtc = "SMT checks", `Int !smt_checks in
+  let t_ccpred = "time/ccpred", trunc !t_ccpred in
+  let t_ccomp = "time/ccomp", trunc !t_ccomp in
+  let t_cred = "time/cred", trunc !t_cred in
+  let t_gjoin = "time/ground join checks", trunc !t_gjoin_check in
+  let t_maxk = "time/maxk", trunc !t_maxk in
+  let t_process = "time/process", trunc !t_process in
+  let t_rewrite = "time/rewrite", trunc !t_rewrite in
+  let t_select = "time/select", trunc !t_select in
+  let t_ovl = "time/overlaps", trunc !t_overlap in
+  let t_orient = "time/orientation constraints", trunc !t_orient_constr in
+  let t_proj = "time/success checks", trunc !t_success_check in
+  let t_sat = "time/sat", trunc !t_sat in
+  let t_cache = "time/cache", trunc !t_cache in
+  let res = "restarts", `Int !restarts in
+  let shp = "shape", `String (Settings.shape_to_string !shape) in
+  let assoc =
+    [it; ea; res; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
+    t_select; t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process;
+    t_sat; t_cache]
+  in
+  `Assoc assoc
+
+(* compare current state with respect to other proof *)
+let init_proof_track ls =
+  track_equations_state := [Literal.normalize l, Unseen | l <- ls]
+
+(* aa are active, pp passive equations *)
+let reset_proof_track _ =
+  acount := 0;
+  pcount := 0;
+  ucount := 0;
+  track_equations_state := []
+
+let update_proof_track aa pp i =
+  let (>) s1 s2 =
+    match s1,s2 with
+    | _, Unseen -> true
+    | Active _, Passive _ -> true
+    | _ -> false
+  in
+  let current l =
+    if List.mem l aa then Active i
+    else if List.mem l pp then Passive i
+    else Unseen
+  in
+  let update (l,s) = let s' = current l in l, if s' > s then s' else s in
+  track_equations_state := List.map update !track_equations_state
+
+let goal_similarity settings n =
+  let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
+  let rsim (s,t) (s',t') = sim s s' +. sim t t' in
+  let msim r = List.fold_left (fun m q -> m +. (rsim r q)) 0. !(settings.gs) in
+  msim (Literal.terms n)
+
+let show_proof_track settings =
+  if !(Settings.track_equations) <> [] then (
+    acount := 0;
+    pcount := 0;
+    ucount := 0;
+    let ststr = function
+      | Unseen -> ucount := !ucount + 1; "unseen"
+      | Active i -> acount := !acount + 1; "active: " ^ (string_of_int i)
+      | Passive i -> pcount := !pcount + 1; "passive: " ^ (string_of_int i)
+    in
+    printf "Proof track:\n";
+    let show (l,s) =
+      let sim = goal_similarity settings l in
+      printf "  %s: %s %.2f\n%!" (Literal.to_string l) (ststr s) sim
+    in
+    List.iter show !track_equations_state;
+    printf "%i active, " !acount;
+    printf "%i passive, " !pcount;
+    printf "%i unseen" !ucount;
+    let cnt = float_of_int (List.length !track_equations_state) in
+    let rat = (float_of_int !acount +. (float_of_int !pcount) *. 0.5) /. cnt in
+    printf " (%.3f)\n%!" rat ;
+  )
+;;
+
+let prefix_equal n xs =
+  let all_equal = function
+    | x :: xs -> List.fold_left (fun b y -> b && x = y) true xs
+    | _ -> false
+  in
+  try all_equal (Listx.take n xs) with _ -> false
+;;
+
+let little_progress _ =
+  (*printf "costs              %s\n%!" (int_count_str costs);
+  printf "reduction counts   %s@." (int_count_str red_counts);*)
+  let cost_stable = prefix_equal 3 !costs && List.hd !costs <> 0 in
+  let red_stable = prefix_equal 4 !red_counts in
+  (*let goal_stable = prefix_equal 3 !goal_counts in*)
+  let no_progress = cost_stable || red_stable (*|| goal_stable*) in
+  (*Format.printf "little: %i\n%!" (if no_progress then 1 else 0);*)
+  no_progress
+;;
+
+let very_little_progress _ =
+  let goal_stable = prefix_equal 4 !goal_counts in
+  let no_progress = goal_stable in
+  (*Format.printf "very little: %i\n%!" (if no_progress then 1 else 0);*)
+  no_progress
+;;
+
+let some_progress _ =
+  not (prefix_equal 2 !costs) ||
+  (List.length !costs > 0 && List.hd !costs = 0) ||
+  not (prefix_equal 2 !goal_counts)
 ;;

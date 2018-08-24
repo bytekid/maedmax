@@ -9,6 +9,10 @@ let ident_or_keyword = function
   | "conjecture" -> CONJECTURE
   | "negated_conjecture" -> NCONJECTURE
   | "include" -> INCLUDEAXIOMS
+  | "plain" -> PLAIN
+  | "file" -> FILE_KEY 
+  | "status" -> STATUS_KEY
+  | "inference" -> INFERENCE_KEY
   | s -> IDENT s
 
 exception Lexing_error of string
@@ -23,11 +27,12 @@ let new_line lexbuf =
 
 let upper = ['A'-'Z']
 let lower = ['a'-'z']
+let digit = ['0'-'9']
 
 let letter = 
   ['a'-'z' 'A'-'Z' '0'-'9'
-   '#' '+' '-' '*' '/' '.' '\\' ':' '=' '<' '>' '_' '@' '`' '$'
-   '{' '}' '[' ']' '|' '~' '?' '&' '"' '!']
+   '#' '+' '-' '*' '/' '.' '\\' ':' '<' '>' '_' '@' '`' '$'
+   '{' '}' '|' '~' '?' '&' '"' '!']
 
 let any =
   ['a'-'z' 'A'-'Z' '0'-'9' 
@@ -42,6 +47,8 @@ rule token = parse
   | "!="   { NEQ }
   | "("    { LPAREN }
   | ")"    { RPAREN }
+  | "["    { LBRACKET }
+  | "]"    { RBRACKET }
   | ","    { COMMA }
   | "."    { DOT }
   | "'" (letter+ as s) "'" { FILE s }

@@ -19,7 +19,7 @@ let k = ref (-1)
 let use_ac = ref false
 let analyze = ref false
 let only_termination = ref false
-let timeout = ref 60.0
+let timeout = ref None
 
 let strategy = ref []
 
@@ -43,6 +43,11 @@ let do_unordered _ =
   settings.strategy := S.strategy_auto
 ;;
 
+let track_proof file =
+  let es,gs = Read.file file in
+  Settings.track_equations := es @ gs;
+;;
+
 let options = Arg.align 
   [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");*)
@@ -56,11 +61,6 @@ let options = Arg.align
     " use heuristic settings (automatic mode)");
    ("--concon", Arg.Unit do_concon,
     " satisfiability-preferring strategy");
-   ("--cpf", Arg.Set Settings.do_proof,
-    " output certifiable CPF proof");
-   ("--cpfd", Arg.Unit (fun _ -> Settings.do_proof := true;
-                                Settings.do_proof_debug := true),
-    " output CPF proof plus debug output");
    ("-D", Arg.Int (fun d -> settings.d := d),
     " print debugging output");
    ("--interactive", Arg.Set Settings.interactive,
@@ -104,6 +104,11 @@ let options = Arg.align
       (*settings.auto := false;*)
       settings.strategy := S.strategy_order_generation),
      " order generation mode");
+   ("-P", Arg.String (fun s ->
+      if s = "cpf" then Settings.do_proof := Some CPF else
+      if s = "tstp" then Settings.do_proof := Some TPTP
+      else failwith "unsupported proof type"),
+    "<format> output proof (cpf, tptp)");
    ("--reduceAC-CPs", Arg.Set settings.reduce_AC_equations_for_CPs,
     " do not use ACx equations for CPs");
    ("--sizeage", Arg.Int (fun n -> settings.size_age_ratio := n), 
@@ -114,10 +119,10 @@ let options = Arg.align
     "<b> upper bound for size of active goals");
    ("--term", Arg.Set only_termination,
     " perform termination check");
-   ("-T", Arg.Set_float timeout,
+   ("-T", Arg.Float (fun f -> timeout := Some f),
     "<t> timeout");
-   (*("-termproof", Arg.Set settings.output_tproof,
-    " output termination proof");*)
+   ("--track", Arg.String track_proof,
+    " <track file> keep track of equations in proof file");
    (*("--tmp", Arg.Int (fun n -> settings.tmp := n),
     "<n> various purposes");*)
    ("--xsig", Arg.Set settings.extended_signature,
@@ -152,7 +157,7 @@ let call () =
   in add_arg 0
 ;;
 
-let success_code = function UNSAT -> "UNSAT" | SAT -> "SAT"
+let success_code = function UNSAT -> "Unsatisfiable" | SAT -> "Satisfiable"
 
 let json_settings settings s k =
  let s = "strategy", `String s in
@@ -237,7 +242,7 @@ let clean es0 =
     | Proof p -> Proof p
 ;;
 
-let proof_string ?(readable=true) (es,gs) =
+let cpf_proof_string readable (es,gs) =
   let result_string p =
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ^ 
       "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n" ^
@@ -247,27 +252,30 @@ let proof_string ?(readable=true) (es,gs) =
     Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
       let goal = Literal.terms (List.hd gs) in
       let es = List.map Literal.terms es in
-      let p = Trace.xml_goal_proof es goal ((s,t),(rs, rt), sigma) in
+      let p = Cpf.goal_proof es goal ((s,t),(rs, rt), sigma) in
       result_string p
   | Completion _ ->
     failwith "Main.show_proof: not yet supported for Completion"
   | GroundCompletion (rr,ee,o) -> (* no goal exists *)
       let es = List.map Literal.terms es in
-      let p = Trace.xml_ground_completion es (rr,ee,o) in
+      let p = Cpf.ground_completion es (rr,ee,o) in
       result_string p
   | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
       let g = Literal.terms (List.hd gs) in
       let es = List.map Literal.terms es in
-      let p = Trace.xml_goal_disproof es g (rr,ee,o) rst in
+      let p = Cpf.goal_disproof es g (rr,ee,o) rst in
       result_string p
   | _ -> failwith "Main.show_proof: not yet supported for inequality axioms"
 ;;
 
-let show_proof (es,gs) res =
-  let p = proof_string (es,gs) res in Format.printf "%s\n" p
-  (*Literal.print_sizes ();
-  Format.printf "max equation: %d\nmax goal: %d\n%!"
-    !Trace.max_eq_size !Trace.max_goal_size *)
+
+let proof_string filename ?(readable=true) input prf = function
+    | CPF -> cpf_proof_string readable input prf
+    | TPTP -> Tptp.proof_string filename input prf
+;;
+
+let show_proof filename input res prf =
+  let p = proof_string filename input res prf in Format.printf "%s\n" p
 ;;
 
 let interactive_mode proof =
@@ -333,58 +341,63 @@ let print_waldmeister es =
   F.printf "CONCLUSION   %!\n"
 ;;
 
+let run file ((es, gs) as input) =
+  let timer = Timer.start () in
+  let ans, proof = Ckb.ckb settings input in
+  Timer.stop timer;
+  let secs = Timer.length ~res:Timer.Seconds timer in
+  if !(Settings.interactive) then
+    interactive_mode proof
+  else if !(settings.json) then (
+    let proofstr =
+      match !(Settings.do_proof) with
+      | Some ft -> Some (proof_string file ~readable:false input proof ft)
+      | None -> None
+    in
+    print_json (es,gs) secs (ans,clean es proof) settings proofstr
+  ) else (
+    match !(Settings.do_proof) with
+    | Some fmt -> show_proof file input proof fmt
+    | None -> (
+      print_res ans (clean es proof);
+      printf "%s %.2f %s@." "Search time:" secs "seconds";
+      Analytics.print ()
+    )
+  )
+;;
+
 let () =
   do_ordered ();
   Arg.parse options 
    (fun x -> filenames := !filenames @ [x]) short_usage;
   strategy := !(settings.strategy);
-  let json = !(settings.json) in
   match !filenames with
   | [f] -> 
-      let (es,gs) as input = Read.file f in
-      Settings.input_file := Filename.remove_extension (Filename.basename f);
-      if !(Settings.interactive) && gs <> [] then
-        failwith "Input for interactive mode is not supposed to contain goals";
-      if !(settings.tmp) > 0 then
-        print_waldmeister es
-      else if not !only_termination && not !analyze then
-       begin try
-        let timer = Timer.start () in
-        let answer, proof = Ckb.ckb settings input in
-        if !(Settings.interactive) then
-          interactive_mode proof
-        else if json then (
-         Timer.stop timer;
-         let secs = Timer.length ~res:Timer.Seconds timer in
-         let proofstr =
-           if !(Settings.do_proof) then
-             Some (proof_string ~readable:false input proof)
-           else None
-         in
-         print_json (es,gs) secs (answer,clean es proof) settings proofstr
-        ) else (
-         if !(Settings.do_proof) then
-           show_proof input proof
-         else (
-           print_res answer (clean es proof);
-	         Timer.stop timer;
-           let secs = Timer.length ~res:Timer.Seconds timer in
-           printf "%s %.2f %s@." "Search time:" secs "seconds";
-           Analytics.print ())
-         )
-       with e -> printf "# SZS status GaveUp\n%!"; raise e end
-      else if !analyze then
-       print_analysis es gs
+    let (es,gs) as input = Read.file f in
+    Settings.input_file := Filename.remove_extension (Filename.basename f);
+    if !(Settings.interactive) && gs <> [] then
+      failwith "Input for interactive mode is not supposed to contain goals";
+    if not !only_termination && not !analyze then
+      try
+        match fst (Timer.run_timed !timeout (run f) input) with
+        | None -> printf "# SZS status Timeout\n%!"
+        | Some _ -> ()
+      with e -> (printf "# SZS status GaveUp\n%!"; raise e)
+    else if !analyze then
+      print_analysis es gs
+    else (
+      let timer = Timer.start () in
+      let yes =
+        Termination.check (S.get_termination !strategy) es !(settings.json)
+      in
+      Timer.stop timer;
+      let secs = Timer.length ~res:Timer.Seconds timer in
+      if !(settings.json) then print_json_term yes secs
       else (
-       let timer = Timer.start () in
-       let yes = Termination.check (S.get_termination !strategy) es json in
-       Timer.stop timer;
-       let secs = Timer.length ~res:Timer.Seconds timer in
-       if json then print_json_term yes secs else (
-        printf "@.%a@." print_trs [ Literal.terms e | e <- es ];
+        printf "@.%a@." print_trs [Literal.terms e | e <- es];
         let a = if yes then "YES" else "MAYBE" in
         printf "%s\n" a;
         printf "%s %.2f %s@." "time:" secs "seconds")
-       )
+      )
   | _ -> eprintf "%s%!" short_usage; exit 1
-
+;;

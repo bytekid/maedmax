@@ -21,6 +21,8 @@ let print ppf l =
   Format.fprintf ppf "%a %s %a" Term.print (fst l.terms) eq Term.print (snd l.terms)
 ;;
 
+let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
+
 let killed = ref 0
 
 let make ts e g =
@@ -67,7 +69,7 @@ let cps l l' =
     let is_eq = l.is_equality && l'.is_equality in
     let no_trivials = is_eq && not is_goal in
     let os = if no_trivials then [ (s,t),o | (s,t),o <- os; s <> t ] else os in
-    if !(Settings.do_proof) then (
+    if !(Settings.do_proof) <> None then (
       let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
       let add ((s,t),o) =
         if s<>t then trace (Variant.normalize_rule (s,t)) o
@@ -85,7 +87,7 @@ let pcps rew l l' =
     let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2; prime o ] in
     let is_eq = l.is_equality && l'.is_equality in
     let is_goal = l.is_goal || l'.is_goal in
-    if !(Settings.do_proof) then (
+    if !(Settings.do_proof) <> None then (
       let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
       let add ((s,t),o) =
         if s<>t then trace (Variant.normalize_rule (s,t)) o
@@ -100,7 +102,7 @@ let rewriter_nf_with l rewriter =
   let t', rt = rewriter#nf (snd ts) in
   let rls = List.map fst (rs @ rt) in
   if s' = t' && not l.is_goal && l.is_equality then (
-    if !(Settings.do_proof) then (
+    if !(Settings.do_proof) <> None then (
       let st' = Variant.normalize_rule (s',t') in
       T.add_rewrite st' ts (rs,rt);
       T.add_delete st');
@@ -110,7 +112,7 @@ let rewriter_nf_with l rewriter =
     try
       let st' = Variant.normalize_rule (s',t') in
       let g = make st' l.is_equality l.is_goal in
-      if !(Settings.do_proof) then
+      if !(Settings.do_proof) <> None then
         (if l.is_goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
       (* preserve goal/equality status *)
       Some ([ g ], rls)
@@ -128,14 +130,16 @@ let is_ac_equivalent l fs = Theory.Ac.equivalent fs l.terms
 let equiv_table : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256
 
 let are_ac_equivalent acs l l' =
-  try Hashtbl.find equiv_table (l.terms, l'.terms)
-  with Not_found ->
-    let (s,t),(s',t') = l.terms, l'.terms in
-    let eq = Theory.Ac.equivalent acs (s,s') &&
-             Theory.Ac.equivalent acs (t,t') in
-    Hashtbl.add equiv_table (l.terms, l'.terms) eq;
-    Hashtbl.add equiv_table (l'.terms, l.terms) eq;
-    eq
+  if acs = [] then false
+  else (
+    try Hashtbl.find equiv_table (l.terms, l'.terms)
+    with Not_found ->
+      let (s,t),(s',t') = l.terms, l'.terms in
+      let eq = Theory.Ac.equivalent acs (s,s') &&
+              Theory.Ac.equivalent acs (t,t') in
+      Hashtbl.add equiv_table (l.terms, l'.terms) eq;
+      Hashtbl.add equiv_table (l'.terms, l.terms) eq;
+      eq)
 ;;
 
 let cequiv_table : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256

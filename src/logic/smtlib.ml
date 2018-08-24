@@ -64,35 +64,42 @@ let to_string f =
   in str f
 ;; 
 
-let visit visit_f visit_t f =
-  let rec vis_t = function
-    | Plus ts -> List.fold_left (fun acc t -> vis_t t @ acc) [] ts
-    | Ite(b, t1, t2) -> vis_f b @ (vis_t t1) @ (vis_t t2)
-    | t -> visit_t t
-  and vis_f = function
-    | Not f -> vis_f f
-    | And fs -> List.fold_left (fun acc f -> vis_f f @ acc) [] fs
-    | Or fs -> List.fold_left (fun acc f -> vis_f f @ acc) [] fs
-    | Xor(f1,f2) -> vis_f f1 @ (vis_f f2)
-    | Implies(f1,f2) -> vis_f f1 @ (vis_f f2)
-    | Iff(f1,f2) -> vis_f f1 @ (vis_f f2)
-    | Lt(t1,t2) -> vis_t t1 @ (vis_t t2)
-    | Leq(t1,t2) -> vis_t t1 @ (vis_t t2)
-    | Eq(t1,t2) -> vis_t t1 @ (vis_t t2)
-    | f -> visit_f f
-  in vis_f f
+let visit visit_f visit_t acc f =
+  let rec vis_t acc = function
+    | Plus ts -> List.fold_left (fun acc t -> vis_t acc t) acc ts
+    | Ite(b, t1, t2) ->
+      let acc1 = vis_f acc b in
+      let acc2 = vis_t acc1 t1 in
+      vis_t acc2 t2
+    | t -> visit_t acc t
+  and vis_f acc = function
+    | Not f -> vis_f acc f
+    | And fs -> List.fold_left (fun acc f -> vis_f acc f) acc fs
+    | Or fs -> List.fold_left (fun acc f -> vis_f acc f) acc fs
+    | Xor(f1,f2) -> let acc1 = vis_f acc f1 in vis_f acc1 f2
+    | Implies(f1,f2) -> let acc1 = vis_f acc f1 in vis_f acc1 f2
+    | Iff(f1,f2) -> let acc1 = vis_f acc f1 in vis_f acc1 f2
+    | Lt(t1,t2) -> let acc1 = vis_t acc t1 in vis_t acc1 t2
+    | Leq(t1,t2) -> let acc1 = vis_t acc t1 in vis_t acc1 t2
+    | Eq(t1,t2) -> let acc1 = vis_t acc t1 in vis_t acc1 t2
+    | f -> visit_f acc f
+  in vis_f acc f
 ;;
 
-let visit_all vf vt = List.fold_left (fun acc f -> visit vf vt f @ acc) []
+let collect vf vt = List.fold_left (fun acc f -> visit vf vt acc f) []
 
 let bool_vars fs =
-  let vs = visit_all (function BoolVar s -> [s] | _ -> []) (fun _ -> []) fs in
-  Listx.unique vs
+  let bvar acc f =
+    match f with BoolVar s when not (List.mem s acc) -> s::acc | _ -> acc
+  in
+  collect bvar (fun acc _ -> acc) fs
 ;;
 
 let int_vars fs =
-  let vs = visit_all (fun _ -> []) (function IntVar s -> [s] | _ -> []) fs in
-  Listx.unique vs
+  let ivar acc f =
+    match f with IntVar s when not (List.mem s acc) -> s::acc | _ -> acc
+  in
+  collect (fun acc _ -> acc) ivar fs
 ;;
 
 let (!!) = function
@@ -193,43 +200,33 @@ let pop _ =
   | _ -> failwith "Smtlib.pop: invalid context"
 ;;
 
-let state_to_string _ =
-  let s = "" in
+let write_out out_channel =
+  let write s = Printf.fprintf out_channel "%s\n" s in
+  write "(set-logic QF_LIA)\n";
   let hard = List.concat !hard_asserts in
   let soft = List.concat !soft_asserts in
   let all = List.map fst soft @ hard in
-  let declare typstr s n = s ^ "(declare-const " ^ n ^ " " ^ typstr ^ ")\n" in
-  let s = List.fold_left (declare "Bool") s (bool_vars all) in
-  let s = List.fold_left (declare "Int") s (int_vars all) in
-  let assert_hard s f = s ^ "(assert " ^ (to_string f) ^ ")\n" in
-  let s = List.fold_left assert_hard s hard in
-  let assert_soft s (f,n) =
+  let declare typstr n = "(declare-const " ^ n ^ " " ^ typstr ^ ")" in
+  List.iter (fun v -> write (declare "Bool" v)) (bool_vars all);
+  List.iter (fun v -> write (declare "Int" v)) (int_vars all);
+  List.iter (fun f -> write ("(assert " ^ (to_string f) ^ ")")) hard;
+  let write_soft (f,n) =
     let sn = string_of_int n in
-    s ^ "(assert-soft " ^ (to_string f) ^ " :weight " ^ sn ^ ")\n"
+    write ("(assert-soft " ^ (to_string f) ^ " :weight " ^ sn ^ ")")
   in
-  let s = List.fold_left assert_soft s soft in
-  let s = s ^ "(check-sat)\n" in
-  s
+  List.iter write_soft soft;
+  write "(check-sat)\n"
 ;;
 
 let benchmark suffix =
   if !hard_asserts = [[]] && !soft_asserts = [[]] then ()
   else (
-    (*let bfile = Filename.temp_file "maedmax_benchmarks/" ".smt2" in*)
     let bname = (!Settings.input_file) ^ "_" ^ suffix in
     let bfile = "/tmp/maedmax_benchmarks/" ^ bname ^ ".smt2" in
+    Format.printf "Write benchmark to %s\n%!" bfile;
     let out_channel = open_out bfile in
-    Printf.fprintf out_channel "%s\n" (state_to_string ());
-    close_out out_channel;
-    Format.printf "Benchmark written to %s\n%!" bfile)
+    write_out out_channel;
+    close_out out_channel)
 ;;
 
 let clear _ = soft_asserts := [[]]; hard_asserts := [[]];
-(*
-let check ctx = 
-let max_sat ctx = 
-let get_model =
-let eval m x =
-let eval_int_var m x =
-let get_cost m =
-*)

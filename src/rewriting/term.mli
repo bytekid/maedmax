@@ -36,13 +36,7 @@ val is_proper_subterm : t -> t -> bool
 
 val root : t -> Signature.sym
 
-val ren : t -> t
-
 val substitute : subst -> t -> t
-
-val rename : t -> t
-
-val rename_canonical : t -> t
 
 val substitute_bot : t -> t
 
@@ -81,5 +75,7 @@ val is_embedded : t -> t -> bool
 val to_xml : t -> Xml.xml
 
 val to_tptp : t -> string
+
+val to_string : t -> string
 
 val similarity : Signature.sym list -> Signature.sym list -> t -> t -> float

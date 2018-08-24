@@ -24,27 +24,19 @@ val strategy_ordered_sat : t
 val strategy_aql : t
 val strategy_order_generation : t
 
-val term_to_string : Settings.t_term -> string
-
 val get_termination : t -> Settings.t_term
-
+val term_to_string : Settings.t_term -> string
 val to_string : t -> string
 
 val has_dps : Settings.t_term -> bool
-
-val init : Settings.t_term -> int -> Yices.context -> Rules.t -> unit
-
-val assert_constraints : Settings.t_term -> int -> Yices.context -> Rules.t ->
-  unit
-
+val init : Settings.t_term -> int -> Settings.Logic.context -> Rules.t -> unit
+val assert_constraints : Settings.t_term -> int -> Settings.Logic.context ->
+  Rules.t -> unit
 val bootstrap_constraints :
-  int -> Yices.context -> (Rule.t * Yicesx.t) list -> Yicesx.t
-
-val decode_print : int -> Yices.model -> Settings.t_term -> unit
-
-val decode : int -> Yices.model -> Settings.t_term -> Order.t
-
+  int -> Settings.Logic.context -> (Rule.t * Settings.Logic.t) list ->
+  Settings.Logic.t
+val decode_print : int -> Settings.Logic.model -> Settings.t_term -> unit
+val decode : int -> Settings.Logic.model -> Settings.t_term -> Order.t
 val clear : unit -> unit
-
-val cond_gt : Settings.t_term -> int -> Yices.context -> (Term.t * Term.t) list
-  -> Term.t -> Term.t -> Yicesx.t
+val cond_gt : Settings.t_term -> int -> Settings.Logic.context ->
+  (Term.t * Term.t) list -> Term.t -> Term.t -> Settings.Logic.t

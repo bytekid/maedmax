@@ -29,9 +29,10 @@ let add_goal g (axs,es,gs) = axs, es, L.make_neg_goal g::gs;;
 %token <string> IDENT
 %token <string> VAR
 %token <string> FILE
-%token LPAREN RPAREN 
+%token LPAREN RPAREN LBRACKET RBRACKET
 %token EQ NEQ COMMA SEMICOLON EOF TICK DOT COMMENT
 %token CNF AXIOM HYPOTHESIS CONJECTURE NCONJECTURE INCLUDEAXIOMS
+%token FILE_KEY STATUS_KEY INFERENCE_KEY PLAIN
 
 %type <string list * Literal.t list * Literal.t list> toplevel
 %type <Literal.t> equation_or_inequality
@@ -54,18 +55,28 @@ decl:
   | error { syntax_error "Syntax error." }
 
 axiom:
- | CNF LPAREN IDENT COMMA AXIOM COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
- | CNF LPAREN IDENT COMMA AXIOM COMMA LPAREN inequality RPAREN RPAREN DOT { $8 }
+ | CNF LPAREN IDENT COMMA axiom_or_plain COMMA LPAREN equation RPAREN source_option { $8 }
+ | CNF LPAREN IDENT COMMA axiom_or_plain COMMA LPAREN inequality RPAREN source_option { $8 }
+
+axiom_or_plain:
+ | AXIOM {}
+ | PLAIN {}
 
 hypothesis:
- | CNF LPAREN IDENT COMMA HYPOTHESIS COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
+ | CNF LPAREN IDENT COMMA HYPOTHESIS COMMA LPAREN equation RPAREN source_option { $8 }
 
 ineq_conjecture:
- | CNF LPAREN IDENT COMMA CONJECTURE COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
- | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN inequality RPAREN RPAREN DOT { $8 }
+ | CNF LPAREN IDENT COMMA CONJECTURE COMMA LPAREN equation RPAREN source_option { $8 }
+ | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN inequality RPAREN source_option { $8 }
 
 eq_conjecture:
- | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN equation RPAREN RPAREN DOT { $8 }
+ | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN equation RPAREN source_option { $8 }
+
+source_option:
+ | RPAREN DOT { }
+ | COMMA inference RPAREN DOT { }
+ | COMMA FILE_KEY LPAREN FILE COMMA IDENT RPAREN RPAREN DOT { }
+ | COMMA FILE_KEY LPAREN FILE RPAREN RPAREN DOT { }
 
 equation_or_inequality:
  | equation EOF { make_literal $1 }
@@ -89,3 +100,15 @@ terms:
   | term COMMA terms { $1 :: $3 }
   | term             { [$1] }
   |                  { [] }
+
+inference:
+  | INFERENCE_KEY LPAREN IDENT COMMA inference_status COMMA
+    LBRACKET inference inferences RPAREN {}
+  | IDENT {}
+
+inferences:
+  | COMMA inference inferences {}
+  | RBRACKET {}
+
+inference_status:
+  | LBRACKET STATUS_KEY LPAREN IDENT RPAREN RBRACKET {}

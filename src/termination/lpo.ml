@@ -3,10 +3,11 @@ module L = List
 module C = Cache
 module F = Format
 module Sig = Signature
+module Logic = Settings.Logic
 
 (*** OPENS *******************************************************************)
 open Term
-open Yicesx
+open Logic
 open Arith
 
 (*** TYPES *******************************************************************)
@@ -20,17 +21,17 @@ let flags = { af = ref false }
 (* signature *)
 let funs = ref []
 (* map function symbol and strategy stage to variable for precedence *)
-let precedence : (int * Sig.sym, Yicesx.t) Hashtbl.t = Hashtbl.create 32
+let precedence : (int * Sig.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
 (* map function symbol and strategy stage to variable expressing whether
    argument filtering for symbol is list *)
-let af_is_list : (int * Sig.sym, Yicesx.t) Hashtbl.t = Hashtbl.create 32
+let af_is_list : (int * Sig.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
 (* variable whether argument position for symbol is contained in filtering *)
-let af_arg : ((int * Sig.sym) * int, Yicesx.t) Hashtbl.t = Hashtbl.create 64
+let af_arg : ((int * Sig.sym) * int, Logic.t) Hashtbl.t = Hashtbl.create 64
 
 (* cache results of comparison *)
-let gt_encodings : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 512
-let ge_encodings : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 512
-let eq_encodings : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 512
+let gt_encodings : (int * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 512
+let ge_encodings : (int * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 512
+let eq_encodings : (int * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 512
 
 (*** FUNCTIONS ***************************************************************)
 let name = Sig.get_fun_name
@@ -187,6 +188,7 @@ let make_fun_vars ctx k fs =
 
 let init (ctx,k) fs =
   funs := fs;
+  Hashtbl.clear precedence;
   let fs' = L.map fst fs in
   make_fun_vars ctx k fs';
   let bnd_0 = mk_zero ctx in
@@ -227,18 +229,14 @@ let eval_prec k m =
  List.sort (fun (_, p) (_,q) -> p - q) [ (f,a), prec f | f,a <- !funs ]
 ;;
 
-
-let print_prec = function
-    [] -> ()
+let prec_to_string = function
+    [] -> ""
   | ((f,_),p) :: fp ->
-    Format.printf "LPO \n %!";
-    if fp <> [] then (
-      Format.printf " %s " (name f);
-      List.iter (fun ((f,_),_) -> Format.printf "< %s %!" (name f)) fp;
-      Format.printf "\n"
-      );
+    let s = "LPO \n " ^ (name f) in
+    List.fold_left (fun s ((f,_),_) -> s ^ " < " ^ (name f)) s fp;
 ;;
 
+let print_prec p = Format.printf "%s\n%!" (prec_to_string p)
 
 let decode_print k m = print_prec (eval_prec k m)
 
@@ -272,7 +270,7 @@ let decode_term_gt k m =
     | V _, _
     | _, V _  -> false (* no subterm *)
     | F(f,ss), F(g,ts) ->
-      let sub_gt = L.exists (fun si -> gt si t) ss in
+      let sub_gt = L.exists (fun si -> (gt si t) || (si = t)) ss in
       if f <> g then
        sub_gt || (prec f > prec g && L.for_all (gt s) ts)
       else (
@@ -306,6 +304,11 @@ let print_params = function
       )
   ;;
 
+let encode i preclist ctx =
+ let add ((f,_), p) = (prec i f <=> (Logic.mk_num ctx p)) in
+ Logic.big_and ctx (List.map add preclist)
+;;
+
 let decode k m =
   let gt = decode_term_gt k m in
   let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
@@ -315,11 +318,13 @@ let decode k m =
   in
   let prec = eval_prec k m in
   object
-    method bot = bot;;
-    method gt = gt;;
-    method print = fun _ -> print_prec prec;;
+    method bot = bot
+    method gt = gt
+    method smt_encode = encode k prec
+    method to_string = prec_to_string prec
+    method print = fun _ -> print_prec prec
     method to_xml = decode_xml prec
-    method print_params = fun _ -> print_params prec;;
+    method print_params = fun _ -> print_params prec
   end
 ;;
 

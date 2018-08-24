@@ -1,21 +1,20 @@
-(*** OPENS *******************************************************************)
-open Yices
-open Yicesx
-open Rewriting
-(*open TerminationStrategy*)
-
 (*** MODULES *****************************************************************)
 module C = Cache
 module T = Term
+module Logic = Settings.Logic
+
+(*** OPENS *******************************************************************)
+open Logic
+open Rewriting
 
 (*** TYPES *******************************************************************)
 (*** GLOBALS *****************************************************************)
-let t_edge : (int * Rule.t * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 128
-let cycle_id :  (int * Signature.sym, Yicesx.t) Hashtbl.t = Hashtbl.create 128
+let t_edge : (int * Rule.t * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 128
+let cycle_id :  (int * Signature.sym, Logic.t) Hashtbl.t = Hashtbl.create 128
 
 let varcount = ref 0
 
-let t_scc : (int * Signature.sym, Yicesx.t) Hashtbl.t = Hashtbl.create 128
+let t_scc : (int * Signature.sym, Logic.t) Hashtbl.t = Hashtbl.create 128
 
 (*** FUNCTIONS ***************************************************************)
 

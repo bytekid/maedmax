@@ -2,11 +2,15 @@
 open Yices
 
 (*** TYPES *******************************************************************)
-type t = { ctx : Yices.context;
-           expr: Yices.expr;
-           decl: Yices.var_decl option }
+type context = Yices.context
 
-(*** GLOBALS *****************************************************************)
+type t = {
+  ctx : Yices.context;
+  expr: Yices.expr;
+  decl: Yices.var_decl option
+}
+
+type model = Yices.model
 
 (*** FUNCTIONS ***************************************************************)
 let mk c e = { ctx = c; expr = e; decl = None }
@@ -16,7 +20,7 @@ let ctx yexpr = yexpr.ctx
 
 let expr yexpr = yexpr.expr
 
-let is_true x = let r = (x.expr == mk_true x.ctx) in (if r then Format.printf "YES!!\n%!"; r)
+let is_true x = let r = (x.expr == mk_true x.ctx) in r
 
 let is_false x = (x.expr == mk_false x.ctx)
 
@@ -136,5 +140,5 @@ let eval_int_var m x =
     | None -> failwith "Yicesx.eval_int: no declaration found"
 ;;
 
-let get_cost m = Int64.to_int (get_cost m)
+let get_cost _ m = Int64.to_int (get_cost m)
 

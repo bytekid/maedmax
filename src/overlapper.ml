@@ -1,3 +1,4 @@
+(*** MODULES *****************************************************************)
 module T = Term
 module L = List
 module H = Hashtbl
@@ -7,11 +8,14 @@ module V = Variant
 module Lit = Literal
 module A = Analytics
 module Trc = Trace
+module Logic = Settings.Logic
 
+(*** TYPES ********************************************************************)
 type term_cmp = Term.t -> Term.t -> bool
 
 exception Not_orientable
 
+(*** FUNCTIONS ****************************************************************)
 class overlapper (trs : Literal.t list) = object (self)
 
   val unif_cache : (Term.t, Literal.t list) H.t = H.create 256
@@ -51,9 +55,7 @@ class overlapper (trs : Literal.t list) = object (self)
   method cp_at rli rlo p = (* rli is inner, rlo is outer *)
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
     else (
-      let t = Unix.gettimeofday () in
       let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
-      A.t_tmp1 := !(A.t_tmp1) +. (Unix.gettimeofday () -. t);
       match o with
         | None -> None
         | Some o ->
@@ -63,7 +65,7 @@ class overlapper (trs : Literal.t list) = object (self)
           if s = t && is_equality && not is_goal then None
           else (
             let st' = V.normalize_rule (s,t) in
-            if !(Settings.do_proof) then
+            if !(Settings.do_proof) <> None then
               (if is_goal then Trc.add_overlap_goal else Trc.add_overlap) st' o;
             try Some (Lit.make st' is_equality is_goal)
             with Lit.Too_large -> None))
@@ -79,9 +81,9 @@ class overlapper (trs : Literal.t list) = object (self)
 end
 
 
-class overlapper_with (trs : (Rule.t * Yicesx.t) list) = object (self)
+class overlapper_with (trs : (Rule.t * Logic.t) list) = object (self)
 
-  val unif_cache : (Term.t, (Rule.t * Yicesx.t) list) H.t = H.create 256
+  val unif_cache : (Term.t, (Rule.t * Logic.t) list) H.t = H.create 256
   val mutable index = FingerprintIndex.empty
 
   method init () =
@@ -104,9 +106,7 @@ class overlapper_with (trs : (Rule.t * Yicesx.t) list) = object (self)
   ;;
 
   method cp_at rli rlo p = (* rli is inner, rlo is outer *)
-  let t = Unix.gettimeofday () in
   let o = O.overlap_between_at rli rlo p  in
-  A.t_tmp1 := !(A.t_tmp1) +. (Unix.gettimeofday () -. t);
     match o with
       | None -> None
       | Some o ->

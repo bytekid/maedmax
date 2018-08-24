@@ -1,38 +1,39 @@
 (*** MODULES *****************************************************************)
 module C = Cache
+module Logic = Settings.Logic
 
 (*** OPENS *******************************************************************)
 open Term
-open Yicesx
+open Logic
 open Arith
 
 (*** TYPES *****************************************************************)
-type poly = Yicesx.t * (Signature.var * Yicesx.t) list
+type poly = Logic.t * (Signature.var * Logic.t) list
 
 (*** GLOBALS *****************************************************************)
 (* signature *)
 let funs = ref []
 
 (* weight status, a boolean for each function symbol *)
-let status : (int * Signature.sym, Yicesx.t) Hashtbl.t 
+let status : (int * Signature.sym, Logic.t) Hashtbl.t 
  = Hashtbl.create 32
 
 (* map function symbol and strategy stage to variable for weight *)
-let weights : (int * Signature.sym, Yicesx.t) Hashtbl.t 
+let weights : (int * Signature.sym, Logic.t) Hashtbl.t 
  = Hashtbl.create 32
 
 (* map function symbol and strategy stage to variable for precedence *)
-let precedence : (int * Signature.sym, Yicesx.t) Hashtbl.t 
+let precedence : (int * Signature.sym, Logic.t) Hashtbl.t 
  = Hashtbl.create 32
 
 (* map function symbol, strategy stage and argument position to coefficient *)
-let scs : (int * Signature.sym * int, Yicesx.t) Hashtbl.t
+let scs : (int * Signature.sym * int, Logic.t) Hashtbl.t
  = Hashtbl.create 32
 
 let w0_var = ref None
 
 (* cache results of comparison *)
-let gt_encodings : (int * Rule.t, Yicesx.t) Hashtbl.t = Hashtbl.create 512
+let gt_encodings : (int * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 512
 let w_encodings : (int * Term.t, poly list) Hashtbl.t = Hashtbl.create 512
 
 (*** FUNCTIONS ***************************************************************)

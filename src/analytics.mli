@@ -14,7 +14,7 @@ val t_select : float ref
 val t_success_check : float ref
 val t_tmp1 : float ref
 val t_tmp2 : float ref
-val ces : int ref
+val equalities : int ref
 val goals : int ref
 val iterations : int ref
 val restarts : int ref
@@ -22,6 +22,11 @@ val smt_checks : int ref
 val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref
+val goal_counts : int list ref
+val red_counts : int list ref
+val cp_counts : int list ref
+val trs_sizes : int list ref
+val costs : int list ref
 val shape : Settings.shape ref
 
 val memory : unit -> int
@@ -39,3 +44,17 @@ val theory_equations : Literal.t list -> Literal.t list
 val json : unit -> Yojson.Basic.json
 
 val print : unit -> unit
+
+val init_proof_track : Literal.t list -> unit
+
+val update_proof_track : Literal.t list -> Literal.t list -> int -> unit
+
+val show_proof_track : Settings.t -> unit
+
+val little_progress : unit -> bool
+
+val very_little_progress : unit -> bool
+
+val some_progress : unit -> bool
+
+val goal_similarity : Settings.t -> Literal.t -> float
