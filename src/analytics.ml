@@ -25,6 +25,8 @@ let t_select = ref 0.0
 let t_cache = ref 0.0
 let t_tmp1 = ref 0.0
 let t_tmp2 = ref 0.0
+let t_tmp3 = ref 0.0
+let t_tmp4 = ref 0.0
 
 let iterations = ref 0;;
 let equalities = ref 0;;
@@ -104,6 +106,8 @@ let print () =
   printf " caching            %.3f@." !t_cache;
   printf " tmp1               %.3f@." !t_tmp1;
   printf " tmp2               %.3f@." !t_tmp2;
+  printf " tmp3               %.3f@." !t_tmp3;
+  printf " tmp4               %.3f@." !t_tmp4;
   printf " normalization      %.3f@." !Variant.t_normalize
 
 let is_applicative es =

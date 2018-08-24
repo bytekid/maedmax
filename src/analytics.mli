@@ -14,6 +14,8 @@ val t_select : float ref
 val t_success_check : float ref
 val t_tmp1 : float ref
 val t_tmp2 : float ref
+val t_tmp3 : float ref
+val t_tmp4 : float ref
 val equalities : int ref
 val goals : int ref
 val iterations : int ref
