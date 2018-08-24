@@ -419,8 +419,8 @@ let cps rew n1 n2 =
       cps))
 ;;
 
-(* get overlaps for rules rr and active nodes cc *)
-let overlaps rew rr aa =
+(* get overlaps for rules rr and equations aa *)
+let overlaps rr aa =
  let ns =
    if not !(settings.unfailing) then rr
    else
@@ -437,10 +437,10 @@ let overlaps rew rr aa =
  cps2, ovl
 ;;
 
-let overlaps rew rr = A.take_time A.t_overlap (overlaps rew rr)
+let overlaps rr = A.take_time A.t_overlap (overlaps rr)
 
 (* goal only as outer rule *)
-let overlaps_on rew rr aa _ gs =
+let overlaps_on rr aa _ gs =
   let ns = rr @ aa in
   let ovl = new Overlapper.overlapper ns in
   ovl#init ();
@@ -962,7 +962,7 @@ let rec phi ctx aa gs =
     (*let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
     let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
     let aa_for_ols = equations_for_overlaps irr aa in
-    let cps', ovl = overlaps rew rr aa_for_ols in
+    let cps', ovl = overlaps rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps') ;
     let cps = NS.filter (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in
     let cps_large = NS.filter (fun cp -> Lit.size cp >= !Settings.max_eq_size) cps' in
@@ -973,7 +973,7 @@ let rec phi ctx aa gs =
     let sel, rest = select (aa,rew) nn in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track sel (NS.to_list rest) !(A.iterations);
-    let gos = overlaps_on rew rr aa_for_ols ovl gs in
+    let gos = overlaps_on rr aa_for_ols ovl gs in
     let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
     (*Format.printf "goal pruning: %d -> %d (%d)\n%!"
       (NS.size gos) (NS.size gcps) !Settings.max_goal_size;*)
