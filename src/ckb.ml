@@ -978,8 +978,6 @@ let rec phi ctx aa gs =
       A.update_proof_track sel (NS.to_list rest) !(A.iterations);
     let gos = overlaps_on rr aa_for_ols ovl gs in
     let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
-    (*Format.printf "goal pruning: %d -> %d (%d)\n%!"
-      (NS.size gos) (NS.size gcps) !Settings.max_goal_size;*)
     let t = Unix.gettimeofday () in
     let gcps = reduced rew gcps in (* goal CPs *)
     A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
@@ -990,7 +988,6 @@ let rec phi ctx aa gs =
     let cc = axs () @ (NS.to_list cps @ (NS.to_list cps_large)) in
     match succeeds ctx (rr, irr) rew cc ieqs gs with
        Some r ->
-       A.show_proof_track settings;
        if !(Settings.generate_benchmarks) then
          Smtlib.benchmark "final";
        if !S.generate_order then
@@ -1003,11 +1000,8 @@ let rec phi ctx aa gs =
     let s = Unix.gettimeofday () in
     let _, aa', gs', aa_new = L.fold_left process (0, aa, gs,[]) rrs in
     let sz = match rrs with (trs,c,_) :: _ -> List.length trs,c | _ -> 0,0 in
-    A.red_counts := !redcount :: !A.red_counts;
-    A.trs_sizes := fst sz :: !A.trs_sizes;
-    A.costs := snd sz :: !A.costs;
     let cp_count = if rrs = [] then 0 else !cp_count / (List.length rrs) in
-    A.cp_counts := cp_count :: !A.cp_counts;
+    A.add_state !redcount (fst sz) (snd sz) cp_count;
     new_nodes := aa_new;
     A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. s);
     phi ctx aa' gs'
@@ -1015,6 +1009,7 @@ let rec phi ctx aa gs =
 ;;
 
 let init_settings fs axs gs =
+ A.restart ();
  settings.axioms := axs;
  let axs = [ Lit.terms a | a <- axs ] in
  let acs = Ac.symbols axs in

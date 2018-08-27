@@ -57,8 +57,8 @@ let options = Arg.align
                                 settings.reduce_trss := false;
                                 settings.k := (fun _ -> 4)*) ()),
     " use heuristics for AQL examples");
-   ("--noauto", Arg.Clear settings.auto,
-    " use heuristic settings (automatic mode)");
+   ("--benchmark", Arg.Set Settings.benchmark,
+    " produce benchmarks");
    ("--concon", Arg.Unit do_concon,
     " satisfiability-preferring strategy");
    ("-D", Arg.Int (fun d -> settings.d := d),
@@ -67,8 +67,8 @@ let options = Arg.align
     " enter interactive mode once a complete system was found");
    ("--json", Arg.Set settings.json,
     " output result and stats in JSON format");
-   ("-I", Arg.Int (fun n -> Settings.inst_depth := n),
-    "<i> instantiation depth for ground confluence check");
+   (*("-I", Arg.Int (fun n -> Settings.inst_depth := n),
+    "<i> instantiation depth for ground confluence check");*)
    ("-K", Arg.Int (fun n -> settings.k := (fun _ -> n); k := n),
     "<k> compute k maximal terminating TRSs");
    ("--kb", Arg.Unit do_unordered,
@@ -357,12 +357,15 @@ let run file ((es, gs) as input) =
     print_json (es,gs) secs (ans,clean es proof) settings proofstr
   ) else (
     match !(Settings.do_proof) with
-    | Some fmt -> show_proof file input proof fmt
+    | Some fmt when not !Settings.benchmark -> show_proof file input proof fmt
     | None -> (
       print_res ans (clean es proof);
-      printf "%s %.2f %s@." "Search time:" secs "seconds";
-      Analytics.print ()
+      if not !Settings.benchmark then (
+        printf "%s %.2f %s@." "Search time:" secs "seconds";
+        Analytics.print ()
+      )
     )
+    | _ -> ()
   )
 ;;
 

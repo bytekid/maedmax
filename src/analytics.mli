@@ -25,10 +25,6 @@ val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref
 val goal_counts : int list ref
-val red_counts : int list ref
-val cp_counts : int list ref
-val trs_sizes : int list ref
-val costs : int list ref
 val shape : Settings.shape ref
 
 val memory : unit -> int
@@ -60,3 +56,7 @@ val very_little_progress : unit -> bool
 val some_progress : unit -> bool
 
 val goal_similarity : Settings.t -> Literal.t -> float
+
+val restart : unit -> unit
+
+val add_state : int -> int -> int -> int -> unit

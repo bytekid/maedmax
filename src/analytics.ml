@@ -9,6 +9,28 @@ module L = List
 (*** TYPES *******************************************************************)
 type equation_state = Active of int | Passive of int | Unseen
 
+type track_footprint = {
+  active: int;
+  passive: int;
+  unseen: int;
+  ratio: float
+}
+
+type state = {
+  restarts: int;
+  iterations: int;
+  equalities: int;
+  goals: int;
+  time: float;
+  memory: int;
+  reducible: int;
+  cps: int;
+  trs_size: int;
+  cost : int;
+  smt_checks: int;
+  track : track_footprint option
+}
+
 (*** GLOBALS *****************************************************************)
 let t_ccomp = ref 0.0
 let t_ccpred = ref 0.0
@@ -50,7 +72,11 @@ let ucount = ref 0
 let ac_syms = ref []
 let only_c_syms = ref []
 
+let start_time = ref 0.0
+
 let track_equations_state : (Literal.t * equation_state) list ref = ref []
+
+let states : state list ref = ref []
 
 (*** FUNCTIONS ***************************************************************)
 let take_time t f x =
@@ -259,7 +285,18 @@ let update_proof_track aa pp i =
     else Unseen
   in
   let update (l,s) = let s' = current l in l, if s' > s then s' else s in
-  track_equations_state := List.map update !track_equations_state
+  track_equations_state := List.map update !track_equations_state;
+  (* update counts *)
+  acount := 0;
+  pcount := 0;
+  ucount := 0;
+  let check = function
+    | Unseen -> ucount := !ucount + 1
+    | Active i -> acount := !acount + 1
+    | Passive i -> pcount := !pcount + 1
+  in
+  List.iter check (List.map snd !track_equations_state)
+;;
 
 let goal_similarity settings n =
   let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
@@ -269,13 +306,10 @@ let goal_similarity settings n =
 
 let show_proof_track settings =
   if !(Settings.track_equations) <> [] then (
-    acount := 0;
-    pcount := 0;
-    ucount := 0;
     let ststr = function
-      | Unseen -> ucount := !ucount + 1; "unseen"
-      | Active i -> acount := !acount + 1; "active: " ^ (string_of_int i)
-      | Passive i -> pcount := !pcount + 1; "passive: " ^ (string_of_int i)
+      | Unseen -> "unseen"
+      | Active i -> "active: " ^ (string_of_int i)
+      | Passive i -> "passive: " ^ (string_of_int i)
     in
     printf "Proof track:\n";
     let show (l,s) =
@@ -323,3 +357,51 @@ let some_progress _ =
   (List.length !costs > 0 && List.hd !costs = 0) ||
   not (prefix_equal 2 !goal_counts)
 ;;
+
+let print_state s =
+  printf "%i, %i, %i, %i, " s.restarts s.iterations s.equalities s.goals;
+  printf "%.2f, %i, %i, " s.time s.memory s.smt_checks;
+  printf "%i, %i, %i, %i" s.reducible s.cps s.trs_size s.cost;
+  (
+    match s.track with
+    | Some t -> printf ", %.2f" t.ratio;
+    | None -> ()
+  );
+  printf "\n%!"
+;;
+
+let record_state red_count trs_size cost cp_count =
+  let t =
+    if !acount + !pcount + !ucount = 0 then None
+    else
+      let cnt = float_of_int (List.length !track_equations_state) in
+      let r = (float_of_int !acount +. (float_of_int !pcount) *. 0.5) /. cnt in
+      Some {active = !acount; passive = !pcount; unseen = !ucount; ratio = r}
+  in
+  let s = {
+    restarts = !restarts;
+    iterations = !iterations;
+    equalities = !equalities;
+    goals = !goals;
+    time = Unix.gettimeofday () -. !start_time;
+    memory = memory ();
+    reducible = red_count;
+    cps = cp_count;
+    trs_size = trs_size;
+    cost = cost;
+    smt_checks = !smt_checks;
+    track = t
+  }
+  in states := s :: !states;
+  if !Settings.benchmark then print_state s
+;;
+
+let add_state red_count trs_size cost cp_count =
+  red_counts := red_count :: !red_counts;
+  trs_sizes := trs_size :: !trs_sizes;
+  costs := cost :: !costs;
+  cp_counts := cp_count :: !cp_counts;
+  record_state red_count trs_size cost cp_count
+;;
+
+let restart _ = start_time := Unix.gettimeofday ()

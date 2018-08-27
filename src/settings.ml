@@ -120,6 +120,7 @@ let max_goal_size : int ref = ref 100
 let input_file = ref ""
 let generate_benchmarks = ref false
 let track_equations : literal list ref = ref []
+let benchmark = ref false
 
 let shape_to_string = function
     NoShape -> "none"
