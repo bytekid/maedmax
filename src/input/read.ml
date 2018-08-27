@@ -35,27 +35,36 @@ let read_trs filename =
 
 let union2 (xs,ys) (xs',ys') = (xs @ xs',ys @ ys')
 
-let rec read_tptp filename =
-  let fn =
-    if Sys.file_exists filename then filename
-    else match Sys.getenv_opt  "TPTP" with
-     | Some tptp -> Filename.concat tptp filename
-     | None -> raise (Sys_error ("Input file" ^ filename ^ " not found."))
-  in
-  let read ch =
-    let lexbuf = from_channel ch in
-    let lex_curr_p = { lexbuf.lex_curr_p with pos_fname = filename } in
+let read_tptp orig_filename =
+  let rec read_tptp filename =
+    let fn =
+      if Sys.file_exists filename then filename
+      else match Sys.getenv_opt  "TPTP" with
+      | Some tptp -> Filename.concat tptp filename
+      | None -> (
+        let dir = Filename.dirname orig_filename in
+        let fn_dir = Filename.concat dir filename in
+        if Sys.file_exists fn_dir then fn_dir
+        else
+          raise (Sys_error ("Input file" ^ filename ^ " was not found."))
+      )
+    in
+    let read ch =
+      let lexbuf = from_channel ch in
+      let lex_curr_p = { lexbuf.lex_curr_p with pos_fname = filename } in
+      try
+        TptpParser.toplevel TptpLexer.token { lexbuf with lex_curr_p=lex_curr_p }
+      with Parsing.Parse_error ->
+        (syntax_error lexbuf.lex_curr_p; exit 1)
+    in
     try
-      TptpParser.toplevel TptpLexer.token { lexbuf with lex_curr_p=lex_curr_p }
-    with Parsing.Parse_error ->
-      (syntax_error lexbuf.lex_curr_p; exit 1)
-  in
-  try
-    let axs, eqs, gls = open_in_do ~path:fn read in
-    let add res a = let res' = read_tptp a in union2 res res' in
-    List.fold_left add (eqs,gls) axs
-  with Sys_error s ->
-    (eprintf "Error:@.%s@." s; exit 1)
+      let axs, eqs, gls = open_in_do ~path:fn read in
+      let add res a = let res' = read_tptp a in union2 res res' in
+      List.fold_left add (eqs,gls) axs
+    with Sys_error s ->
+      (eprintf "Error:@.%s@." s; exit 1)
+  in read_tptp orig_filename
+;;
 
 let file filename = 
   if Filename.check_suffix filename "trs"  then fst (read_trs filename), []
