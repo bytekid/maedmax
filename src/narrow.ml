@@ -6,8 +6,13 @@ module S = Settings
 (*** MODULES *****************************************************************)
 open Settings
 
+(*** EXCEPTIONS **************************************************************)
+exception Too_large
+
 (*** GLOBALS *****************************************************************)
 let settings = S.default
+
+let complete = ref true
 
 (*** FUNCTIONS ***************************************************************)
 let debug _ = !(settings.d) >= 1
@@ -51,12 +56,15 @@ let narrow_forward_at_with rr ((s,t),(ps,pt)) p (l,r) =
     let s' = T.replace (subst s) (subst r) p in
     let ps' = propagate_basic_pos p ps r in
     let st', keep_dir = Variant.normalize_rule_dir (s',subst t) in
+    if Rule.size st' > (*!(settings.size_bound_goals)*) 200 then
+      (complete := false; raise Too_large);
     let pst = if keep_dir then (ps',pt) else (pt,ps') in
     if debug () then
-      Format.printf "forward narrow (%a,%a) with %a at %s to (%a,%a)\n%!"
+      Format.printf "forward narrow (%a,%a) with %a at %s to (%a,%a) %d\n%!"
         T.print s T.print t
         R.print (l,r) (pstr p)
-        T.print (fst st') T.print (snd st');
+        T.print (fst st') T.print (snd st')
+        (R.size st');
     let uv,ps_uv = nf2 rr (st',pst) in
     if debug () then
       Format.printf "rewrite to (%a,%a)\n%!" T.print (fst uv) T.print (snd uv);
@@ -69,9 +77,9 @@ let narrow_at rr st p =
 ;;
 
 let merge ((s,t),(ps,pt)) ((s',t'),(ps',pt')) =
-  if R.variant (s,t) (s',t') then
+  if (s,t) = (s',t') then
     (s,t),(Hashset.add_all ps ps', Hashset.add_all pt pt')
-  else if R.variant (t,s) (s',t') then
+  else if (t,s) = (s',t') then
     (s',t'),(Hashset.add_all pt ps', Hashset.add_all ps pt')
   else ((s',t'),(ps',pt'))
 ;;
@@ -81,11 +89,20 @@ let sym_variant ((s,t),_) (st',_) = (t,s) = st' || (s,t) = st'
 
 let rec add st = function
     [] -> [st]
-  | st' :: gs when sym_variant st st' -> (merge st st') :: gs  
+  | st' :: gs when sym_variant st st' -> (merge st st') :: gs
   | st' :: gs -> st' :: (add st gs)
 ;;
 
-let unique = L.fold_left (fun all g -> add g all) []
+let unique_add gs_new gs =
+  (* takes too long, and for examples like COL06*-1 unique does not change*)
+  if List.length gs > 1000 || List.length gs_new > 1000 then List.rev_append gs_new gs
+  else L.fold_left (fun all g -> add g all) gs gs_new
+;;
+
+let unique gs =
+  if List.length gs > 1000 then gs (* takes too long ...*)
+  else L.fold_left (fun all g -> add g all) [] gs
+;;
 
 let narrow rr ((s,t),(ps,pt)) =
   L.concat ((Hashset.map_to_list (narrow_at rr ((s,t),(ps,pt))) ps) @
@@ -106,42 +123,22 @@ let decide rr ee ord gs =
   if debug () then (
     Format.printf "EE:\n%a\n%!" Rules.print ee');
   let rr' = rr @ ee' in
-
   let rec decide_by_narrowing all gs =
-  (*if debug () then (
-    Format.printf "%i start decide_by_narrowing iteration\n%!" (List.length gs);
-    let psstr ps =
-      "{" ^ (L.fold_left (fun s p -> s ^ ", " ^ (pstr p)) "" ps) ^ "}"
+    let unifiable ((s,t),_) = Subst.unifiable s t in
+    let both_empty (ps,pt) = Hashset.is_empty ps && Hashset.is_empty pt in
+    if L.exists unifiable gs then (
+      if debug () then
+        Format.printf "UNSAT, found unifiable equation\n%!";
+      Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[])))
+    else if L.for_all (fun (_,pps) -> both_empty pps) gs && !complete then (
+      Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
+    else
+      let all' = unique_add gs all in
+      let aux = L.concat (L.map (narrow rr') gs) in
+      let gs' = unique aux in
+      decide_by_narrowing all' gs'
     in
-    L.iter (fun ((s,t),(ps,pt)) ->
-      Format.printf "  (%a,%a) (%s,%s)\n%!" T.print s T.print t
-        (psstr ps) (psstr pt)) gs;
-    Format.printf "all:\n";
-    L.iter (fun ((s,t),(ps,pt)) ->
-      Format.printf "  (%a,%a) (%s,%s)\n%!" T.print s T.print t
-        (psstr ps) (psstr pt)) all);*)
-  let unifiable ((s,t),_) = Subst.unifiable s t in
-  let both_empty (ps,pt) = Hashset.is_empty ps && Hashset.is_empty pt in
-  if L.exists unifiable gs then (
-    if debug () then
-      Format.printf "UNSAT, found unifiable equation\n%!";
-    Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[])))
-  else if L.for_all (fun (_,pps) -> both_empty pps) gs then (
-    Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
-  else
-    let all' = unique (all @ gs) in
-    let remove_gs ((st,(ps,pt)) as np) =
-      try
-        let _,(ps',pt') = L.find (fun (st',_) -> st' = st) all' in
-        (st,(Hashset.diff ps ps', Hashset.diff pt pt'))
-      with Not_found -> np
-    in
-    let gs' = unique (L.concat (L.map (narrow rr') gs)) in
-    let gs' = L.map remove_gs gs' in
-    decide_by_narrowing all' gs'
-  in
   let poss t = Hashset.of_list (T.function_positions t) in
   let gs = [(s,t), (poss s, poss t) | s,t <- gs] in
-  let r = decide_by_narrowing [] gs in
-  r
+  decide_by_narrowing [] gs
 ;;
