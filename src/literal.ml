@@ -27,10 +27,10 @@ let killed = ref 0
 
 let make ts e g =
   let sz = Rule.size ts in
-  (*let c,cg = try Hashtbl.find sizes s with _ -> (0,0) in
-  Hashtbl.replace sizes s (if g then (c,cg+1) else (c+1,cg));*)
-  if g && sz > !Settings.max_goal_size (*||
-     (not g) && sz > !Settings.max_eq_size*) then (killed := !killed + 1; raise Too_large)
+  if g && sz > !Settings.max_goal_size then (
+    killed := !killed + 1;
+    raise Too_large
+  )
   else {terms = ts; is_goal = g; is_equality = e }
 
 let terms l = l.terms
