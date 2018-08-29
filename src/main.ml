@@ -12,6 +12,7 @@ open Yojson.Basic
 (*** GLOBALS *****************************************************************)
 let short_usage = "maedmax v0.9\nUsage: maedmax <options> <file>\n"
 let filenames = ref []
+let track_file = ref None
 
 let settings = Settings.default
 
@@ -121,7 +122,7 @@ let options = Arg.align
     " perform termination check");
    ("-T", Arg.Float (fun f -> timeout := Some f),
     "<t> timeout");
-   ("--track", Arg.String track_proof,
+   ("--track", Arg.String (fun s -> track_file := Some s),
     " <track file> keep track of equations in proof file");
    (*("--tmp", Arg.Int (fun n -> settings.tmp := n),
     "<n> various purposes");*)
@@ -378,6 +379,9 @@ let () =
   | [f] -> 
     let (es,gs) as input = Read.file f in
     Settings.input_file := Filename.remove_extension (Filename.basename f);
+    (match !track_file with
+    | Some f -> track_proof f
+    | None -> ());
     if !(Settings.interactive) && gs <> [] then
       failwith "Input for interactive mode is not supposed to contain goals";
     if !(settings.d) > 0 then
