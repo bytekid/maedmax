@@ -90,15 +90,32 @@ let take_time t f x =
 let memory _ =
   let s = Gc.quick_stat () in
   s.Gc.heap_words * (Sys.word_size / 8 ) / (1024 * 1024)
+;;
+
+let runtime _ = Unix.gettimeofday () -. !start_time
+
+let set_time_mem _ =
+  let mem_diff = memory () - (try (List.hd !states).memory with _ -> 0) in
+  let time_diff = runtime () -. (try (List.hd !states).time with _ -> 0.) in
+  time_diffs := time_diff :: !time_diffs;
+  mem_diffs := mem_diff :: !mem_diffs
+;;
 
 let int_count_str l =
   let append s d = s ^ " " ^ (string_of_int d) in
   List.fold_left append "" (List.rev !l)
+;;
+
+let bool_str l =
+  let append s d = s ^ " " ^ (if d then "1" else "0") in
+  List.fold_left append "" (List.rev !l)
+;;
 
 let float_count_str l =
   let str f = string_of_float ((floor (100. *.f)) /. 100.) in
   let append s d = s ^ " " ^ (str d) in
   List.fold_left append "" (List.rev !l)
+;;
 
 let print () =
   printf "\niterations          %i@." !iterations;
@@ -116,6 +133,7 @@ let print () =
   printf "TRS sizes          %s@." (int_count_str trs_sizes);
   printf "costs              %s@." (int_count_str costs);
   printf "oracle counts       %i/%i/%i@." !acount !pcount !ucount;
+  printf "progress estimates  %s@." (bool_str progress);
   printf "SMT checks          %i@." !smt_checks;
   printf "problem shape       %s@."(Settings.shape_to_string !shape);
   printf "times@.";
@@ -315,8 +333,8 @@ let show_proof_track settings =
     in
     printf "Proof track:\n";
     let show (l,s) =
-      let sim = Literal.size l in
-      printf "  %s: %s %d\n%!" (Literal.to_string l) (ststr s) sim
+      let sz, age = Literal.size l, Nodes.age l in
+      printf "  %s (%s) (%d, %d)\n%!" (Literal.to_string l) (ststr s) sz age
     in
     List.iter show !track_equations_state;
     printf "%i active, " !acount;
@@ -336,15 +354,16 @@ let prefix_equal n xs =
   try all_equal (Listx.take n xs) with _ -> false
 ;;
 
-let little_progress _ =
+let little_progress i =
   (*let cost_stable = prefix_equal 3 !costs && List.hd !costs <> 0 in
   let red_stable = prefix_equal 4 !red_counts in
   (*let goal_stable = prefix_equal 3 !goal_counts in*)
   let no_progress = cost_stable || red_stable (*|| goal_stable*) in
   no_progress*)
-  match !progress with
-  | false :: false :: _ when !iterations > 2 -> true
-  | _ -> false
+  try
+    let progress = Listx.take i !progress in
+    List.fold_left (fun b y -> b && not y) (!iterations > 2) progress
+  with _ -> false
 ;;
 
 let very_little_progress _ =
@@ -399,7 +418,7 @@ let record_state red_count trs_size cost cp_count =
     iterations = !iterations;
     equalities = !equalities;
     goals = !goals;
-    time = Unix.gettimeofday () -. !start_time;
+    time = runtime ();
     memory = memory ();
     reducible = red_count;
     cps = cp_count;

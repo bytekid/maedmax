@@ -24,11 +24,6 @@ exception Fail
 (*** GLOBALS *****************************************************************)
 let settings = Settings.default
 
-let sizes = ref [] (* to check degeneration *)
-let last_time = ref 0.0
-let start_time = ref 0.0
-let last_mem = ref 0
-
 (* caching for search strategies*)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
 let reducible : (int, Logic.t) Hashtbl.t = Hashtbl.create 512;;
@@ -314,16 +309,13 @@ let select' ?(only_size = true) aarew k cc thresh =
  in
  let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
  let aa =
-  if A.little_progress () then (get_old_nodes max aarew 2) @ aa else aa
+  if A.little_progress 2 then (get_old_nodes max aarew 2) @ aa else aa
  in
  (*let aa =
    if A.very_little_progress () then select_goal_similar size_sorted :: aa else aa
  in*)
  let pp = NS.diff_list cc aa in
  if debug 1 then log_select size_sorted aa;
- (* remember smallest terms for divergence estimate, 20 is heuristic value *)
- let m = L.fold_left (fun m n -> min m (R.size (Lit.terms n))) 20 aa in
- sizes := m :: !sizes;
  (aa,pp)
 ;;
 
@@ -337,12 +329,6 @@ let select_for_restart cc =
   let deepl l = deep (Lit.terms l) in
   let is_big es = L.exists bigl es && L.exists deepl es in
   let fats es = [L.find bigl es; L.find deepl es] in
-  (*let drule n =
-    let l,r = Lit.terms n in
-    Rule.is_rule (l,r) && Rule.is_duplicating (l,r) && not (Term.is_subterm l r)
-  in
-  let dup es = L.exists drule (es @ [Lit.flip e | e <- es ]) in
-  let fdup es = L.find drule (es @ [Lit.flip e | e <- es ]) in*)
   let k = !(A.restarts) * 2 in
   let rew = new Rewriter.rewriter [] [] Order.default in
   let ccl = NS.to_list cc in
@@ -689,6 +675,7 @@ let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
 let search_constraints ctx (ccl, ccsymlvs) gs =
  (* orientable equations are used for CPs in CeTA ... *)
  let take_max = nth_iteration !(settings.max_oriented) (*|| !(S.do_proof)*) in
+ (* A.little_progress 5 && !A.equalities < 500 *)
  let assert_c = function
    | S.Red -> c_red ctx ccl
    | S.Empty -> ()
@@ -759,8 +746,7 @@ let max_k ctx cc gs =
    Logic.push ctx; (* backtrack point for Yices *)
    Logic.require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
    search_constraints ctx (cc_eq, cc_symml_vars) gs;
-   let running_time = (Unix.gettimeofday () -. !(start_time)) in
-   if !(Settings.generate_benchmarks) && running_time > 100. then (
+   if !(Settings.generate_benchmarks) && A.runtime () > 100. then (
      let rs,is = !(A.restarts), !(A.iterations) in
      Smtlib.benchmark (string_of_int rs ^ "_" ^ (string_of_int is)));
    let trss = max_k [] ctx k in
@@ -809,16 +795,15 @@ else
   hash_iteration := Listx.take_at_most 20 !hash_iteration;
   if rep && debug 1 then F.printf "restart (repeated iteration state)\n%!";
   (* iteration/size bound*)
-  let running_time = (Unix.gettimeofday () -. !(start_time)) in
   (* estimate exponential blowup *)
   let blow n m = float_of_int n >= 1.5 *. (float_of_int m) in
   let rec is_exp = function n::m::cs -> blow n m && is_exp (m::cs) | _ -> true in
   let eqcounts = Listx.take_at_most 6 !(A.eq_counts) in
   let blowup = !(A.iterations) > 6 && is_exp eqcounts in
   if blowup && debug 1 then F.printf "restart (blowup)\n%!";
-  if limit_reached running_time && debug 1 then
+  if limit_reached (A.runtime ()) && debug 1 then
     F.printf "restart (limit reached)\n";
-  rep || limit_reached running_time || blowup
+  rep || limit_reached (A.runtime ()) || blowup
 ;;
 
 
@@ -874,12 +859,7 @@ let set_iteration_stats aa gs =
   A.iterations := i + 1;
   A.equalities := NS.size aa;
   A.goals := NS.size gs;
-  let mem_diff = A.memory () - !last_mem in
-  let time_diff = Unix.gettimeofday () -. !last_time in
-  last_mem := A.memory ();
-  last_time := Unix.gettimeofday ();
-  A.time_diffs := time_diff :: !(A.time_diffs);
-  A.mem_diffs := mem_diff :: !(A.mem_diffs);
+  A.set_time_mem ();
   A.eq_counts := NS.size aa :: !(A.eq_counts);
   A.goal_counts := NS.size gs :: !(A.goal_counts);
   if debug 1 then (
@@ -921,9 +901,8 @@ let equations_for_overlaps irr all =
 ;;
 
 let check_order_generation success order =
-  let running_time = (Unix.gettimeofday () -. !(start_time)) in
   if !S.generate_order &&
-      (success || limit_reached running_time || running_time > 30.) then (
+      (success || limit_reached (A.runtime ()) || A.runtime () > 30.) then (
     order#print_params ();
     exit 0)
 ;;
@@ -1023,9 +1002,6 @@ let init_settings fs axs gs =
    settings.tmp := !(fs.tmp);
    if !(fs.auto)  then detect_shape axs);
  settings.gs := gs;
- start_time := Unix.gettimeofday ();
- last_time := Unix.gettimeofday ();
- last_mem := A.memory ();
  Settings.is_ordered := !(settings.unfailing);
  if !(Settings.do_proof) <> None then
    Trace.add_initials axs;
@@ -1091,7 +1067,6 @@ let es' = L.map Lit.normalize est in
   Hashtbl.reset rewrite_trace;
   Hashtbl.reset cp_cache;
   NS.reset_age ();
-  sizes := [];
   A.mem_diffs := [];
   A.time_diffs := [];
   A.eq_counts := [];

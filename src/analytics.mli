@@ -29,6 +29,10 @@ val shape : Settings.shape ref
 
 val memory : unit -> int
 
+val set_time_mem : unit -> unit
+
+val runtime : unit -> float
+
 val is_duplicating : Rules.t -> bool
 
 val take_time : float ref -> ('a -> 'b) -> 'a -> 'b
@@ -49,7 +53,7 @@ val update_proof_track : Literal.t list -> Literal.t list -> int -> unit
 
 val show_proof_track : Settings.t -> unit
 
-val little_progress : unit -> bool
+val little_progress : int -> bool
 
 val very_little_progress : unit -> bool
 
