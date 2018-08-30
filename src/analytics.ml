@@ -78,6 +78,8 @@ let track_equations_state : (Literal.t * equation_state) list ref = ref []
 
 let states : state list ref = ref []
 
+let progress : bool list ref = ref []
+
 (*** FUNCTIONS ***************************************************************)
 let take_time t f x =
   let s = Unix.gettimeofday () in
@@ -313,8 +315,8 @@ let show_proof_track settings =
     in
     printf "Proof track:\n";
     let show (l,s) =
-      let sim = goal_similarity settings l in
-      printf "  %s: %s %.2f\n%!" (Literal.to_string l) (ststr s) sim
+      let sim = Literal.size l in
+      printf "  %s: %s %d\n%!" (Literal.to_string l) (ststr s) sim
     in
     List.iter show !track_equations_state;
     printf "%i active, " !acount;
@@ -335,14 +337,14 @@ let prefix_equal n xs =
 ;;
 
 let little_progress _ =
-  (*printf "costs              %s\n%!" (int_count_str costs);
-  printf "reduction counts   %s@." (int_count_str red_counts);*)
-  let cost_stable = prefix_equal 3 !costs && List.hd !costs <> 0 in
+  (*let cost_stable = prefix_equal 3 !costs && List.hd !costs <> 0 in
   let red_stable = prefix_equal 4 !red_counts in
   (*let goal_stable = prefix_equal 3 !goal_counts in*)
   let no_progress = cost_stable || red_stable (*|| goal_stable*) in
-  (*Format.printf "little: %i\n%!" (if no_progress then 1 else 0);*)
-  no_progress
+  no_progress*)
+  match !progress with
+  | false :: false :: _ when !iterations > 2 -> true
+  | _ -> false
 ;;
 
 let very_little_progress _ =
@@ -370,6 +372,20 @@ let print_state s =
   printf "\n%!"
 ;;
 
+let add_progress s' s =
+  let dtime = (s.time -. s'.time) *. 100. in
+  let deqs = s.equalities - s'.equalities in
+  let dgls = s.goals - s'.goals in
+  let dcost = s.cost - s'.cost in
+  (*let dmem = s.memory - s'.memory in
+  let dred = s.reducible - s'.reducible in*)
+  let prog =
+    (dtime < 53.5 && deqs <= 6 && dgls <= 1) ||
+    (dtime < 53.5 && deqs > 6 && dcost > 1)
+  in
+  progress := prog :: !progress
+;;
+
 let record_state red_count trs_size cost cp_count =
   let t =
     if !acount + !pcount + !ucount = 0 then None
@@ -392,7 +408,11 @@ let record_state red_count trs_size cost cp_count =
     smt_checks = !smt_checks;
     track = t
   }
-  in states := s :: !states;
+  in
+  (match !states with
+  | s' :: _ -> add_progress s' s;
+  | _ -> ());
+  states := s :: !states;
   if !Settings.benchmark then print_state s
 ;;
 
