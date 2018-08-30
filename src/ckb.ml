@@ -121,22 +121,6 @@ let store_remaining_goals ctx ns =
     all_goals := L.rev_append (L.rev !all_goals) (NS.sort_size ns)
 ;;
 
-let rec get_oldest_node (aa,rew) =
-  match !all_nodes with
-     [] -> None
-    | (n, _) :: ns -> (
-      try
-        all_nodes := ns;
-        let s,t = Lit.terms n in
-        let (s',rss),(t',rst) = rew#nf s, rew#nf t in
-        (*let inst = NS.exists (fun n' -> Literal.is_subsumed n n') aa in
-        if inst then Format.printf "subsumed\n%!";*)
-        if s' = t' || NS.mem aa n (*|| inst || Rule.size (s,t) > 20*) then get_oldest_node (aa,rew)
-        else Some n
-      with Rewriter.Max_term_size_exceeded -> get_oldest_node (aa,rew)
-      )
-;;
-
 let get_oldest_node_max max maxmax (aa,rew) =
   let rec get_oldest acc max k =
     if k > 5000 then (
@@ -285,13 +269,18 @@ let select_size_age aarew ns_sorted all n =
         let b = select_goal_similar all in
         select ns (b::acc) (n - 1)
       else (
-        match get_oldest_node aarew with
-        | Some b ->
+        let max =
+          if !A.equalities > 100 then
+            try Lit.size (List.hd ns) + 10 with _ -> 20
+          else 200
+        in
+        match get_old_nodes max aarew 1  with
+        | b :: _ ->
           if debug 1 then
             F.printf "age selected: %a  (%i) (%i)\n%!"
               Lit.print b (Nodes.age b) (Lit.size b);
           select ns (b :: acc) (n - 1)
-        | None -> select (L.tl ns) (L.hd ns :: acc) (n - 1)))
+        | _ -> select (L.tl ns) (L.hd ns :: acc) (n - 1)))
    in
    select ns_sorted [] n
 ;;
@@ -982,6 +971,8 @@ let rec phi ctx aa gs =
     let gcps = reduced rew gcps in (* goal CPs *)
     A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
     let gg, grest = select_goals (gs,rew) 2 (NS.diff gcps gs) in
+    if !(Settings.track_equations) <> [] then
+      A.update_proof_track gg (NS.to_list grest) !(A.iterations);
     store_remaining_nodes ctx rest;
     store_remaining_goals ctx grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
