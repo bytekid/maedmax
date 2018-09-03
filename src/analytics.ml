@@ -73,6 +73,7 @@ let ac_syms = ref []
 let only_c_syms = ref []
 
 let start_time = ref 0.0
+let last_time = ref 0.0
 
 let track_equations_state : (Literal.t * equation_state) list ref = ref []
 
@@ -95,10 +96,12 @@ let memory _ =
 let runtime _ = Unix.gettimeofday () -. !start_time
 
 let set_time_mem _ =
-  let mem_diff = memory () - (try (List.hd !states).memory with _ -> 0) in
-  let time_diff = runtime () -. (try (List.hd !states).time with _ -> 0.) in
-  time_diffs := time_diff :: !time_diffs;
-  mem_diffs := mem_diff :: !mem_diffs
+  if !iterations > 0 then (
+    let mem_diff = memory () - (try (List.hd !states).memory with _ -> 0) in
+    let time_diff = Unix.gettimeofday () -. !last_time in
+    time_diffs := time_diff :: !time_diffs;
+    mem_diffs := mem_diff :: !mem_diffs;
+    last_time := Unix.gettimeofday ())
 ;;
 
 let int_count_str l =
@@ -324,17 +327,23 @@ let goal_similarity settings n =
   let msim r = List.fold_left (fun m q -> m +. (rsim r q)) 0. !(settings.gs) in
   msim (Literal.terms n)
 
-let show_proof_track settings =
+let show_proof_track settings all_nodes =
+  let rec pos l i = function
+    | [] -> "none"
+    | (n,_) :: _ when n = l -> string_of_int i
+    | _ :: ns -> pos l (i + 1) ns
+  in
+  let pos l = pos l 0 !all_nodes in
   if !(Settings.track_equations) <> [] then (
-    let ststr = function
+    let ststr l = function
       | Unseen -> "unseen"
-      | Active i -> "active: " ^ (string_of_int i)
-      | Passive i -> "passive: " ^ (string_of_int i)
+      | Active i -> "active"
+      | Passive i -> "passive (" ^ (pos l) ^ ")"
     in
     printf "Proof track:\n";
     let show (l,s) =
-      let sz, age = Literal.size l, Nodes.age l in
-      printf "  %s (%s) (%d, %d)\n%!" (Literal.to_string l) (ststr s) sz age
+      (*let sz, age = Literal.size l, Nodes.age l in*)
+      printf "  %s (%s)\n%!" (Literal.to_string l) (ststr l s)
     in
     List.iter show !track_equations_state;
     printf "%i active, " !acount;

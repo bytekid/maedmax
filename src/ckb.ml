@@ -108,7 +108,7 @@ let store_remaining_nodes ctx ns =
   (*if !(settings.size_age_ratio) < 100 then*)
     let ns = NS.smaller_than !(settings.size_bound_equations) ns in
     let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
-    all_nodes := L.rev_append (L.rev !all_nodes) ns_sized;
+    all_nodes := L.rev_append (L.rev !all_nodes) ns_sized
 ;;
 
 let store_remaining_goals ctx ns =
@@ -241,9 +241,10 @@ let rec get_old_nodes maxsize aarew n =
     if n = 0 then []
     else match get_oldest_node_max maxsize maxmaxsize aarew with
     | Some b ->
-      if debug 1 then
+      if debug 1 then (
         F.printf "extra age selected: %a  (%i) (%i)\n%!"
-          Lit.print b (Nodes.age b) (Lit.size b);
+          Lit.print b (Nodes.age b) (Lit.size b)
+      );
       b :: (get_old_nodes (n - 1))
     | None -> []
   in get_old_nodes n
@@ -420,6 +421,7 @@ let overlaps rr = A.take_time A.t_overlap (overlaps rr)
 let overlaps_on rr aa _ gs =
   let goals_ground = List.for_all Rule.is_ground !(settings.gs) in
   let ns = if goals_ground then aa else rr @ aa in
+  (* FIXME restrict equations to be used? *)
   let ovl = new Overlapper.overlapper ns in
   ovl#init ();
   let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
@@ -476,6 +478,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       in
       if L.exists joinable ieqs then (* joinable inequality axiom *)
         Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
+      else if List.length ee > 40 then None (* saturation too expensive *)
       else  match saturated ctx (rr,ee) rewriter cc with
         | None -> if rr @ ee = [] then Some (SAT, Completion []) else None
         | Some order ->
@@ -872,7 +875,7 @@ let set_iteration_stats aa gs =
        (if gnd then 1 else 0));
   if debug 1 then (
     A.print ();
-    A.show_proof_track settings)
+    A.show_proof_track settings all_nodes)
 ;;
 
 
@@ -892,11 +895,24 @@ let store_trs ctx j rr cost =
   rr_index
 ;;
 
+let subsumption_ratios : float list ref = ref []
+
 let equations_for_overlaps irr all =
   if !A.iterations < 3 && !(settings.full_CPs_with_axioms) then
     NS.to_list (eqs_for_overlaps all)
   else
-    let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
+  let last3 =
+    match !subsumption_ratios with
+    | a :: b :: c :: d :: _ -> a +. b +. c +. d <= 3.6
+    | _ -> false
+  in
+  let check = check_subsumption 1 && (!A.iterations < 9 || last3) in
+    let irr' =
+      if check then NS.subsumption_free irr else irr
+    in
+    let r = float_of_int (NS.size irr') /. (float_of_int (NS.size irr)) in
+    subsumption_ratios := r :: !subsumption_ratios;
+    (*if check then Format.printf "%d -> %d\n%!" (NS.size irr) (NS.size irr');*)
     NS.to_list (eqs_for_overlaps irr')
 ;;
 
@@ -930,8 +946,6 @@ let rec phi ctx aa gs =
     let gs = NS.add_all (reduced rew gs) gs in (* rewrite goals wrt new TRS *)
     A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    (*let irr' = if check_subsumption 1 then NS.subsumption_free irr else irr in
-    let aa_for_ols = NS.to_list (eqs_for_overlaps irr') in*)
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps', ovl = overlaps rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps') ;

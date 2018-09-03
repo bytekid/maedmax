@@ -51,7 +51,7 @@ val init_proof_track : Literal.t list -> unit
 
 val update_proof_track : Literal.t list -> Literal.t list -> int -> unit
 
-val show_proof_track : Settings.t -> unit
+val show_proof_track : Settings.t -> (Literal.t * 'a) list ref -> unit
 
 val little_progress : int -> bool
 
