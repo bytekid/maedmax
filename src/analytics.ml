@@ -44,6 +44,7 @@ let t_rewrite = ref 0.0
 let t_sat = ref 0.0
 let t_success_check = ref 0.0
 let t_select = ref 0.0
+let t_subsumption = ref 0.0
 let t_cache = ref 0.0
 let t_tmp1 = ref 0.0
 let t_tmp2 = ref 0.0
@@ -145,6 +146,7 @@ let print () =
   printf " sat                %.3f@." !t_sat;
   printf " overlaps           %.3f@." !t_overlap;
   printf " process            %.3f@." !t_process;
+  printf " subsumption check  %.3f@." !t_subsumption;
   printf " success checks     %.3f@." !t_success_check;
   printf " constraints CPred  %.3f@." !t_ccpred;
   printf "             Comp   %.3f@." !t_ccomp;
@@ -259,7 +261,8 @@ let analyze es gs =
 let json () =
   let trunc f = `Float ((float_of_int (truncate (f *. 1000.))) /. 1000.) in
   let it = "iterations", `Int !iterations in
-  let ea = "equalities", `Int !equalities in
+  let ea = "equalities", `Int !goals in
+  let gs = "goals", `Int !equalities in
   let mem = "memory", `Int (memory ()) in
   let smtc = "SMT checks", `Int !smt_checks in
   let t_ccpred = "time/ccpred", trunc !t_ccpred in
@@ -272,15 +275,16 @@ let json () =
   let t_select = "time/select", trunc !t_select in
   let t_ovl = "time/overlaps", trunc !t_overlap in
   let t_orient = "time/orientation constraints", trunc !t_orient_constr in
+  let t_sub = "time/subsumption checks", trunc !t_subsumption in
   let t_proj = "time/success checks", trunc !t_success_check in
   let t_sat = "time/sat", trunc !t_sat in
   let t_cache = "time/cache", trunc !t_cache in
   let res = "restarts", `Int !restarts in
   let shp = "shape", `String (Settings.shape_to_string !shape) in
   let assoc =
-    [it; ea; res; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
+    [it; ea; gs; res; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
     t_select; t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process;
-    t_sat; t_cache]
+    t_sat; t_sub; t_cache]
   in
   `Assoc assoc
 

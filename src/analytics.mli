@@ -12,6 +12,7 @@ val t_process : float ref
 val t_sat : float ref
 val t_select : float ref
 val t_success_check : float ref
+val t_subsumption: float ref
 val t_tmp1 : float ref
 val t_tmp2 : float ref
 val t_tmp3 : float ref
