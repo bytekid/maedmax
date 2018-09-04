@@ -167,10 +167,11 @@ let add_rewrite_trace st rls st' =
 
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
    are newly generated eqs and cs' \subseteq cs is set of irreducible eqs *)
-let rewrite rewriter (cs : NS.t) =
+let rewrite ?(max_size=0) rewriter (cs : NS.t) =
+  let t = Unix.gettimeofday () in
   (* skip exponential rewrite sequences with unfortunate orders *)
   let nf n =
-    try Lit.rewriter_nf_with n rewriter
+    try Lit.rewriter_nf_with ~max_size:max_size n rewriter
     with Rewriter.Max_term_size_exceeded -> None
   in
   let rewrite n (irrdcbl, news) =
@@ -180,13 +181,14 @@ let rewrite rewriter (cs : NS.t) =
           if !(Settings.do_proof) <> None && nnews <> [] then
             add_rewrite_trace (Lit.terms n) rs (Lit.terms (L.hd nnews));
           irrdcbl, NS.add_list nnews news)
-  in NS.fold rewrite cs (NS.empty (), NS.empty ())
-;;  
+  in
+  let res = NS.fold rewrite cs (NS.empty (), NS.empty ()) in
+  A.t_rewrite := !A.t_rewrite +. (Unix.gettimeofday () -. t);
+  res
+;;
 
-let rewrite rr = A.take_time A.t_rewrite (rewrite rr)
-
-let reduced rr ns =
-  let (irred, news) = rewrite rr ns in NS.add_all news irred
+let reduced ?(max_size=0) rr ns =
+  let (irred, news) = rewrite ~max_size:max_size rr ns in NS.add_all news irred
 ;;
 
 let interreduce rr =
@@ -942,9 +944,17 @@ let rec phi ctx aa gs =
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
     redcount := !redcount + (NS.size red);
+
     let t = Unix.gettimeofday () in
-    let gs = NS.add_all (reduced rew gs) gs in (* rewrite goals wrt new TRS *)
+    let thresh = NS.avg_size gs + 8 in
+    let gs_red = reduced (*~max_size:!Settings.max_goal_size*) rew gs in
+    let gs_red', gs_big =
+      if NS.size gs_red < 10 then gs_red, NS.empty ()
+      else NS.filter_out (fun n -> Lit.size n > thresh) gs_red
+    in
+    let gs = NS.add_all gs_red' gs in
     A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
+    
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps', ovl = overlaps rr aa_for_ols in
@@ -961,9 +971,9 @@ let rec phi ctx aa gs =
     let gos = overlaps_on rr aa_for_ols ovl gs in
     let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
     let t = Unix.gettimeofday () in
-    let gcps = reduced rew gcps in (* goal CPs *)
+    let gcps = reduced (*~max_size:!Settings.max_goal_size*) rew gcps in
     A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
-    let gg, grest = select_goals (gs,rew) 2 (NS.diff gcps gs) in
+    let gg, grest = select_goals (gs,rew) 2 (NS.diff (NS.add_all gs_big gcps) gs) in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
     store_remaining_nodes ctx rest;

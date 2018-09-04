@@ -109,6 +109,10 @@ let partition p ns =
 
 let find p ns = H.fold (fun n _ x -> if p n then Some n else x) ns None
 
+let avg_size ns =
+  if is_empty ns then 0
+  else (H.fold (fun n _ s -> Lit.size n + s) ns 0) / size ns
+
 let for_all p ns = H.fold (fun n _ b -> b && p n) ns true
 
 let subset ns1 ns2 = for_all (mem ns2) ns1
@@ -126,7 +130,17 @@ let subsumed n n' =
   R.is_proper_instance r r' || R.is_proper_instance (R.flip r) r'
 ;;
 
-let subsumption_free ns = filter (fun n -> not (exists (subsumed n) ns)) ns
+let subsumption_free : t -> t =
+  let sfree ns = filter (fun n -> not (exists (subsumed n) ns)) ns in
+  Analytics.take_time Analytics.t_subsumption sfree
+;;
+
+let filter_out p ns =
+  let rest = empty () in
+  let filter n _ = if p n then (let _ = remove n ns in ignore (add n rest)) in
+  H.iter filter ns;
+  ns, rest
+;;
 
 let diff ns d = H.fold (fun n _ nsr -> remove n nsr) d ns 
 

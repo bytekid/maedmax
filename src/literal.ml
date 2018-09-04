@@ -96,9 +96,11 @@ let pcps rew l l' =
     with Too_large -> []
 ;;
 
-let rewriter_nf_with l rewriter =
+let rewriter_nf_with ?(max_size=0) l rewriter =
   let ts = l.terms in
   let s', rs = rewriter#nf (fst ts) in
+  if max_size > 0 && Term.size s' > 30 then
+    raise Rewriter.Max_term_size_exceeded;
   let t', rt = rewriter#nf (snd ts) in
   let rls = List.map fst (rs @ rt) in
   if s' = t' && not l.is_goal && l.is_equality then (
