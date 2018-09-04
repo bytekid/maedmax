@@ -98,7 +98,8 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (ord : Order.t) =
   ;;
 
   method rewrite_at_root_with t ((l, r), b) =
-    let lsub,rsub = Rule.substitute (Subst.pattern_match l t) (l,r) in
+    let sigma = Subst.pattern_match l t in
+    let rsub = Term.substitute sigma r in
     if b then Some (l,r), rsub
     else
       let rho = match order#bot with
@@ -106,6 +107,7 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (ord : Order.t) =
         | Some c -> let vs = Listset.diff (T.variables r) (T.variables l) in
           [ x, T.F(c,[]) | x <- vs ]
       in
+      let lsub = Term.substitute sigma l in
       let rsub = Term.substitute rho rsub in
       if order#gt lsub rsub then Some (l,r), rsub
       else raise Not_orientable
