@@ -312,7 +312,7 @@ let select' ?(only_size = true) aarew k cc thresh =
  in
  let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
  let aa =
-  let kk = if !(A.shape) = Boro then 3 else 2 in
+  let kk = if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2 in
   if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
  in
  (*let aa =
@@ -846,6 +846,7 @@ let detect_shape es =
       settings.size_bound_equations := 50;
       settings.size_bound_goals := 50;
     | Calcio -> settings.n := 6
+    | Magnesio -> settings.n := 6
     | NoShape -> settings.n := 6(*;
       Settings.max_goal_size := 27;
       settings.check_subsumption := 0*)
