@@ -368,22 +368,10 @@ let prefix_equal n xs =
 ;;
 
 let little_progress i =
-  (*let cost_stable = prefix_equal 3 !costs && List.hd !costs <> 0 in
-  let red_stable = prefix_equal 4 !red_counts in
-  (*let goal_stable = prefix_equal 3 !goal_counts in*)
-  let no_progress = cost_stable || red_stable (*|| goal_stable*) in
-  no_progress*)
   try
     let progress = Listx.take i !progress in
-    List.fold_left (fun b y -> b && not y) (!iterations > 2) progress
+    List.fold_left (fun b y -> b && not y) (!iterations > i) progress
   with _ -> false
-;;
-
-let very_little_progress _ =
-  let goal_stable = prefix_equal 4 !goal_counts in
-  let no_progress = goal_stable in
-  (*Format.printf "very little: %i\n%!" (if no_progress then 1 else 0);*)
-  no_progress
 ;;
 
 let some_progress _ =
@@ -409,13 +397,27 @@ let add_progress s' s =
   let deqs = s.equalities - s'.equalities in
   let dgls = s.goals - s'.goals in
   let dcost = s.cost - s'.cost in
-  (*let dmem = s.memory - s'.memory in
-  let dred = s.reducible - s'.reducible in*)
-  let prog =
+  let dcps = s.cps - s'.cps in
+  let dsz = s.trs_size - s'.trs_size in
+  let dred = s.reducible - s'.reducible in
+  let prog1 =
     (dtime < 53.5 && deqs <= 6 && dgls <= 1) ||
     (dtime < 53.5 && deqs > 6 && dcost > 1)
   in
-  progress := prog :: !progress
+  let prog2 =
+    (deqs <= 10 && (
+      (dred <= 3 && (dgls <=1 || dred >=0)) ||
+      dsz > 3 ||
+      deqs <= 6)
+    ) ||
+    (deqs > 10 && (
+      (dgls <= 1 && deqs <= 15) || (dgls <= 1 && deqs = 20 && dcost <= 33) ||
+      (dgls <= 1 && deqs > 20 && dsz > 17 && dcps <= 326) ||
+      (dgls > 1 && dcost <= 0 && deqs <= 13 && dgls <= 6)||
+      (dgls > 1 && dcost > 0 && dgls <= 3 && dcps <= 500))
+    )
+  in
+  progress := (prog1 && prog2) :: !progress
 ;;
 
 let record_state red_count trs_size cost cp_count =

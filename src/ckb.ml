@@ -312,7 +312,8 @@ let select' ?(only_size = true) aarew k cc thresh =
  in
  let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
  let aa =
-  if A.little_progress 2 then (get_old_nodes max aarew 2) @ aa else aa
+  let kk = if !(A.shape) = Boro then 3 else 2 in
+  if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
  in
  (*let aa =
    if A.very_little_progress () then select_goal_similar size_sorted :: aa else aa
@@ -841,11 +842,13 @@ let detect_shape es =
       settings.n := 12;
       settings.size_age_ratio := 80;
     | Carbonio ->
-      settings.n := 6;
+      settings.n := 5;
       settings.size_bound_equations := 50;
       settings.size_bound_goals := 50;
-    | Calcio
-    | NoShape -> settings.n := 6
+    | Calcio -> settings.n := 6
+    | NoShape -> settings.n := 6(*;
+      Settings.max_goal_size := 27;
+      settings.check_subsumption := 0*)
     | Elio ->
       settings.n := 6;
       settings.strategy := Strategy.strategy_ordered_lpo
@@ -947,14 +950,14 @@ let rec phi ctx aa gs =
 
     let t = Unix.gettimeofday () in
     let thresh = NS.avg_size gs + 8 in
-    let gs_red = reduced (*~max_size:!Settings.max_goal_size*) rew gs in
+    let gs_red = reduced ~max_size:!Settings.max_goal_size rew gs in
     let gs_red', gs_big =
       if NS.size gs_red < 10 then gs_red, NS.empty ()
       else NS.filter_out (fun n -> Lit.size n > thresh) gs_red
     in
     let gs = NS.add_all gs_red' gs in
     A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
-    
+
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps', ovl = overlaps rr aa_for_ols in
@@ -971,7 +974,7 @@ let rec phi ctx aa gs =
     let gos = overlaps_on rr aa_for_ols ovl gs in
     let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
     let t = Unix.gettimeofday () in
-    let gcps = reduced (*~max_size:!Settings.max_goal_size*) rew gcps in
+    let gcps = reduced ~max_size:!Settings.max_goal_size rew gcps in
     A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
     let gg, grest = select_goals (gs,rew) 2 (NS.diff (NS.add_all gs_big gcps) gs) in
     if !(Settings.track_equations) <> [] then
@@ -1093,6 +1096,5 @@ let es' = L.map Lit.normalize est in
   NS.reset_age ();
   A.mem_diffs := [];
   A.time_diffs := [];
-  A.eq_counts := [];
   ckb fs ((if gs = [] then es0 else es_new @ es0), gs))
 ;;
