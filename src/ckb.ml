@@ -6,6 +6,7 @@ module O = Overlap
 module R = Rule
 module A = Analytics
 module S = Settings
+module St = Strategy
 module Ac = Theory.Ac
 module Commutativity = Theory.Commutativity
 module Lit = Literal
@@ -22,7 +23,8 @@ exception Restart of Lit.t list
 exception Fail
 
 (*** GLOBALS *****************************************************************)
-let settings = Settings.default
+let settings = ref Settings.default
+let heuristic = ref Settings.default_heuristic
 
 (* caching for search strategies*)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
@@ -47,33 +49,33 @@ let acx_rules = ref []
 (*** FUNCTIONS ***************************************************************)
 (* shorthands for settings *)
 let termination_strategy _ = 
- match !(settings.strategy) with 
+  match !heuristic.strategy with 
   | [] -> failwith "no termination strategy found"
-  | (s,_, _,_,_) :: _ -> s
+  | (s, _, _, _, _) :: _ -> s
 ;;
 
-let dps_used _ = Strategy.has_dps (termination_strategy ())
+let dps_used _ = St.has_dps (termination_strategy ())
 
-let constraints _ = 
- match !(settings.strategy) with 
+let constraints _ =
+  match !heuristic.strategy with
   | [] -> failwith "no constraints found"
-  | (_,cs,_,_,_) :: _ -> cs
+  | (_, cs, _, _, _) :: _ -> cs
 ;;
 
 let max_constraints _ =
- match !(settings.strategy) with
+ match !heuristic.strategy with
   | [] -> failwith "no max constraints found"
-  | (_,_,ms,_,_) :: _ -> ms
+  | (_, _, ms, _, _) :: _ -> ms
 ;;
 
-let strategy_limit _ = 
- match !(settings.strategy) with 
+let strategy_limit _ =
+ match !heuristic.strategy with
   | [] -> failwith "empty strategy list"
-  | (_, _, _, i,_) :: _ -> i
+  | (_, _, _, i, _) :: _ -> i
 ;;
 
-let selection_mode _ = 
- match !(settings.strategy) with 
+let selection_mode _ =
+ match !heuristic.strategy with
   | [] -> failwith "empty strategy list"
   | (_, _, _, _, s) :: _ -> s
 ;;
@@ -82,37 +84,36 @@ let use_maxsat _ = max_constraints () <> []
 
 let has_comp () = L.mem S.Comp (constraints ())
 
-let debug d = !(settings.d) >= d
+let debug d = !settings.debug >= d
 
-let check_subsumption n = !(settings.check_subsumption) == n
+let check_subsumption n = !heuristic.check_subsumption == n
 
 let nth_iteration n = !A.iterations mod n == 0
 
 let pop_strategy _ = 
  if debug 2 then F.printf "pop strategy\n%!";
- match !(settings.strategy) with
+ match !heuristic.strategy with
   | [] -> failwith "no strategy left in pop"
   | [s] -> ()
-  | _ :: ss -> settings.strategy := ss
+  | _ :: ss -> heuristic := { !heuristic with strategy = ss }
 ;;
 
-let t_strategies _ = L.map (fun (ts,_,_,_,_) -> ts) !(settings.strategy)
+let t_strategies _ = L.map (fun (ts,_,_,_,_) -> ts) !heuristic.strategy
 
 let normalize = Variant.normalize_rule
 
-let ac_eqs () = [ normalize e | e <- Ac.eqs !(settings.ac_syms) ]
+let ac_eqs () = [ normalize e | e <- Ac.eqs !settings.ac_syms ]
 
 let store_remaining_nodes ctx ns =
   if has_comp () then
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
-  (*if !(settings.size_age_ratio) < 100 then*)
-    let ns = NS.smaller_than !(settings.size_bound_equations) ns in
+    let ns = NS.smaller_than !heuristic.size_bound_equations ns in
     let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
     all_nodes := L.rev_append (L.rev !all_nodes) ns_sized
 ;;
 
 let store_remaining_goals ctx ns =
-    let ns = NS.smaller_than !(settings.size_bound_equations) ns in
+    let ns = NS.smaller_than !heuristic.size_bound_equations ns in
     all_goals := L.rev_append (L.rev !all_goals) (NS.sort_size ns)
 ;;
 
@@ -153,7 +154,7 @@ let rec get_oldest_goal (gg, rew) =
 
 let shape_changed es =
   let shape = A.problem_shape (L.map Lit.terms (NS.to_list es)) in
-  !(settings.auto) && shape <> !(A.shape) && shape <> NoShape
+  !settings.auto && shape <> !(A.shape) && shape <> NoShape
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -217,8 +218,7 @@ let log_select cc ss =
     F.printf "all:\n%a\n%!" plist cc
 ;;
 
-
-let select_count i = !(settings.n)
+let select_count i = !heuristic.n
 
 let keep acs n =
   let fs = Rule.functions (Lit.terms n) in
@@ -227,7 +227,7 @@ let keep acs n =
 ;;
 
 let select_goal_similar ns =
-  let ns' = [n, A.goal_similarity settings n | n <- ns] in
+  let ns' = [n, A.goal_similarity !settings n | n <- ns] in
   let cmp m k = if m -. k < 0. then 1 else if m -. k > 0. then -1 else 0 in
   let ns' = L.sort (fun (_, m) (_, k) -> cmp m k) ns' in
   let n, d = L.hd ns' in
@@ -261,7 +261,7 @@ let select_size_age aarew ns_sorted all n =
     if n <= 0 || ns = [] then L.rev acc
     else (
       selections := !selections + 1;
-      if !selections mod 20 < (!(settings.size_age_ratio) / 5) then
+      if !selections mod 20 < (!heuristic.size_age_ratio / 5) then
           select (L.tl ns) (L.hd ns :: acc) (n - 1)
       else if !selections mod 26 = 0 && all <> [] then
         let b = select_goal_similar all in
@@ -298,12 +298,12 @@ let split k ns =
 (* selection of small new nodes *)
 let select' ?(only_size = true) aarew k cc thresh =
  let k = if k = 0 then select_count !(A.iterations) else k in
- let acs = !(settings.ac_syms) in
+ let acs = !settings.ac_syms in
  let small = NS.smaller_than thresh cc in
  let small',_ = L.partition (keep acs) small in
  let size_sorted = NS.sort_size_age small' in
  let aa = 
-   if only_size || !(settings.size_age_ratio) = 100 then
+   if only_size || !heuristic.size_age_ratio = 100 then
      fst (Listx.split_at_most k size_sorted)
    else
      let size_sorted' = split k size_sorted in
@@ -324,7 +324,7 @@ let select' ?(only_size = true) aarew k cc thresh =
 ;;
 
 (* there might be inequalities *)
-let axs _ = !(settings.axioms)
+let axs _ = !settings.axioms
 
 let select_for_restart cc =
   let big (l,r) = Pervasives.max (Term.size l) (Term.size r) > 65 in
@@ -354,12 +354,12 @@ let select_for_restart cc =
   fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
 
 let select rew cc =
-  let thresh = !(settings.size_bound_equations) in
+  let thresh = !heuristic.size_bound_equations in
   A.take_time A.t_select (select' ~only_size:false rew 0 cc) thresh
 ;;
 
 let select_goals' grew k gg thresh =
- let acs = !(settings.ac_syms) in
+ let acs = !settings.ac_syms in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let s = !(A.shape) in
@@ -374,7 +374,7 @@ let select_goals' grew k gg thresh =
 ;;
 
 let select_goals grew k cc =
-  A.take_time A.t_select (select_goals' grew k cc) !(settings.size_bound_goals)
+  A.take_time A.t_select (select_goals' grew k cc) !heuristic.size_bound_goals
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -386,12 +386,12 @@ let eqs_for_overlaps ee =
 let cp_cache : (Lit.t * Lit.t, Lit.t list) Hashtbl.t = Hashtbl.create 256
 
 let cps rew n1 n2 =
-  if !(settings.pcp) > 0 then Lit.pcps rew n1 n2
+  if !heuristic.pcp > 0 then Lit.pcps rew n1 n2
   else (
     try Hashtbl.find cp_cache (n1,n2)
     with Not_found -> (
       let cps = Lit.cps n1 n2 in
-      if !(settings.d) >= 2 && L.length cps > 0 then
+      if debug 2 && L.length cps > 0 then
         Format.printf "CPs between %a and %a: %a\n%!" Lit.print n1 Lit.print n2
           NS.print_list cps;
       Hashtbl.add cp_cache (n1,n2) cps;
@@ -401,11 +401,11 @@ let cps rew n1 n2 =
 (* get overlaps for rules rr and equations aa *)
 let overlaps rr aa =
  let ns =
-   if not !(settings.unfailing) then rr
+   if not !settings.unfailing then rr
    else
-     let acs, cs = !(settings.ac_syms), !(settings.only_c_syms) in
+     let acs, cs = !settings.ac_syms, !settings.only_c_syms in
      let aa' = NS.ac_equivalence_free acs (Listset.diff aa !acx_rules) in
-     let rr' = NS.ac_equivalence_free !(settings.ac_syms) rr in
+     let rr' = NS.ac_equivalence_free !settings.ac_syms rr in
      let aa' = NS.c_equivalence_free cs aa' in
      (*let rr' = NS.c_equivalence_free cs rr' in*)
      rr' @ aa'
@@ -422,7 +422,7 @@ let overlaps rr = A.take_time A.t_overlap (overlaps rr)
    Use rr only if the goals are not ground (otherwise, goals with rr are
    covered by rewriting). *)
 let overlaps_on rr aa _ gs =
-  let goals_ground = List.for_all Rule.is_ground !(settings.gs) in
+  let goals_ground = List.for_all Rule.is_ground !settings.gs in
   let ns = if goals_ground then aa else rr @ aa in
   (* FIXME restrict equations to be used? *)
   let ovl = new Overlapper.overlapper ns in
@@ -436,12 +436,10 @@ let overlaps_on rr aa _ gs =
 let saturated ctx (rr, ee) rewriter cc =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
-  let d = !(settings.d) in
-  let sys = rr,ee',!(settings.ac_syms),!(settings.signature),rewriter#order in
-  let xsig = !(settings.extended_signature) in
+  let sys = rr, ee', rewriter#order in
   let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
   let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
-  Ground.all_joinable ctx str sys eqs' xsig d
+  Ground.all_joinable !settings ctx str sys eqs'
 ;;
 
 let rewrite_seq rew (s,t) (rss,rst) =
@@ -485,12 +483,12 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       else  match saturated ctx (rr,ee) rewriter cc with
         | None -> if rr @ ee = [] then Some (SAT, Completion []) else None
         | Some order ->
-          let gs_ground = L.for_all (fun g -> Lit.is_ground g) (NS.to_list gs) in
+          let gs_ground = L.for_all Lit.is_ground (NS.to_list gs) in
           let orientable (s,t) = order#gt s t || order#gt t s in
           (* if an equation is orientable, wait one iteration ... *)
           if not gs_ground && L.for_all (fun e -> not (orientable e)) ee &&
             !(Settings.do_proof) = None then (* no narrowing proof output yet *)
-            Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order !(settings.gs)
+            Narrow.decide_goals !settings rr (ee @ [s, t| t, s <- ee ]) order
           else if not (rr @ ee = [] || gs_ground) then None
           else (
             if ee = [] then Some (SAT, Completion rr)
@@ -498,7 +496,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
               Some (SAT, GroundCompletion (rr, ee, order))
             else if L.length ieqs = 1 && NS.is_empty gs &&
               !(Settings.do_proof) = None then
-              Narrow.decide rr (ee @ [s,t| t,s <- ee ]) order ieqs
+              Narrow.decide !settings rr (ee @ [s,t| t,s <- ee ]) order ieqs
             else None
           )
     )
@@ -670,7 +668,7 @@ let c_comp ctx ns =
    Logic.require (C.find_eq st <=>> c);
  in
  (* initial equations have to be considered *)
- let axs = !(settings.axioms) in
+ let axs = !settings.axioms in
  Logic.require (all_eqs [Lit.terms l | l <- axs; Lit.is_equality l]);
  L.iter considered [ l,r | l,r <- ns; not (l=r) ];
 ;;
@@ -680,7 +678,7 @@ let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
 (* constraints to guide search; those get all retracted *)
 let search_constraints ctx (ccl, ccsymlvs) gs =
  (* orientable equations are used for CPs in CeTA ... *)
- let take_max = nth_iteration !(settings.max_oriented) (*|| !(S.do_proof)*) in
+ let take_max = nth_iteration !heuristic.max_oriented (*|| !(S.do_proof)*) in
  (* A.little_progress 5 && !A.equalities < 500 *)
  let assert_c = function
    | S.Red -> c_red ctx ccl
@@ -701,7 +699,7 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
 
 (* find k maximal TRSs *)
 let max_k ctx cc gs =
-  let k = !(settings.k) !(A.iterations) in
+  let k = !heuristic.k !(A.iterations) in
   let cc_eq = [ Lit.terms n | n <- NS.to_list cc; Lit.is_equality n ] in
   let cc_symm = [n | n <- NS.to_list (NS.symmetric cc); Lit.is_equality n] in 
   let cc_symml = [Lit.terms c | c <- cc_symm] in
@@ -728,29 +726,31 @@ let max_k ctx cc gs =
         in
         let rr = L.fold_right add_rule cc_symm_vars []  in
         let order =
-          if !(settings.unfailing) then Strategy.decode 0 m s
+          if !settings.unfailing then St.decode 0 m s
           else Order.default
         in
         if !S.generate_order then order#print_params ();
         if debug 2 then order#print ();
-        if !(settings.unfailing) && !Settings.do_assertions then (
-          let ord n = let l,r = Lit.terms n in order#gt l r && not (order#gt r l) in
+        if !settings.unfailing && !Settings.do_assertions then (
+          let ord n =
+            let l, r = Lit.terms n in order#gt l r && not (order#gt r l)
+          in
           assert (L.for_all ord (L.map fst rr)));
         Logic.require (!! (Logic.big_and ctx [ v | _,v <- rr ]));
         max_k ((L.map fst rr, c, order) :: acc) ctx (n-1))
      else (
        if debug 2 then F.printf "no further TRS found\n%!"; 
-       if (n = k && L.length !(settings.strategy) > 1) then
+       if (n = k && L.length !heuristic.strategy > 1) then
          raise (Restart (select_for_restart cc));
        acc))
    in
    if has_comp () then
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
-   A.take_time A.t_orient_constr (Strategy.assert_constraints s 0 ctx) cc_symml;
+   A.take_time A.t_orient_constr (St.assert_constraints s 0 ctx) cc_symml;
    c_max_red_pre ctx cc_eq;
    Logic.push ctx; (* backtrack point for Yices *)
-   Logic.require (Strategy.bootstrap_constraints 0 ctx cc_symml_vars);
+   Logic.require (St.bootstrap_constraints 0 ctx cc_symml_vars);
    search_constraints ctx (cc_eq, cc_symml_vars) gs;
    if !(Settings.generate_benchmarks) && A.runtime () > 100. then (
      let rs,is = !(A.restarts), !(A.iterations) in
@@ -786,7 +786,7 @@ if A.memory () > 6000 then (
 else
   let to_eqs ns = L.map Lit.terms (NS.to_list ns) in
   let shape = A.problem_shape (to_eqs es) in
-  if !(settings.auto) && shape <> !(A.shape) && shape <> NoShape &&
+  if !settings.auto && shape <> !(A.shape) && shape <> NoShape &&
     shape <> Piombo
    then (
     if debug 1 then
@@ -821,45 +821,39 @@ let detect_shape es =
     F.printf "detected shape %s %i\n%!" (Settings.shape_to_string shape) fs_count;
   Settings.max_eq_size := 200;
   Settings.max_goal_size := 100;
-  match shape with
-    | Piombo ->
+  let h = !heuristic in
+  let h' =
+    match shape with
+    | Piombo -> (
       Settings.max_eq_size := 4000;
       Settings.max_goal_size := 200;
-      settings.n := 10;
-      settings.strategy := Strategy.strategy_ordered_lpo
-    | Zolfo -> settings.n := 10
-    | Xeno -> (
-      settings.reduce_AC_equations_for_CPs := true;
-      settings.size_age_ratio := 60;
-      settings.n := 10
-    )
-    | Elio when fs_count > 3 -> settings.n := 10
+      { h with n = 10; strategy = St.strategy_ordered_lpo })
+    | Zolfo -> { h with n = 10 }
+    | Xeno ->
+      { h with reduce_AC_equations_for_CPs = true; size_age_ratio = 60; n = 10 }
+    | Elio when fs_count > 3 -> { h with n = 10 }
     | Silicio ->
-      settings.n := 10;
-      settings.size_age_ratio := 80;
-      settings.strategy := Strategy.strategy_ordered_lpo
-    | Ossigeno ->
-      settings.n := 12;
-      settings.size_age_ratio := 80;
+      { h with n = 10; size_age_ratio = 80; strategy = St.strategy_ordered_lpo }
+    | Ossigeno -> { h with n = 12; size_age_ratio = 80 }
     | Carbonio ->
-      settings.n := 5;
-      settings.size_bound_equations := 50;
-      settings.size_bound_goals := 50;
-    | Calcio -> settings.n := 6
-    | Magnesio -> settings.n := 6
-    | NoShape -> settings.n := 6(*;
+      { h with n = 5; size_bound_equations = 50; size_bound_goals = 50 }
+    | Calcio -> { h with n = 6 }
+    | Magnesio -> { h with n = 6 }
+    | NoShape -> { h with n = 6 }(*;
       Settings.max_goal_size := 27;
       settings.check_subsumption := 0*)
-    | Elio ->
-      settings.n := 6;
-      settings.strategy := Strategy.strategy_ordered_lpo
+    | Elio ->  { h with n = 6; strategy = St.strategy_ordered_lpo }
     | Boro -> (
-      settings.n := 14;
-      settings.size_age_ratio := 70;
-      settings.size_bound_equations := 16;
       Settings.max_eq_size := 20;
       Settings.max_goal_size := 20;
-      settings.strategy := Strategy.strategy_ordered_kbo)
+      { h with
+        n = 14;
+        size_age_ratio = 70;
+        size_bound_equations = 16;
+        strategy = St.strategy_ordered_kbo
+      })
+  in
+  heuristic := h'
 ;;
 
 
@@ -881,7 +875,7 @@ let set_iteration_stats aa gs =
        (if gnd then 1 else 0));
   if debug 1 then (
     A.print ();
-    A.show_proof_track settings all_nodes)
+    A.show_proof_track !settings all_nodes)
 ;;
 
 
@@ -890,7 +884,7 @@ let store_trs ctx j rr cost =
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS may be used; have to store *)
   let rr_reduced =
-    if not !(settings.reduce_trss) then rr
+    if not !heuristic.reduce_trss then rr
     else if !(Settings.do_proof) <> None then interreduce rr
     else Variant.reduce_encomp rr
   in
@@ -904,7 +898,7 @@ let store_trs ctx j rr cost =
 let subsumption_ratios : float list ref = ref []
 
 let equations_for_overlaps irr all =
-  if !A.iterations < 3 && !(settings.full_CPs_with_axioms) then
+  if !A.iterations < 3 && !heuristic.full_CPs_with_axioms then
     NS.to_list (eqs_for_overlaps all)
   else
   let last3 =
@@ -940,7 +934,7 @@ let rec phi ctx aa gs =
   let process (j, aa, gs, aa_new) (rr, c, order) =
     let n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index n in (* interreduce *)
-    let rew = new Rewriter.rewriter rr_red !(settings.ac_syms) order in
+    let rew = new Rewriter.rewriter rr_red !settings.ac_syms order in
     check_order_generation false order;
     rew#init ();
     (* TODO: red is often very small, is this rewriting necessary? *)
@@ -1006,96 +1000,104 @@ let rec phi ctx aa gs =
   with Success r -> r
 ;;
 
-let init_settings fs axs gs =
- A.restart ();
- settings.axioms := axs;
- let axs = [ Lit.terms a | a <- axs ] in
- let acs = Ac.symbols axs in
- settings.ac_syms := acs;
- let cs = Commutativity.symbols axs in
- settings.only_c_syms := Listset.diff cs acs;
- settings.signature := Rules.signature (axs @ gs);
- settings.d := !(fs.d);
- A.iterations := 0;
- if L.length axs >= 90 then (
-   settings.large := true;
-   settings.strategy := Strategy.strategy_aql;
-   settings.reduce_trss := false;
-   settings.k := (fun _ -> 4);
-   settings.auto := false)
- else (
-   settings.n := !(fs.n);
-   settings.strategy := !(fs.strategy);
-   settings.auto := !(fs.auto);
-   settings.tmp := !(fs.tmp);
-   if !(fs.auto)  then detect_shape axs);
- settings.gs := gs;
- Settings.is_ordered := !(settings.unfailing);
- if !(Settings.do_proof) <> None then
-   Trace.add_initials axs;
- if debug 1 then
-   F.printf "AC syms: %s \n%!"
-     (L.fold_left (fun s f -> Signature.get_fun_name f ^ " " ^ s) "" acs);
- if !(settings.reduce_AC_equations_for_CPs) then (
-   let acxs = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
-   acx_rules := [ Lit.flip r | r <- acxs ] @ acxs);
- A.init_proof_track !(Settings.track_equations);
- A.update_proof_track !(settings.axioms) [] 0
+let init_settings (settings_flags, heuristic_flags) axs gs =
+  A.restart ();
+  A.iterations := 0;
+  let axs_eqs = [ Lit.terms a | a <- axs ] in
+  let acs = Ac.symbols axs_eqs in
+  let cs = Commutativity.symbols axs_eqs in
+  let is_large = L.length axs_eqs >= 90 in
+  let s =
+    { !settings with
+      ac_syms = acs;
+      auto = if is_large then false else settings_flags.auto;
+      axioms = axs;
+      debug = settings_flags.debug;
+      gs = gs;
+      only_c_syms = Listset.diff cs acs;
+      signature = Rules.signature (axs_eqs @ gs);
+      tmp = settings_flags.tmp;
+      unfailing = settings_flags.unfailing
+    }
+  in
+  let h =
+    if is_large then
+      let saql = St.strategy_aql in
+      { !heuristic with k = (fun _ -> 4); reduce_trss = false; strategy = saql }
+    else
+      { !heuristic with
+        n = heuristic_flags.n;
+      }
+  in
+  settings := s;
+  heuristic := h;
+  if settings_flags.auto && not is_large then detect_shape axs_eqs;
+  if !(Settings.do_proof) <> None then Trace.add_initials axs_eqs;
+  if !heuristic.reduce_AC_equations_for_CPs then
+    let acx = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
+    acx_rules := [ Lit.flip r | r <- acx ] @ acx;
+  A.init_proof_track !(Settings.track_equations);
+  A.update_proof_track axs [] 0
 ;;
 
 let remember_state es gs =
  let h = Hashtbl.hash (termination_strategy (), es,gs) in
  if h = !hash_initial then
-   (*raise Fail;*)
-   settings.n := Pervasives.max (!(settings.n) + 1) 15;
+   heuristic := { !heuristic with n = Pervasives.max (!heuristic.n + 1) 15};
  hash_initial := h
 ;;
 
-(* main ckb function *)
-let rec ckb fs (es, gs) =
- (* TODO check positive/negative goals??? *)
- let eq_ok e = Lit.is_equality e || Lit.is_ground e in
- if not (L.for_all eq_ok es) then raise Fail
- else
- (*if gs = [] then settings.strategy := Strategy.strategy_ordered_sat;*)
- (* store initial state to capture*)
- remember_state es gs;
- (* init state *)
- let est =
-  if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
- in
-let es' = L.map Lit.normalize est in
- let es0 = L.sort Pervasives.compare es' in
- let gs0 = L.map Lit.normalize gs in
- all_nodes := [e, Lit.size e | e <- es0];
- try
-  init_settings fs es0 [ Lit.terms g | g <- gs0 ];
-  let cas = [ Ac.cassociativity f | f <- !(settings.ac_syms)] in
-  let es0 = [ Lit.make_axiom (Variant.normalize_rule rl) | rl <- cas ] @ es0 in
-  let ctx = Logic.mk_context () in
-  let ns0 = NS.of_list es0 in
-  new_nodes := es0;
-  let ss = Listx.unique (t_strategies ()) in
-  L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms n | n <- gs0 @ es0 ]) ss;
-  (if !(settings.keep_orientation) then
-    let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
-    let es' = [ if d then e else R.flip e | e,d <- es ] in
-    let keep = Logic.big_and ctx [ !!(C.rule_var ctx (R.flip r)) | r <- es' ] in
-    Logic.require keep;
-    L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
-    );
-  let res = phi ctx ns0 (NS.of_list gs0) in
-  Logic.del_context ctx;
-  res
- with Restart es_new -> (
-  pop_strategy ();
-  Strategy.clear ();
-  Cache.clear ();
-  A.restarts := !A.restarts + 1;
-  Hashtbl.reset rewrite_trace;
-  Hashtbl.reset cp_cache;
-  NS.reset_age ();
-  A.mem_diffs := [];
-  A.time_diffs := [];
-  ckb fs ((if gs = [] then es0 else es_new @ es0), gs))
+
+let ckb ((settings_flags, heuristic_flags) as flags) input =
+  settings := settings_flags;
+  heuristic := heuristic_flags;
+  let rec ckb (es, gs) =
+    (* TODO check positive/negative goals??? *)
+    let eq_ok e = Lit.is_equality e || Lit.is_ground e in
+    if not (L.for_all eq_ok es) then
+      raise Fail;
+    (*if gs = [] then heuristic.strategy := St.strategy_ordered_sat;*)
+    (* store initial state to capture*)
+    (* init state *)
+    let est =
+      if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
+    in
+    let es' = L.map Lit.normalize est in
+    let es0 = L.sort Pervasives.compare es' in
+    let gs0 = L.map Lit.normalize gs in
+    all_nodes := [ e, Lit.size e | e <- es0 ];
+    init_settings flags es0 [ Lit.terms g | g <- gs0 ];
+    remember_state es gs;
+    try
+      let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
+      let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
+      let ctx = Logic.mk_context () in
+      let ns0 = NS.of_list es0 in
+      new_nodes := es0;
+      let ss = Listx.unique (t_strategies ()) in
+      L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- gs0 @ es0 ]) ss;
+      if !settings.keep_orientation then (
+        let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
+        let es' = [ if d then e else R.flip e | e,d <- es ] in
+        let oriented = [ !!(C.rule_var ctx (R.flip r)) | r <- es' ] in
+        let keep = Logic.big_and ctx oriented in
+        Logic.require keep;
+        L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
+      );
+      let res = phi ctx ns0 (NS.of_list gs0) in
+      Logic.del_context ctx;
+      res
+    with Restart es_new -> (
+      pop_strategy ();
+      St.clear ();
+      Cache.clear ();
+      A.restarts := !A.restarts + 1;
+      Hashtbl.reset rewrite_trace;
+      Hashtbl.reset cp_cache;
+      NS.reset_age ();
+      A.mem_diffs := [];
+      A.time_diffs := [];
+      ckb ((if gs = [] then es0 else es_new @ es0), gs))
+  in
+  ckb input
 ;;

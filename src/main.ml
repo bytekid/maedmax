@@ -14,9 +14,10 @@ let short_usage = "maedmax v0.9\nUsage: maedmax <options> <file>\n"
 let filenames = ref []
 let track_file = ref None
 
-let settings = Settings.default
+let settings = ref Settings.default
+let heuristic = ref Settings.default_heuristic
 
-let k = ref (-1)
+(*let k = ref (-1)*)
 let use_ac = ref false
 let analyze = ref false
 let only_termination = ref false
@@ -25,23 +26,23 @@ let timeout = ref None
 let strategy = ref []
 
 let do_ordered _ =
-  settings.unfailing := true;
-  settings.k := (fun _ -> 2);
-  settings.strategy := S.strategy_ordered
+  let h = !heuristic in
+  settings := { !settings with unfailing = true };
+  heuristic := { h with k = (fun _ -> 2); strategy = S.strategy_ordered }
 ;;
 
 let do_concon _ =
-  settings.unfailing := true;
-  settings.max_oriented := 2;
-  settings.full_CPs_with_axioms := true;
-  settings.k := (fun _ -> 2);
-  settings.strategy := S.strategy_ordered
+  settings := { !settings with unfailing = true };
+  heuristic := { !heuristic with
+    full_CPs_with_axioms = true;
+    k = (fun _ -> 2); max_oriented = 2;
+    strategy = S.strategy_ordered
+  }
 ;;
 
 let do_unordered _ =
-  settings.unfailing := false;
-  settings.k := (fun _ -> 2);
-  settings.strategy := S.strategy_auto
+  settings := { !settings with unfailing = false };
+  heuristic := { !heuristic with k = (fun _ -> 2); strategy = S.strategy_auto }
 ;;
 
 let track_proof file =
@@ -53,81 +54,90 @@ let options = Arg.align
   [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");*)
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
-    " print problem characteristics");
+     " print problem characteristics");
    ("--aql", Arg.Unit (fun _ -> (*settings.strategy := S.strategy_aql;
                                 settings.reduce_trss := false;
                                 settings.k := (fun _ -> 4)*) ()),
-    " use heuristics for AQL examples");
+     " use heuristics for AQL examples");
    ("--benchmark", Arg.Set Settings.benchmark,
-    " produce benchmarks");
+     " produce benchmarks");
    ("--concon", Arg.Unit do_concon,
-    " satisfiability-preferring strategy");
-   ("-D", Arg.Int (fun d -> settings.d := d),
-    " print debugging output");
+     " satisfiability-preferring strategy");
+   ("-D", Arg.Int (fun d -> settings := { !settings with debug = d }),
+     " print debugging output");
    ("--interactive", Arg.Set Settings.interactive,
-    " enter interactive mode once a complete system was found");
-   ("--json", Arg.Set settings.json,
-    " output result and stats in JSON format");
-   (*("-I", Arg.Int (fun n -> Settings.inst_depth := n),
-    "<i> instantiation depth for ground confluence check");*)
-   ("-K", Arg.Int (fun n -> settings.k := (fun _ -> n); k := n),
-    "<k> compute k maximal terminating TRSs");
+     " enter interactive mode once a complete system was found");
+   ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
+     " output result and stats in JSON format");
+   ("-K", Arg.Int (fun k -> heuristic := { !heuristic with k = (fun _ -> k) } (*k := n*)),
+     "<k> compute k maximal terminating TRSs");
    ("--kb", Arg.Unit do_unordered,
-    " Knuth-Bendix completion (unordered)");
-   ("-M", Arg.String (fun s -> 
-       if s = "kbauto" then settings.strategy := S.strategy_auto
-       else if s = "lpo" then settings.strategy := S.strategy_lpo
-       else if s = "olpo" then settings.strategy := S.strategy_ordered_lpo
-       else if s = "okbo" then settings.strategy := S.strategy_ordered_kbo
-       else if s = "olpoorkbo" then settings.strategy := S.strategy_ordered_lpokbo
-       else if s = "kbo" then settings.strategy := S.strategy_kbo
-       else if s = "maxcomplpo" then settings.strategy := S.strategy_maxcomp_lpo
-       else if s = "maxcompkbo" then settings.strategy := S.strategy_maxcomp_kbo
-       else if s = "okbauto" then settings.strategy := S.strategy_ordered
-       else if s = "linpoly" then settings.strategy := S.strategy_aql
-       else if s = "temp" then settings.strategy := S.strategy_temp
-       else failwith "unsupported option for -M"),
-    "<mode> strategy (olpo, okbo, olpokbo)");
-   ("--checksub", Arg.Int (fun n -> settings.check_subsumption := n),
-    " perform subsumption checks (1,2)");
-   ("--pcp", Arg.Int (fun n -> settings.pcp := n),
-    " only consider prime critical pairs if set to 1 (but then no caching)");
-   ("--keep-oriented", Arg.Set settings.keep_orientation,
-    " preserve orientation of input axioms");
-   ("-N", Arg.Int (fun n -> settings.n := n), 
-    "<n> select <n> active equations from CPs of TRS");
-    ("--max-oriented", Arg.Int (fun n -> settings.max_oriented := n), 
-    "<n> every <n> iterations, orient as many equations as possible");
-   ("--full-CPs-with-axioms", Arg.Set settings.full_CPs_with_axioms,
-    " compute CPs with axioms in both directions");
+     " Knuth-Bendix completion (unordered)");
+   ("-M", Arg.String (fun s ->
+      let strategy = 
+        if s = "kbauto" then S.strategy_auto
+        else if s = "lpo" then S.strategy_lpo
+        else if s = "olpo" then S.strategy_ordered_lpo
+        else if s = "okbo" then S.strategy_ordered_kbo
+        else if s = "olpoorkbo" then S.strategy_ordered_lpokbo
+        else if s = "kbo" then S.strategy_kbo
+        else if s = "maxcomplpo" then S.strategy_maxcomp_lpo
+        else if s = "maxcompkbo" then S.strategy_maxcomp_kbo
+        else if s = "okbauto" then S.strategy_ordered
+        else if s = "linpoly" then S.strategy_aql
+        else if s = "temp" then S.strategy_temp
+        else failwith "unsupported option for -M"
+      in
+      heuristic := { !heuristic with strategy = strategy }),
+     "<mode> strategy (olpo, okbo, olpokbo)");
+   ("--checksub", Arg.Int (fun n ->
+     heuristic := {!heuristic with check_subsumption = n}),
+     " perform subsumption checks (1,2)");
+   ("--pcp", Arg.Int (fun n -> heuristic := { !heuristic with pcp = n }),
+     " only consider prime critical pairs if set to 1 (but then no caching)");
+   ("--keep-oriented", Arg.Unit (fun _ ->
+     settings := { !settings with keep_orientation = true}),
+     " preserve orientation of input axioms");
+   ("-N", Arg.Int (fun n -> heuristic := { !heuristic with n = n}), 
+     "<n> select <n> active equations from CPs of TRS");
+    ("--max-oriented", Arg.Int (fun n ->
+      heuristic := { !heuristic with max_oriented = n }), 
+     "<n> every <n> iterations, orient as many equations as possible");
+   ("--full-CPs-with-axioms", Arg.Unit (fun _ ->
+     heuristic := { !heuristic with full_CPs_with_axioms = true }),
+     " compute CPs with axioms in both directions");
     ("--generate-order", Arg.Unit (fun _ ->
       Settings.generate_order := true;
-      (*settings.auto := false;*)
-      settings.strategy := S.strategy_order_generation),
-     " order generation mode");
+      heuristic := { !heuristic with strategy = S.strategy_order_generation }),
+      " order generation mode");
    ("-P", Arg.String (fun s ->
       if s = "cpf" then Settings.do_proof := Some CPF else
       if s = "tstp" then Settings.do_proof := Some TPTP
       else failwith "unsupported proof type"),
-    "<format> output proof (cpf, tptp)");
-   ("--reduceAC-CPs", Arg.Set settings.reduce_AC_equations_for_CPs,
-    " do not use ACx equations for CPs");
-   ("--sizeage", Arg.Int (fun n -> settings.size_age_ratio := n), 
-    "<r> percentage of size (vs age) decisions");
-   ("--size-bound", Arg.Int (fun n -> settings.size_bound_equations := n),
-    "<b> upper bound for size of active equations");
-   ("--size-bound-goals", Arg.Int (fun n -> settings.size_bound_goals := n),
-    "<b> upper bound for size of active goals");
+     "<format> output proof (cpf, tptp)");
+   ("--reduceAC-CPs", Arg.Unit (fun _ ->
+     heuristic := { !heuristic with reduce_AC_equations_for_CPs = true}),
+     " do not use ACx equations for CPs");
+   ("--sizeage", Arg.Int (fun n ->
+     heuristic := { !heuristic with size_age_ratio = n}), 
+     "<r> percentage of size (vs age) decisions");
+   ("--size-bound", Arg.Int (fun n ->
+     heuristic := { !heuristic with size_bound_equations = n}),
+     "<b> upper bound for size of active equations");
+   ("--size-bound-goals", Arg.Int (fun n ->
+     heuristic := { !heuristic with size_bound_goals = n}),
+     "<b> upper bound for size of active goals");
    ("--term", Arg.Set only_termination,
-    " perform termination check");
+     " perform termination check");
    ("-T", Arg.Float (fun f -> timeout := Some f),
-    "<t> timeout");
+     "<t> timeout");
    ("--track", Arg.String (fun s -> track_file := Some s),
-    " <track file> keep track of equations in proof file");
-   (*("--tmp", Arg.Int (fun n -> settings.tmp := n),
-    "<n> various purposes");*)
-   ("--xsig", Arg.Set settings.extended_signature,
-    " consider signature plus infinitely many constants (ordered completion)")
+     " <track file> keep track of equations in proof file");
+   ("--tmp", Arg.String (fun s -> Settings.tmp := s),
+    "<n> various purposes");
+   ("--xsig",  Arg.Unit (fun _ ->
+     settings := { !settings with extended_signature = true}),
+     " consider signature plus infinitely many constants (ordered completion)")
  ]
 
 (*** FUNCTIONS ***************************************************************)
@@ -160,12 +170,11 @@ let call () =
 
 let success_code = function UNSAT -> "Unsatisfiable" | SAT -> "Satisfiable"
 
-let json_settings settings s k =
+let json_settings settings s =
  let s = "strategy", `String s in
- let k = "k", `String (if k  < 0 then "if i < 3 then 6 else 2" else string_of_int k) in
- let n = "n", `Int !(settings.n) in
- let sa = "sizeage", `Int !(settings.size_age_ratio) in
- `Assoc [s; k; n; sa]
+ let n = "n", `Int !heuristic.n in
+ let sa = "sizeage", `Int !heuristic.size_age_ratio in
+ `Assoc [s; n; sa]
 ;;
 
 let print_json (es, gs) f (a,p) settings proof =
@@ -177,13 +186,13 @@ let print_json (es, gs) f (a,p) settings proof =
     | Proof _ -> "..."
   in
   let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
-  let strat = !(settings.strategy) in
+  let strat = !heuristic.strategy in
   let t = `Assoc [
     "result",`String (success_code a);
     "time", f;
     "trs", `String res_str;
     "statistics", Analytics.json ();
-    "settings", json_settings settings (Strategy.to_string strat) !k;
+    "settings", json_settings settings (Strategy.to_string strat);
     "characteristics", Analytics.analyze es gs;
     "proof", `String (match proof with Some s -> s | _ -> "")
   ] in
@@ -228,7 +237,7 @@ let clean es0 =
     let ee'' = Rules.subsumption_free ee' in
     let rr' = if List.length rr < 200 then Var.reduce_encomp rr else rr in
     let rr_pre =
-      if not !(settings.keep_orientation) then []
+      if not !settings.keep_orientation then []
       else Listset.diff [ r | r <- rr;List.mem (Var.normalize_rule r) es0n ] rr'
     in
     (rr' @ rr_pre, ee'')
@@ -283,12 +292,12 @@ let interactive_mode proof =
   let rewriter = match proof with
     | Completion rr ->
       Format.printf "Deciding equational theory.\n%!";
-      let rew = new Rewriter.rewriter rr !(settings.ac_syms) Order.default in
+      let rew = new Rewriter.rewriter rr !settings.ac_syms Order.default in
       rew#init ();
       rew
     | GroundCompletion (rr,ee,o) ->
     Format.printf "Deciding ground theory over given signature.\n%!";
-      let rew = new Rewriter.rewriter rr !(settings.ac_syms) o in
+      let rew = new Rewriter.rewriter rr !settings.ac_syms o in
       rew#init ();
       rew#add ee;
       rew
@@ -344,12 +353,12 @@ let print_waldmeister es =
 
 let run file ((es, gs) as input) =
   let timer = Timer.start () in
-  let ans, proof = Ckb.ckb settings input in
+  let ans, proof = Ckb.ckb (!settings, !heuristic) input in
   Timer.stop timer;
   let secs = Timer.length ~res:Timer.Seconds timer in
   if !(Settings.interactive) then
     interactive_mode proof
-  else if !(settings.json) then (
+  else if !settings.json then (
     let proofstr =
       match !(Settings.do_proof) with
       | Some ft -> Some (proof_string file ~readable:false input proof ft)
@@ -374,7 +383,7 @@ let () =
   do_ordered ();
   Arg.parse options 
    (fun x -> filenames := !filenames @ [x]) short_usage;
-  strategy := !(settings.strategy);
+  strategy := !heuristic.strategy;
   match !filenames with
   | [f] -> 
     let (es,gs) as input = Read.file f in
@@ -384,8 +393,8 @@ let () =
     | None -> ());
     if !(Settings.interactive) && gs <> [] then
       failwith "Input for interactive mode is not supposed to contain goals";
-    if !(settings.d) > 0 then
-      printf "working on %s\n%!" f;
+    if !settings.debug > 0 then
+      printf "input problem: %s\n%!" f;
     if not !only_termination && not !analyze then
       try
         match fst (Timer.run_timed !timeout (run f) input) with
@@ -397,11 +406,11 @@ let () =
     else (
       let timer = Timer.start () in
       let yes =
-        Termination.check (S.get_termination !strategy) es !(settings.json)
+        Termination.check (S.get_termination !strategy) es !settings.json
       in
       Timer.stop timer;
       let secs = Timer.length ~res:Timer.Seconds timer in
-      if !(settings.json) then print_json_term yes secs
+      if !settings.json then print_json_term yes secs
       else (
         printf "@.%a@." print_trs [Literal.terms e | e <- es];
         let a = if yes then "YES" else "MAYBE" in

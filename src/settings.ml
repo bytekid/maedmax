@@ -3,72 +3,112 @@ module Logic = Order.Logic
 
 (*** TYPES *******************************************************************)
 (* Type for reduction order *)
-type order = LPO | KBO | Matrix | Cfs | Cfsn | MPol
+type order =
+  | LPO
+  | KBO
+  | Matrix
+  | Cfs
+  | Cfsn
+  | MPol
+
 (* Constructors connecting different reduction orders *)
 type orders = Choice of (order * order) | Seq of order list
 
 type t_term = 
-   Orders of orders (* plain reduction orders *)
- | Dp of orders (* dependency pairs followed by orders *)
- | Dg of orders (* dependency graph without SCCs *)
- | DgScc of (int * orders) (* dependency graph with k SCCs *)
+  | Orders of orders (* plain reduction orders *)
+  | Dp of orders (* dependency pairs followed by orders *)
+  | Dg of orders (* dependency graph without SCCs *)
+  | DgScc of (int * orders) (* dependency graph with k SCCs *)
  
- type selection = Size | SizeAge of int
+type selection =
+  | Size
+  | SizeAge of int
 
-type t_constraint = Empty | Red | Comp | RedSize
-type t_max_constraint = MaxEmpty | MaxRed | Oriented | CPsRed | NotOriented |
-                        GoalRed | MinCPs
-type limit = IterationLimit of int | TimeLimit of float
+type t_constraint =
+  | Empty
+  | Red
+  | Comp
+  | RedSize
+
+type t_max_constraint =
+  | MaxEmpty
+  | MaxRed
+  | Oriented
+  | CPsRed
+  | NotOriented
+  | GoalRed
+  | MinCPs
+
+type limit =
+  | IterationLimit of int
+  | TimeLimit of float
+
 type t_setting =
   t_term * (t_constraint list) * (t_max_constraint list) * limit * selection
+
 type termination_strategy = t_setting list
 
-(* heuristically detected problem shape *)
+(* heuristically detected problem class *)
 type shape =
-  NoShape | Boro | Calcio | Carbonio | Elio | Magnesio | Silicio | Ossigeno |
-  Piombo | Xeno | Zolfo
-
+  | Boro
+  | Calcio
+  | Carbonio
+  | Elio
+  | Magnesio
+  | Silicio
+  | Ossigeno
+  | Piombo
+  | Xeno
+  | Zolfo
+  | NoShape
 
 type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
 
 type proof_format = CPF | TPTP
 
 type t = {
- auto     : bool ref; (* automatic mode *)
- ac_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
- only_c_syms  : Signature.sym list ref; (* only relevant for ordered completion *)
- signature: (Signature.sym * int) list ref;
- d        : int ref ; (* debug mode *)
- axioms   : literal list ref ;
- json     : bool ref; (* output json result and statistics *)
- gs       : Rules.t ref ;
- k        : (int -> int) ref;  (* k TRSs are chosen in an iteration *)
- large    : bool ref;
- n        : int ref;  (* how many equations are (at most) selected *)
- max_oriented : int ref;
- unfailing : bool ref;
- strategy : termination_strategy ref;
- tmp      : int ref; (* various purpose parameter *)
- output_tproof : bool ref;
- check_subsumption : int ref;
- pcp : int ref;
- extended_signature: bool ref;
- keep_orientation: bool ref;
- reduce_trss : bool ref;
- size_age_ratio: int ref;
- size_bound_equations: int ref;
- size_bound_goals: int ref;
- reduce_AC_equations_for_CPs: bool ref;
- full_CPs_with_axioms : bool ref
+  auto : bool; (* automatic mode *)
+  ac_syms : Signature.sym list; (* only relevant for ordered completion *)
+  only_c_syms : Signature.sym list; (* only relevant for ordered completion *)
+  signature : (Signature.sym * int) list;
+  debug : int; (* debug level *)
+  axioms : literal list;
+  json : bool; (* output json result and statistics *)
+  gs : Rules.t; (* initial goals *)
+  unfailing : bool;
+  tmp : int; (* various purpose parameter *)
+  output_tproof : bool;
+  extended_signature: bool;
+  keep_orientation: bool
+}
+
+type heuristic = {
+  k : int -> int;  (* k TRSs are chosen in an iteration *)
+  n : int;  (* how many equations are (at most) selected *)
+  strategy : termination_strategy;
+  check_subsumption : int; (* degree of subsumption check, in {0,1,2} *)
+  max_oriented : int;
+  pcp : int; (* use critical pair criterion *)
+  reduce_trss : bool; (* interreduce TRSs *)
+  size_age_ratio: int;
+  size_bound_equations: int;
+  size_bound_goals: int;
+  reduce_AC_equations_for_CPs: bool;
+  full_CPs_with_axioms : bool
 }
 
 type rewrite_steps = (Rule.t * Term.pos * Term.t) list
-type proof = Completion of Rules.t
-| GroundCompletion of (Rules.t * Rules.t * Order.t)
-| Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
-| Disproof of (Rules.t * Rules.t * Order.t * (rewrite_steps * rewrite_steps))
 
-type answer = SAT | UNSAT
+type proof =
+  | Completion of Rules.t
+  | GroundCompletion of (Rules.t * Rules.t * Order.t)
+  | Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
+  | Disproof of (Rules.t * Rules.t * Order.t * (rewrite_steps * rewrite_steps))
+
+type answer =
+  | SAT
+  | UNSAT
+
 type result = answer * proof
 
 
@@ -77,42 +117,42 @@ type result = answer * proof
 let k_default = fun i -> if i < 3 then 6 else 2
 let k2 _ = 2
 
-let tmp = ref false
-
-(* settings *)
+(* default settings *)
 let default = {
- auto      = ref true;
- ac_syms   = ref [];
- only_c_syms   = ref [];
- signature = ref [];
- d         = ref 0;
- axioms    = ref [] ;
- json      = ref false;
- gs        = ref [] ;
- k         = ref k_default;
- large     = ref false;
- n         = ref 10;
- max_oriented = ref 1000;
- unfailing = ref false;
- strategy  = ref [];
- tmp       = ref 0;
- output_tproof = ref false;
- check_subsumption = ref 1;
- pcp = ref 0;
- extended_signature = ref false;
- keep_orientation = ref false;
- reduce_trss = ref true;
- size_age_ratio = ref 100;
- size_bound_equations = ref 200;
- size_bound_goals = ref 30;
- reduce_AC_equations_for_CPs = ref false;
- full_CPs_with_axioms = ref false
+  auto = true;
+  ac_syms = [];
+  only_c_syms = [];
+  signature = [];
+  debug = 0;
+  axioms = [];
+  json = false;
+  gs = [];
+  unfailing = false;
+  tmp = 0;
+  output_tproof = false;
+  extended_signature = false;
+  keep_orientation = false;
+}
+
+(* default settings *)
+let default_heuristic = {
+  k = k_default;
+  n = 10;
+  max_oriented = 1000;
+  strategy = [];
+  check_subsumption = 1;
+  pcp = 0;
+  reduce_trss = true;
+  size_age_ratio = 100;
+  size_bound_equations = 200;
+  size_bound_goals = 30;
+  reduce_AC_equations_for_CPs = false;
+  full_CPs_with_axioms = false
 }
 
 let do_assertions = ref false
 let do_debug = ref false
 let do_proof : proof_format option ref = ref None
-let is_ordered = ref false
 let interactive = ref false
 let generate_order = ref false
 let inst_depth : int ref = ref 2
@@ -122,9 +162,9 @@ let input_file = ref ""
 let generate_benchmarks = ref false
 let track_equations : literal list ref = ref []
 let benchmark = ref false
+let tmp = ref ""
 
 let shape_to_string = function
-    NoShape -> "none"
   | Boro -> "boro"
   | Calcio -> "calcio"
   | Carbonio -> "carbonio"
@@ -135,6 +175,7 @@ let shape_to_string = function
   | Piombo -> "piombo"
   | Xeno -> "xeno"
   | Zolfo -> "zolfo"
+  | NoShape -> "none"
 ;;
 
 let do_proof_debug () = !do_debug && (!do_proof <> None)

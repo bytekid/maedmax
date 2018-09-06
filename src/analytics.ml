@@ -328,10 +328,11 @@ let update_proof_track aa pp i =
 ;;
 
 let goal_similarity settings n =
-  let sim = Term.similarity !(settings.ac_syms) !(settings.only_c_syms) in
+  let sim = Term.similarity settings.ac_syms settings.only_c_syms in
   let rsim (s,t) (s',t') = sim s s' +. sim t t' in
-  let msim r = List.fold_left (fun m q -> m +. (rsim r q)) 0. !(settings.gs) in
+  let msim r = List.fold_left (fun m q -> m +. (rsim r q)) 0. settings.gs in
   msim (Literal.terms n)
+;;
 
 let show_proof_track settings all_nodes =
   let rec pos l i = function
@@ -374,12 +375,6 @@ let little_progress i =
     let progress = Listx.take i !progress in
     List.fold_left (fun b y -> b && not y) (!iterations > i) progress
   with _ -> false
-;;
-
-let some_progress _ =
-  not (prefix_equal 2 !costs) ||
-  (List.length !costs > 0 && List.hd !costs = 0) ||
-  not (prefix_equal 2 !goal_counts)
 ;;
 
 let print_state s =

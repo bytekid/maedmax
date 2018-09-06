@@ -56,8 +56,6 @@ val show_proof_track : Settings.t -> (Literal.t * 'a) list ref -> unit
 
 val little_progress : int -> bool
 
-val some_progress : unit -> bool
-
 val goal_similarity : Settings.t -> Literal.t -> float
 
 val restart : unit -> unit

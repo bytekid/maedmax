@@ -15,7 +15,7 @@ let settings = S.default
 let complete = ref true
 
 (*** FUNCTIONS ***************************************************************)
-let debug _ = !(settings.d) >= 1
+let debug settings = settings.debug >= 1
 
 let pstr = function
     [] -> "e"
@@ -49,7 +49,7 @@ let nf2 rr ((s,t),(ps,pt)) =
 ;;
 
 (* basic narrowing *)
-let narrow_forward_at_with rr ((s,t),(ps,pt)) p (l,r) =
+let narrow_forward_at_with settings rr ((s,t),(ps,pt)) p (l,r) =
   let s_p = T.subterm_at p s in
   try
     let subst = T.substitute (Subst.mgu s_p l) in
@@ -59,21 +59,22 @@ let narrow_forward_at_with rr ((s,t),(ps,pt)) p (l,r) =
     if Rule.size st' > (*!(settings.size_bound_goals)*) 200 then
       (complete := false; raise Too_large);
     let pst = if keep_dir then (ps',pt) else (pt,ps') in
-    if debug () then
+    if debug settings then
       Format.printf "forward narrow (%a,%a) with %a at %s to (%a,%a) %d\n%!"
         T.print s T.print t
         R.print (l,r) (pstr p)
         T.print (fst st') T.print (snd st')
         (R.size st');
     let uv,ps_uv = nf2 rr (st',pst) in
-    if debug () then
+    if debug settings then
       Format.printf "rewrite to (%a,%a)\n%!" T.print (fst uv) T.print (snd uv);
     [(uv,ps_uv)]
   with _ -> []
 ;;
 
-let narrow_at rr st p =
-  L.concat (L.map (fun rl -> narrow_forward_at_with rr st p (R.rename rl)) rr)
+let narrow_at settings rr st p =
+  let forward = narrow_forward_at_with settings in
+  L.concat (L.map (fun rl -> forward rr st p (R.rename rl)) rr)
 ;;
 
 let merge ((s,t),(ps,pt)) ((s',t'),(ps',pt')) =
@@ -104,41 +105,43 @@ let unique gs =
   else L.fold_left (fun all g -> add g all) [] gs
 ;;
 
-let narrow rr ((s,t),(ps,pt)) =
-  L.concat ((Hashset.map_to_list (narrow_at rr ((s,t),(ps,pt))) ps) @
-  (Hashset.map_to_list (narrow_at rr ((t,s),(pt,ps))) pt))
+let narrow settings rr ((s,t),(ps,pt)) =
+  let narrow x px = Hashset.map_to_list (narrow_at settings rr x) px in
+  L.concat ((narrow ((s,t),(ps,pt)) ps) @ (narrow ((t,s),(pt,ps)) pt))
 ;;
 
-let decide rr ee ord gs =
+let decide settings rr ee ord gs =
   let bot = match ord#bot with Some b -> b | _ -> 100 in
-  let patch (l,r) = 
+  let patch (l, r) = 
     let vs = Listset.diff (T.variables r) (T.variables l) in
-    R.substitute [ v, T.F (bot,[]) | v <- vs ] (l,r)
+    R.substitute [ v, T.F (bot,[]) | v <- vs ] (l, r)
   in
   let ee' = L.map patch ee in
   let var_add es n = if not (L.exists (R.variant n) es) then n::es else es in
   let ee' = L.fold_left var_add [] ee' in
   let ee' = L.filter
     (fun e -> not (L.exists (fun e' -> R.is_proper_instance e e') ee')) ee' in
-  if debug () then (
+  if debug settings then (
     Format.printf "EE:\n%a\n%!" Rules.print ee');
   let rr' = rr @ ee' in
   let rec decide_by_narrowing all gs =
     let unifiable ((s,t),_) = Subst.unifiable s t in
     let both_empty (ps,pt) = Hashset.is_empty ps && Hashset.is_empty pt in
     if L.exists unifiable gs then (
-      if debug () then
+      if debug settings then
         Format.printf "UNSAT, found unifiable equation\n%!";
       Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[])))
     else if L.for_all (fun (_,pps) -> both_empty pps) gs && !complete then (
       Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
     else
       let all' = unique_add gs all in
-      let aux = L.concat (L.map (narrow rr') gs) in
+      let aux = L.concat (L.map (narrow settings rr') gs) in
       let gs' = unique aux in
       decide_by_narrowing all' gs'
     in
   let poss t = Hashset.of_list (T.function_positions t) in
-  let gs = [(s,t), (poss s, poss t) | s,t <- gs] in
+  let gs = [(s, t), (poss s, poss t) | s,t <- gs] in
   decide_by_narrowing [] gs
 ;;
+
+let decide_goals settings rr ee ord = decide settings rr ee ord settings.gs

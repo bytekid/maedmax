@@ -1,5 +1,6 @@
 (*** OPENS *******************************************************************)
 open Term
+open Settings
 
 (*** MODULES *****************************************************************)
 module Sig = Signature
@@ -386,6 +387,9 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
     j)
 ;;
 
-let all_joinable ctx str p sts xsig =
-  Analytics.take_time Analytics.t_gjoin_check (all_joinable ctx str p sts xsig)
+let all_joinable settings ctx str (rr, ee, order) sts =
+  let p = (rr, ee, settings.ac_syms, settings.signature, order) in
+  let xs = settings.extended_signature in
+  let d = settings.debug in
+  Analytics.take_time Analytics.t_gjoin_check (all_joinable ctx str p sts xs) d
 ;;
