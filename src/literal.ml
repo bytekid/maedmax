@@ -99,7 +99,7 @@ let pcps rew l l' =
 let rewriter_nf_with ?(max_size=0) l rewriter =
   let ts = l.terms in
   let s', rs = rewriter#nf (fst ts) in
-  if max_size > 0 && Term.size s' > 30 then
+  if max_size <> 0 && Term.size s' > max_size then
     raise Rewriter.Max_term_size_exceeded;
   let t', rt = rewriter#nf (snd ts) in
   let rls = List.map fst (rs @ rt) in
