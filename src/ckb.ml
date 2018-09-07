@@ -46,6 +46,8 @@ let all_goals = ref []
 
 let acx_rules = ref []
 
+let incomplete = ref false
+
 (*** FUNCTIONS ***************************************************************)
 (* shorthands for settings *)
 let termination_strategy _ = 
@@ -173,7 +175,9 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
   (* skip exponential rewrite sequences with unfortunate orders *)
   let nf n =
     try Lit.rewriter_nf_with ~max_size:max_size n rewriter
-    with Rewriter.Max_term_size_exceeded -> None
+    with Rewriter.Max_term_size_exceeded ->
+      incomplete := true;
+      None
   in
   let rewrite n (irrdcbl, news) =
     match nf n with
@@ -479,7 +483,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       in
       if L.exists joinable ieqs then (* joinable inequality axiom *)
         Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
-      else if List.length ee > 40 then None (* saturation too expensive *)
+      else if List.length ee > 40 || !incomplete then
+        None (* saturation too expensive, or goals have been discarded *)
       else  match saturated ctx (rr,ee) rewriter cc with
         | None -> if rr @ ee = [] then Some (SAT, Completion []) else None
         | Some order ->
@@ -968,6 +973,8 @@ let rec phi ctx aa gs =
       A.update_proof_track sel (NS.to_list rest) !(A.iterations);
     let gos = overlaps_on rr aa_for_ols ovl gs in
     let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
+    if NS.exists (fun g -> Lit.size g < !Settings.max_goal_size) gos then
+      incomplete := true;
     let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:!Settings.max_goal_size rew gcps in
     A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
