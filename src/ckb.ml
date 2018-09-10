@@ -483,27 +483,30 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       in
       if L.exists joinable ieqs then (* joinable inequality axiom *)
         Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
-      else if List.length ee > 40 || !incomplete then
+      else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
-      else  match saturated ctx (rr,ee) rewriter cc with
-        | None -> if rr @ ee = [] then Some (SAT, Completion []) else None
+      else match saturated ctx (rr,ee) rewriter cc with
+        | None when rr @ ee = [] && not !incomplete -> Some (SAT, Completion [])
         | Some order ->
           let gs_ground = L.for_all Lit.is_ground (NS.to_list gs) in
+          let ee_nonground = L.for_all (fun e -> not (Rule.is_ground e)) ee in
           let orientable (s,t) = order#gt s t || order#gt t s in
           (* if an equation is orientable, wait one iteration ... *)
+          let ee_sym = ee @ [s, t| t, s <- ee ] in
           if not gs_ground && L.for_all (fun e -> not (orientable e)) ee &&
             !(Settings.do_proof) = None then (* no narrowing proof output yet *)
-            Narrow.decide_goals !settings rr (ee @ [s, t| t, s <- ee ]) order
+            Narrow.decide_goals !settings rr ee_sym order !incomplete
           else if not (rr @ ee = [] || gs_ground) then None
           else (
-            if ee = [] then Some (SAT, Completion rr)
-            else if ieqs = [] && L.for_all (fun e ->not(Rule.is_ground e)) ee then
+            if ee = [] && not !incomplete then Some (SAT, Completion rr)
+            else if ieqs = [] && ee_nonground && not !incomplete then
               Some (SAT, GroundCompletion (rr, ee, order))
             else if L.length ieqs = 1 && NS.is_empty gs &&
               !(Settings.do_proof) = None then
-              Narrow.decide !settings rr (ee @ [s,t| t,s <- ee ]) order ieqs
+              Narrow.decide !settings rr ee_sym order ieqs !incomplete
             else None
           )
+        | _ -> None
     )
 ;;
 
@@ -843,7 +846,7 @@ let detect_shape es =
     | Carbonio ->
       { h with n = 5; size_bound_equations = 50; size_bound_goals = 50 }
     | Calcio -> { h with n = 6 }
-    | Magnesio -> { h with n = 6 }
+    | Magnesio
     | NoShape -> { h with n = 6 }(*;
       Settings.max_goal_size := 27;
       settings.check_subsumption := 0*)

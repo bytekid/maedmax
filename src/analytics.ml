@@ -175,6 +175,18 @@ let find_duplicating es =
   List.find duplicating_rule (es @ [Rule.flip e | e <- es])
 
 let problem_shape es =
+  let s = !Settings.tmp in
+  if s = "boro" then Boro
+  else if s = "calcio" then Calcio
+  else if s = "carbonio" then Carbonio
+  else if s = "elio" then Elio
+  else if s = "magnesio" then Magnesio
+  else if s = "ossigeno" then Ossigeno
+  else if s = "piombo" then Piombo
+  else if s = "silicio" then Silicio
+  else if s = "xeno" then Xeno
+  else if s = "zolfo" then Zolfo
+  else (
   let rmax (l, r) = max (Term.size l) (Term.size r) in
   let max_term_size = L.fold_left max 0 [rmax e | e <- es] in
   let rmax (l, r) = max (Term.depth l) (Term.depth r) in
@@ -212,7 +224,8 @@ let problem_shape es =
   else if (not app && acs > 0 && cs > 0 && mon && max_arity = 2) then Magnesio
   (* Calcio: large problems *)
   else if (dup && large) then Calcio
-  else NoShape
+  else NoShape)
+;;
 
 let theory_equations es =
   let theory_relevant l =
@@ -455,4 +468,7 @@ let add_state red_count trs_size cost cp_count =
   record_state red_count trs_size cost cp_count
 ;;
 
-let restart _ = start_time := Unix.gettimeofday ()
+let restart _ =
+  start_time := Unix.gettimeofday ();
+  last_time := Unix.gettimeofday ()
+;;

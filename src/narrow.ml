@@ -110,7 +110,8 @@ let narrow settings rr ((s,t),(ps,pt)) =
   L.concat ((narrow ((s,t),(ps,pt)) ps) @ (narrow ((t,s),(pt,ps)) pt))
 ;;
 
-let decide settings rr ee ord gs =
+let decide settings rr ee ord gs incomplete =
+  complete := not incomplete;
   let bot = match ord#bot with Some b -> b | _ -> 100 in
   let patch (l, r) = 
     let vs = Listset.diff (T.variables r) (T.variables l) in
@@ -144,4 +145,4 @@ let decide settings rr ee ord gs =
   decide_by_narrowing [] gs
 ;;
 
-let decide_goals settings rr ee ord = decide settings rr ee ord settings.gs
+let decide_goals settings rr ee o ic = decide settings rr ee o settings.gs ic
