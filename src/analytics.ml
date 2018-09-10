@@ -175,7 +175,7 @@ let find_duplicating es =
   List.find duplicating_rule (es @ [Rule.flip e | e <- es])
 
 let problem_shape es =
-  let s = !Settings.tmp in
+  (*let s = !Settings.tmp in
   if s = "boro" then Boro
   else if s = "calcio" then Calcio
   else if s = "carbonio" then Carbonio
@@ -186,7 +186,7 @@ let problem_shape es =
   else if s = "silicio" then Silicio
   else if s = "xeno" then Xeno
   else if s = "zolfo" then Zolfo
-  else (
+  else*) (
   let rmax (l, r) = max (Term.size l) (Term.size r) in
   let max_term_size = L.fold_left max 0 [rmax e | e <- es] in
   let rmax (l, r) = max (Term.depth l) (Term.depth r) in
@@ -306,6 +306,7 @@ let json () =
 (* compare current state with respect to other proof *)
 let init_proof_track ls =
   track_equations_state := [Literal.normalize l, Unseen | l <- ls]
+;;
 
 (* aa are active, pp passive equations *)
 let reset_proof_track _ =

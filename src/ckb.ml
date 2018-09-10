@@ -367,6 +367,7 @@ let select_goals' grew k gg thresh =
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let s = !(A.shape) in
+ let k = if A.little_progress 3 && !heuristic.n_goals = 1 then k + 1 else k in
  let g_old =
   if (selection_mode () = Size || s = Elio) && not (s = Calcio) then []
   else match get_oldest_goal grew with Some g -> [g] | _ -> []
@@ -838,13 +839,16 @@ let detect_shape es =
       { h with n = 10; strategy = St.strategy_ordered_lpo })
     | Zolfo -> { h with n = 10 }
     | Xeno ->
-      { h with reduce_AC_equations_for_CPs = true; size_age_ratio = 60; n = 10 }
+      { h with n = 10; n_goals = 1; reduce_AC_equations_for_CPs = true;
+        size_age_ratio = 60 }
     | Elio when fs_count > 3 -> { h with n = 10 }
     | Silicio ->
-      { h with n = 10; size_age_ratio = 80; strategy = St.strategy_ordered_lpo }
+      { h with n = 10; n_goals = 1; size_age_ratio = 80;
+        strategy = St.strategy_ordered_lpo }
     | Ossigeno -> { h with n = 12; size_age_ratio = 80 }
     | Carbonio ->
-      { h with n = 5; size_bound_equations = 50; size_bound_goals = 50 }
+      { h with n = 5; n_goals = 1; size_bound_equations = 50;
+        size_bound_goals = 50 }
     | Calcio -> { h with n = 6 }
     | Magnesio
     | NoShape -> { h with n = 6 }(*;
@@ -981,7 +985,8 @@ let rec phi ctx aa gs =
     let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:!Settings.max_goal_size rew gcps in
     A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
-    let gg, grest = select_goals (gs,rew) 2 (NS.diff (NS.add_all gs_big gcps) gs) in
+    let gs' = NS.diff (NS.add_all gs_big gcps) gs in
+    let gg, grest = select_goals (gs,rew) !heuristic.n_goals gs' in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
     store_remaining_nodes ctx rest;

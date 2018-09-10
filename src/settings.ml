@@ -85,6 +85,7 @@ type t = {
 type heuristic = {
   k : int -> int;  (* k TRSs are chosen in an iteration *)
   n : int;  (* how many equations are (at most) selected *)
+  n_goals : int;  (* how many equations are (at most) selected *)
   strategy : termination_strategy;
   check_subsumption : int; (* degree of subsumption check, in {0,1,2} *)
   max_oriented : int;
@@ -138,6 +139,7 @@ let default = {
 let default_heuristic = {
   k = k_default;
   n = 10;
+  n_goals = 2;
   max_oriented = 1000;
   strategy = [];
   check_subsumption = 1;
