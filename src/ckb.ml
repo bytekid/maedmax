@@ -1043,9 +1043,9 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   heuristic := h;
   if settings_flags.auto && not is_large then detect_shape axs_eqs;
   if !(Settings.do_proof) <> None then Trace.add_initials axs_eqs;
-  if !heuristic.reduce_AC_equations_for_CPs then
+  if !heuristic.reduce_AC_equations_for_CPs then (
     let acx = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
-    acx_rules := [ Lit.flip r | r <- acx ] @ acx;
+    acx_rules := [ Lit.flip r | r <- acx ] @ acx);
   A.init_proof_track !(Settings.track_equations);
   A.update_proof_track axs [] 0
 ;;
