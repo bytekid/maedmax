@@ -367,7 +367,6 @@ let select_goals' grew k gg thresh =
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let s = !(A.shape) in
- let k = if A.little_progress 3 && !heuristic.n_goals = 1 then k + 1 else k in
  let g_old =
   if (selection_mode () = Size || s = Elio) && not (s = Calcio) then []
   else match get_oldest_goal grew with Some g -> [g] | _ -> []
@@ -438,10 +437,11 @@ let overlaps_on rr aa _ gs =
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let saturated ctx (rr, ee) rewriter cc =
+let saturated ctx (rr, ee) rewriter (axs, cps, cps') =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
   let sys = rr, ee', rewriter#order in
+  let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
   let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
   let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
   Ground.all_joinable !settings ctx str sys eqs'
@@ -847,8 +847,7 @@ let detect_shape es =
         strategy = St.strategy_ordered_lpo }
     | Ossigeno -> { h with n = 12; size_age_ratio = 80 }
     | Carbonio ->
-      { h with n = 5; n_goals = 1; size_bound_equations = 50;
-        size_bound_goals = 50 }
+      { h with n = 5; size_bound_equations = 50; size_bound_goals = 50 }
     | Calcio -> { h with n = 6 }
     | Magnesio
     | NoShape -> { h with n = 6 }(*;
@@ -913,18 +912,17 @@ let equations_for_overlaps irr all =
   if !A.iterations < 3 && !heuristic.full_CPs_with_axioms then
     NS.to_list (eqs_for_overlaps all)
   else
-  let last3 =
-    match !subsumption_ratios with
-    | a :: b :: c :: d :: _ -> a +. b +. c +. d <= 3.6
-    | _ -> false
-  in
-  let check = check_subsumption 1 && (!A.iterations < 9 || last3) in
-    let irr' =
-      if check then NS.subsumption_free irr else irr
+    let last3 =
+      match !subsumption_ratios with
+      | a :: b :: c :: d :: _ -> a +. b +. c +. d <= 3.6
+      | _ -> false
     in
+    let check = check_subsumption 1 && (!A.iterations < 9 || last3) in
+    let irr' = if check then NS.subsumption_free irr else irr in
     let r = float_of_int (NS.size irr') /. (float_of_int (NS.size irr)) in
+    if debug 1 then
+      Format.printf "subsumption check (ratio %.2f)\n%!" r;
     subsumption_ratios := r :: !subsumption_ratios;
-    (*if check then Format.printf "%d -> %d\n%!" (NS.size irr) (NS.size irr');*)
     NS.to_list (eqs_for_overlaps irr')
 ;;
 
@@ -950,30 +948,26 @@ let rec phi ctx aa gs =
     check_order_generation false order;
     rew#init ();
     (* TODO: red is often very small, is this rewriting necessary? *)
-    let t = Unix.gettimeofday () in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
-    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
     redcount := !redcount + (NS.size red);
 
-    let t = Unix.gettimeofday () in
     let thresh = NS.avg_size gs + 8 in
+    let t = Unix.gettimeofday () in
     let gs_red = reduced ~max_size:!Settings.max_goal_size rew gs in
+    A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs_red', gs_big =
       if NS.size gs_red < 10 then gs_red, NS.empty ()
       else NS.filter_out (fun n -> Lit.size n > thresh) gs_red
     in
     let gs = NS.add_all gs_red' gs in
-    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
 
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps', ovl = overlaps rr aa_for_ols in
-    cp_count := !cp_count +  (NS.size cps') ;
+    cp_count := !cp_count +  (NS.size cps');
     let cps = NS.filter (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in
     let cps_large = NS.filter (fun cp -> Lit.size cp >= !Settings.max_eq_size) cps' in
-    let t = Unix.gettimeofday () in
-    let cps = reduced rew cps in (* rewrite CPs *)
-    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
+    let cps = reduced rew cps in
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
     if !(Settings.track_equations) <> [] then
@@ -982,17 +976,20 @@ let rec phi ctx aa gs =
     let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
     if NS.exists (fun g -> Lit.size g < !Settings.max_goal_size) gos then
       incomplete := true;
-    let t = Unix.gettimeofday () in
+      let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:!Settings.max_goal_size rew gcps in
-    A.t_tmp4 := !A.t_tmp4 +. (Unix.gettimeofday () -. t);
+    A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs' = NS.diff (NS.add_all gs_big gcps) gs in
     let gg, grest = select_goals (gs,rew) !heuristic.n_goals gs' in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
     store_remaining_nodes ctx rest;
     store_remaining_goals ctx grest;
+    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
-    let cc = axs () @ (NS.to_list cps @ (NS.to_list cps_large)) in
+    let t = Unix.gettimeofday () in
+    let cc = (axs (), cps, cps_large) in
+    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
     match succeeds ctx (rr, irr) rew cc ieqs gs with
        Some r ->
        if !(Settings.generate_benchmarks) then

@@ -6,6 +6,7 @@ val t_cred : float ref
 val t_gjoin_check : float ref
 val t_maxk : float ref
 val t_rewrite : float ref
+val t_rewrite_goals : float ref
 val t_orient_constr : float ref
 val t_overlap : float ref
 val t_process : float ref
@@ -16,7 +17,6 @@ val t_subsumption: float ref
 val t_tmp1 : float ref
 val t_tmp2 : float ref
 val t_tmp3 : float ref
-val t_tmp4 : float ref
 val equalities : int ref
 val goals : int ref
 val iterations : int ref

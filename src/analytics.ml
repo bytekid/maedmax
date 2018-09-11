@@ -49,7 +49,7 @@ let t_cache = ref 0.0
 let t_tmp1 = ref 0.0
 let t_tmp2 = ref 0.0
 let t_tmp3 = ref 0.0
-let t_tmp4 = ref 0.0
+let t_rewrite_goals = ref 0.0
 
 let iterations = ref 0;;
 let equalities = ref 0;;
@@ -152,13 +152,13 @@ let print () =
   printf "             Comp   %.3f@." !t_ccomp;
   printf "             red    %.3f@." !t_cred;
   printf " rewriting          %.3f@." !t_rewrite;
+  printf "   on goals         %.3f@." !t_rewrite_goals;
   printf " encode termination %.3f@." !t_orient_constr;
   printf " selection          %.3f@." !t_select;
   printf " caching            %.3f@." !t_cache;
   printf " tmp1               %.3f@." !t_tmp1;
   printf " tmp2               %.3f@." !t_tmp2;
   printf " tmp3               %.3f@." !t_tmp3;
-  printf " tmp4               %.3f@." !t_tmp4;
   printf " normalization      %.3f@." !Variant.t_normalize
 
 let is_applicative es =
