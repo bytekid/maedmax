@@ -118,6 +118,8 @@ let options = Arg.align
    ("--reduceAC-CPs", Arg.Unit (fun _ ->
      heuristic := { !heuristic with reduce_AC_equations_for_CPs = true}),
      " do not use ACx equations for CPs");
+   ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
+      "<s> fixed problem shape");
    ("--sizeage", Arg.Int (fun n ->
      heuristic := { !heuristic with size_age_ratio = n}), 
      "<r> percentage of size (vs age) decisions");
@@ -133,7 +135,7 @@ let options = Arg.align
      "<t> timeout");
    ("--track", Arg.String (fun s -> track_file := Some s),
      " <track file> keep track of equations in proof file");
-   ("--tmp", Arg.String (fun s -> Settings.tmp := s),
+   ("--tmp", Arg.Int (fun s -> Settings.tmp := s),
     "<n> various purposes");
    ("--xsig",  Arg.Unit (fun _ ->
      settings := { !settings with extended_signature = true}),

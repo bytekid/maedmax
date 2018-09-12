@@ -109,26 +109,27 @@ let ac_eqs () = [ normalize e | e <- Ac.eqs !settings.ac_syms ]
 let store_remaining_nodes ctx ns =
   if has_comp () then
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
-    let ns = NS.smaller_than !heuristic.size_bound_equations ns in
-    let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
-    all_nodes := L.rev_append (L.rev !all_nodes) ns_sized
+  let ns = NS.smaller_than !heuristic.size_bound_equations ns in
+  let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
+  all_nodes := L.rev_append (L.rev !all_nodes) ns_sized
 ;;
 
 let store_remaining_goals ctx ns =
-    let ns = NS.smaller_than !heuristic.size_bound_equations ns in
-    all_goals := L.rev_append (L.rev !all_goals) (NS.sort_size ns)
+  let ns = NS.smaller_than !heuristic.size_bound_goals ns in
+  let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
+  all_goals := L.rev_append (L.rev !all_goals) ns_sized
 ;;
 
-let get_oldest_node_max max maxmax (aa,rew) =
+let get_oldest_max_from nodelist max maxmax (aa,rew) =
   let rec get_oldest acc max k =
     if k > 5000 then (
-      all_nodes := List.rev acc @ !all_nodes;
+      nodelist := List.rev acc @ !nodelist;
       if max + 2 <= maxmax then get_oldest [] (max + 2) 0 else None
     ) else
-      match !all_nodes with
+      match !nodelist with
       | [] -> None
       | ((n, size_n) as na) :: ns -> (
-        all_nodes := ns;
+        nodelist := ns;
         let s,t = Lit.terms n in
         let nfs =
           try Some (rew#nf s, rew#nf t)
@@ -140,18 +141,10 @@ let get_oldest_node_max max maxmax (aa,rew) =
           (* check for subsumption by other literals seems not beneficial *)
           if s' = t' || NS.mem aa n then get_oldest acc max (k+1)
           else if size_n > max then get_oldest (na :: acc) max (k+1)
-          else (all_nodes := List.rev acc @ !all_nodes; Some n)
+          else (nodelist := List.rev acc @ !nodelist; Some n)
         )
   in
   get_oldest [] max 0
-;;
-
-let rec get_oldest_goal (gg, rew) =
-  match !all_goals with
-  | [] -> None
-  | n :: ns ->
-    all_goals := ns;
-    if NS.mem gg n then get_oldest_goal (gg, rew) else Some n
 ;;
 
 let shape_changed es =
@@ -241,11 +234,11 @@ let select_goal_similar ns =
   n
 ;;
 
-let rec get_old_nodes maxsize aarew n =
+let get_old_nodes_from nodeset maxsize aarew n =
   let maxmaxsize = maxsize + 6 in
   let rec get_old_nodes n =
     if n = 0 then []
-    else match get_oldest_node_max maxsize maxmaxsize aarew with
+    else match get_oldest_max_from nodeset maxsize maxmaxsize aarew with
     | Some b ->
       if debug 1 then (
         F.printf "extra age selected: %a  (%i) (%i)\n%!"
@@ -255,6 +248,10 @@ let rec get_old_nodes maxsize aarew n =
     | None -> []
   in get_old_nodes n
 ;;
+
+let get_old_nodes = get_old_nodes_from all_nodes
+
+let get_old_goals = get_old_nodes_from all_goals
 
 let selections = ref 0
 
@@ -366,14 +363,9 @@ let select_goals' grew k gg thresh =
  let acs = !settings.ac_syms in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
- let s = !(A.shape) in
- let g_old =
-  if (selection_mode () = Size || s = Elio) && not (s = Calcio) then []
-  else match get_oldest_goal grew with Some g -> [g] | _ -> []
- in
- let gg_a =  g_old @ (fst (Listx.split_at_most k sorted)) in
+ let gg_a = fst (Listx.split_at_most k sorted) in
  let gg_p = NS.diff_list gg gg_a in 
- if debug 2 then log_select (NS.to_list gg) gg_a;
+ if debug 1 then log_select (NS.to_list gg) gg_a;
  (gg_a, gg_p)
 ;;
 
@@ -427,9 +419,10 @@ let overlaps rr = A.take_time A.t_overlap (overlaps rr)
    covered by rewriting). *)
 let overlaps_on rr aa _ gs =
   let goals_ground = List.for_all Rule.is_ground !settings.gs in
+  let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let ns = if goals_ground then aa else rr @ aa in
-  (* FIXME restrict equations to be used? *)
-  let ovl = new Overlapper.overlapper ns in
+  let ns' = NS.ac_equivalence_free acs (Listset.diff ns !acx_rules) in
+  let ovl = new Overlapper.overlapper ns' in
   ovl#init ();
   let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
@@ -794,13 +787,11 @@ if A.memory () > 6000 then (
   true)
 else
   let to_eqs ns = L.map Lit.terms (NS.to_list ns) in
-  let shape = A.problem_shape (to_eqs es) in
-  if !settings.auto && shape <> !(A.shape) && shape <> NoShape &&
-    shape <> Piombo
-   then (
+  let shp = A.problem_shape (to_eqs es) in
+  if !settings.auto && shp <> !A.shape && shp <> NoShape && shp <> Piombo && shp <> Zolfo then (
     if debug 1 then
       Format.printf "restart (from %s new shape %s detected)\n%!"
-      (Settings.shape_to_string !(A.shape)) (Settings.shape_to_string shape);
+      (Settings.shape_to_string !(A.shape)) (Settings.shape_to_string shp);
     true)
 else
   (* no progress measure *)
@@ -839,7 +830,7 @@ let detect_shape es =
       { h with n = 10; strategy = St.strategy_ordered_lpo })
     | Zolfo -> { h with n = 10 }
     | Xeno ->
-      { h with n = 10; n_goals = 1; reduce_AC_equations_for_CPs = true;
+      { h with n = 6; n_goals = 1; reduce_AC_equations_for_CPs = true;
         size_age_ratio = 60 }
     | Elio when fs_count > 3 -> { h with n = 10 }
     | Silicio ->

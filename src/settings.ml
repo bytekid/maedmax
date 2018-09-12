@@ -164,7 +164,8 @@ let input_file = ref ""
 let generate_benchmarks = ref false
 let track_equations : literal list ref = ref []
 let benchmark = ref false
-let tmp = ref ""
+let tmp = ref 0
+let fixed_shape = ref ""
 
 let shape_to_string = function
   | Boro -> "boro"

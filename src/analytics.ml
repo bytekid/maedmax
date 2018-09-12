@@ -175,7 +175,7 @@ let find_duplicating es =
   List.find duplicating_rule (es @ [Rule.flip e | e <- es])
 
 let problem_shape es =
-  (*let s = !Settings.tmp in
+  let s = !Settings.fixed_shape in
   if s = "boro" then Boro
   else if s = "calcio" then Calcio
   else if s = "carbonio" then Carbonio
@@ -186,7 +186,7 @@ let problem_shape es =
   else if s = "silicio" then Silicio
   else if s = "xeno" then Xeno
   else if s = "zolfo" then Zolfo
-  else*) (
+  else (
   let rmax (l, r) = max (Term.size l) (Term.size r) in
   let max_term_size = L.fold_left max 0 [rmax e | e <- es] in
   let rmax (l, r) = max (Term.depth l) (Term.depth r) in
@@ -217,14 +217,14 @@ let problem_shape es =
   (* Silicio: lattice problems *)
   else if (not app && not distrib && acs > 1 && lat && not mon) then Silicio
   (* Elio: no structure detected *)
-  else if no_prop then Elio
+  else if no_prop then if max_arity = 2 then Elio else Magnesio
   (* Boro: commutative symbols, duplication *)
   else if (dup && not app && acs = 0 && cs > 1 && not mon) then Boro
   (* Magnesio: commutative symbols, monoid *)
   else if (not app && acs > 0 && cs > 0 && mon && max_arity = 2) then Magnesio
   (* Calcio: large problems *)
   else if (dup && large) then Calcio
-  else NoShape)
+  else if dup then Zolfo else NoShape)
 ;;
 
 let theory_equations es =
