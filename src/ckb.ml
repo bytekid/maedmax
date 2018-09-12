@@ -830,7 +830,7 @@ let detect_shape es =
       { h with n = 10; strategy = St.strategy_ordered_lpo })
     | Zolfo -> { h with n = 10 }
     | Xeno ->
-      { h with n = 6; n_goals = 1; reduce_AC_equations_for_CPs = true;
+      { h with n = 8; n_goals = 1; reduce_AC_equations_for_CPs = true;
         size_age_ratio = 60 }
     | Elio when fs_count > 3 -> { h with n = 10 }
     | Silicio ->

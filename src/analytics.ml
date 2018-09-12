@@ -224,7 +224,7 @@ let problem_shape es =
   else if (not app && acs > 0 && cs > 0 && mon && max_arity = 2) then Magnesio
   (* Calcio: large problems *)
   else if (dup && large) then Calcio
-  else if dup then Zolfo else NoShape)
+  else if dup && max_arity > 2 then Zolfo else NoShape)
 ;;
 
 let theory_equations es =
