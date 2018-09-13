@@ -13,7 +13,8 @@ exception Not_orientable
 exception Max_term_size_exceeded
 
 (*** FUNCTIONS ****************************************************************)
-class rewriter (trs : Rules.t) (acs : Sig.sym list) (ord : Order.t) =
+class rewriter (h:Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
+  (ord : Order.t) =
   object (self)
 
   val mutable nf_table: (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t
@@ -73,7 +74,7 @@ class rewriter (trs : Rules.t) (acs : Sig.sym list) (ord : Order.t) =
   (* Returns tuple (u, rs@rs') where u is a normal form of t that was obtained
      using rules rs'. Lookup in table, otherwise compute. *)
   method nf' rs t =
-    if Term.size t > !Settings.max_eq_size then
+    if Term.size t > h.hard_bound_equations then
       raise Max_term_size_exceeded;
     try let u, urs = H.find nf_table t in u, rs @ urs with
     Not_found -> (

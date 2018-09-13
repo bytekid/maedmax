@@ -109,13 +109,13 @@ let ac_eqs () = [ normalize e | e <- Ac.eqs !settings.ac_syms ]
 let store_remaining_nodes ctx ns =
   if has_comp () then
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
-  let ns = NS.smaller_than !heuristic.size_bound_equations ns in
+  let ns = NS.smaller_than !heuristic.soft_bound_equations ns in
   let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
   all_nodes := L.rev_append (L.rev !all_nodes) ns_sized
 ;;
 
 let store_remaining_goals ctx ns =
-  let ns = NS.smaller_than !heuristic.size_bound_goals ns in
+  let ns = NS.smaller_than !heuristic.soft_bound_goals ns in
   let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
   all_goals := L.rev_append (L.rev !all_goals) ns_sized
 ;;
@@ -190,7 +190,7 @@ let reduced ?(max_size=0) rr ns =
 ;;
 
 let interreduce rr =
- let rew = new Rewriter.rewriter rr [] Order.default in
+ let rew = new Rewriter.rewriter !heuristic rr [] Order.default in
  let right_reduce (l,r) =
    let r', rs = rew#nf r in
    if r <> r' then (
@@ -335,7 +335,7 @@ let select_for_restart cc =
   let is_big es = L.exists bigl es && L.exists deepl es in
   let fats es = [L.find bigl es; L.find deepl es] in
   let k = !(A.restarts) * 2 in
-  let rew = new Rewriter.rewriter [] [] Order.default in
+  let rew = new Rewriter.rewriter !heuristic [] [] Order.default in
   let ccl = NS.to_list cc in
   let ths = Listset.diff (A.theory_equations ccl) (axs ()) in
   let ths' =
@@ -349,13 +349,13 @@ let select_for_restart cc =
 
   let select_for_restart cc =
     let k = !(A.restarts) * 2 in
-    let rew = new Rewriter.rewriter [] [] Order.default in
+    let rew = new Rewriter.rewriter !heuristic [] [] Order.default in
     let ths = Listset.diff (A.theory_equations (NS.to_list cc)) (axs ()) in
     let ths' = if shape_changed cc then ths else [] in
   fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
 
 let select rew cc =
-  let thresh = !heuristic.size_bound_equations in
+  let thresh = !heuristic.soft_bound_equations in
   A.take_time A.t_select (select' ~only_size:false rew 0 cc) thresh
 ;;
 
@@ -370,7 +370,7 @@ let select_goals' grew k gg thresh =
 ;;
 
 let select_goals grew k cc =
-  A.take_time A.t_select (select_goals' grew k cc) !heuristic.size_bound_goals
+  A.take_time A.t_select (select_goals' grew k cc) !heuristic.soft_bound_goals
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -386,7 +386,7 @@ let cps rew n1 n2 =
   else (
     try Hashtbl.find cp_cache (n1,n2)
     with Not_found -> (
-      let cps = Lit.cps n1 n2 in
+      let cps = Lit.cps !heuristic n1 n2 in
       if debug 2 && L.length cps > 0 then
         Format.printf "CPs between %a and %a: %a\n%!" Lit.print n1 Lit.print n2
           NS.print_list cps;
@@ -819,41 +819,50 @@ let detect_shape es =
   let fs_count = L.length (Rules.signature es) in
   if debug 1 then
     F.printf "detected shape %s %i\n%!" (Settings.shape_to_string shape) fs_count;
-  Settings.max_eq_size := 200;
-  Settings.max_goal_size := 100;
-  let h = !heuristic in
+  let h = {!heuristic with hard_bound_equations = 200;hard_bound_goals = 100} in
   let h' =
     match shape with
-    | Piombo -> (
-      Settings.max_eq_size := 4000;
-      Settings.max_goal_size := 200;
-      { h with n = 10; strategy = St.strategy_ordered_lpo })
+    | Piombo -> { h with
+        hard_bound_equations = 4000;
+        hard_bound_goals = 200;
+        n = 10;
+        strategy = St.strategy_ordered_lpo
+      }
     | Zolfo -> { h with n = 10 }
-    | Xeno ->
-      { h with n = 10; n_goals = 1; reduce_AC_equations_for_CPs = true;
-        size_age_ratio = 60 }
+    | Xeno -> { h with
+        n = 10;
+        n_goals = 1;
+        reduce_AC_equations_for_CPs = true;
+        size_age_ratio = 60
+      }
     | Elio when fs_count > 3 -> { h with n = 10 }
-    | Silicio ->
-      { h with n = 10; n_goals = 1; size_age_ratio = 80;
-        strategy = St.strategy_ordered_lpo }
-    | Ossigeno -> { h with n = 12; size_age_ratio = 80 }
-    | Carbonio ->
-      { h with n = 5; size_bound_equations = 50; size_bound_goals = 50 }
+    | Silicio -> { h with
+        n = 10;
+        n_goals = 1;
+        size_age_ratio = 80;
+        strategy = St.strategy_ordered_lpo
+      }
+    | Ossigeno -> { h with
+        n = 12;
+        size_age_ratio = 80
+      }
+    | Carbonio -> { h with
+        n = 5;
+        soft_bound_equations = 50;
+        soft_bound_goals = 50
+      }
     | Calcio -> { h with n = 6 }
     | Magnesio
-    | NoShape -> { h with n = 6 }(*;
-      Settings.max_goal_size := 27;
-      settings.check_subsumption := 0*)
-    | Elio ->  { h with n = 6; strategy = St.strategy_ordered_lpo }
-    | Boro -> (
-      Settings.max_eq_size := 20;
-      Settings.max_goal_size := 20;
-      { h with
+    | NoShape -> { h with n = 6 }
+    | Elio -> { h with n = 6; strategy = St.strategy_ordered_lpo }
+    | Boro -> { h with
+        hard_bound_equations = 20;
+        hard_bound_goals = 20;
         n = 14;
         size_age_ratio = 70;
-        size_bound_equations = 16;
+        soft_bound_equations = 16;
         strategy = St.strategy_ordered_kbo
-      })
+      }
   in
   heuristic := h'
 ;;
@@ -935,7 +944,7 @@ let rec phi ctx aa gs =
   let process (j, aa, gs, aa_new) (rr, c, order) =
     let n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index n in (* interreduce *)
-    let rew = new Rewriter.rewriter rr_red !settings.ac_syms order in
+    let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in
     check_order_generation false order;
     rew#init ();
     (* TODO: red is often very small, is this rewriting necessary? *)
@@ -944,7 +953,7 @@ let rec phi ctx aa gs =
 
     let thresh = NS.avg_size gs + 8 in
     let t = Unix.gettimeofday () in
-    let gs_red = reduced ~max_size:!Settings.max_goal_size rew gs in
+    let gs_red = reduced ~max_size:!heuristic.hard_bound_goals rew gs in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs_red', gs_big =
       if NS.size gs_red < 10 then gs_red, NS.empty ()
@@ -956,19 +965,21 @@ let rec phi ctx aa gs =
     let aa_for_ols = equations_for_overlaps irr aa in
     let cps', ovl = overlaps rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps');
-    let cps = NS.filter (fun cp -> Lit.size cp < !Settings.max_eq_size) cps' in
-    let cps_large = NS.filter (fun cp -> Lit.size cp >= !Settings.max_eq_size) cps' in
+    let eq_bound = !heuristic.hard_bound_equations in
+    let cps = NS.filter (fun cp -> Lit.size cp < eq_bound) cps' in
+    let cps_large = NS.filter (fun cp -> Lit.size cp >= eq_bound) cps' in
     let cps = reduced rew cps in
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select (aa,rew) nn in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track sel (NS.to_list rest) !(A.iterations);
     let gos = overlaps_on rr aa_for_ols ovl gs in
-    let gcps = NS.filter (fun g -> Lit.size g < !Settings.max_goal_size) gos in
-    if NS.exists (fun g -> Lit.size g < !Settings.max_goal_size) gos then
+    let g_bound = !heuristic.hard_bound_goals in
+    let gcps = NS.filter (fun g -> Lit.size g < g_bound) gos in
+    if NS.exists (fun g -> Lit.size g < g_bound) gos then
       incomplete := true;
       let t = Unix.gettimeofday () in
-    let gcps = reduced ~max_size:!Settings.max_goal_size rew gcps in
+    let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs' = NS.diff (NS.add_all gs_big gcps) gs in
     let gg, grest = select_goals (gs,rew) !heuristic.n_goals gs' in

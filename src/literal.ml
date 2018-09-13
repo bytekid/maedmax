@@ -25,13 +25,7 @@ let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
 
 let killed = ref 0
 
-let make ts e g =
-  let sz = Rule.size ts in
-  if g && sz > !Settings.max_goal_size then (
-    killed := !killed + 1;
-    raise Too_large
-  )
-  else {terms = ts; is_goal = g; is_equality = e }
+let make ts e g = {terms = ts; is_goal = g; is_equality = e }
 
 let terms l = l.terms
 
@@ -59,7 +53,7 @@ let normalize l = { l with terms = Variant.normalize_rule l.terms }
 let not_increasing l = not (Term.is_subterm (fst l.terms) (snd l.terms))
 
 (* Iff none of the literals is a goal, filter out trivial CPs *)
-let cps l l' =
+let cps h l l' =
   assert (not (l.is_goal && l'.is_goal));
   if not l.is_equality && not l'.is_equality then []
   else
@@ -71,11 +65,11 @@ let cps l l' =
     let os = if no_trivials then [ (s,t),o | (s,t),o <- os; s <> t ] else os in
     if !(Settings.do_proof) <> None then (
       let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
-      let add ((s,t),o) =
-        if s<>t then trace (Variant.normalize_rule (s,t)) o
+      let add ((s, t), o) =
+        if s <> t then trace (Variant.normalize_rule (s, t)) o
       in List.iter add os);
-    try [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
-    with Too_large -> []
+    let os' = [o | o, _ <- os; Rule.size o <= h.hard_bound_goals] in
+    [make (Variant.normalize_rule o) is_eq is_goal | o <- os']
 ;;
 
 let pcps rew l l' =

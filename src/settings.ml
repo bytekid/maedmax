@@ -83,6 +83,8 @@ type t = {
 }
 
 type heuristic = {
+  hard_bound_equations: int;
+  hard_bound_goals: int;
   k : int -> int;  (* k TRSs are chosen in an iteration *)
   n : int;  (* how many equations are (at most) selected *)
   n_goals : int;  (* how many equations are (at most) selected *)
@@ -92,8 +94,8 @@ type heuristic = {
   pcp : int; (* use critical pair criterion *)
   reduce_trss : bool; (* interreduce TRSs *)
   size_age_ratio: int;
-  size_bound_equations: int;
-  size_bound_goals: int;
+  soft_bound_equations: int;
+  soft_bound_goals: int;
   reduce_AC_equations_for_CPs: bool;
   full_CPs_with_axioms : bool
 }
@@ -137,6 +139,8 @@ let default = {
 
 (* default settings *)
 let default_heuristic = {
+  hard_bound_equations = 2500;
+  hard_bound_goals = 200;
   k = k_default;
   n = 10;
   n_goals = 2;
@@ -146,8 +150,8 @@ let default_heuristic = {
   pcp = 0;
   reduce_trss = true;
   size_age_ratio = 100;
-  size_bound_equations = 200;
-  size_bound_goals = 30;
+  soft_bound_equations = 200;
+  soft_bound_goals = 30;
   reduce_AC_equations_for_CPs = false;
   full_CPs_with_axioms = false
 }
@@ -158,8 +162,6 @@ let do_proof : proof_format option ref = ref None
 let interactive = ref false
 let generate_order = ref false
 let inst_depth : int ref = ref 2
-let max_eq_size : int ref = ref 2500
-let max_goal_size : int ref = ref 200
 let input_file = ref ""
 let generate_benchmarks = ref false
 let track_equations : literal list ref = ref []

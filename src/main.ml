@@ -50,7 +50,8 @@ let track_proof file =
   Settings.track_equations := es @ gs;
 ;;
 
-let options = Arg.align 
+let options =
+  Arg.align 
   [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
     " use AC-completion");*)
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
@@ -69,7 +70,7 @@ let options = Arg.align
      " enter interactive mode once a complete system was found");
    ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
      " output result and stats in JSON format");
-   ("-K", Arg.Int (fun k -> heuristic := { !heuristic with k = (fun _ -> k) } (*k := n*)),
+   ("-K", Arg.Int (fun k -> heuristic := { !heuristic with k = (fun _ -> k) }),
      "<k> compute k maximal terminating TRSs");
    ("--kb", Arg.Unit do_unordered,
      " Knuth-Bendix completion (unordered)");
@@ -93,18 +94,21 @@ let options = Arg.align
    ("--checksub", Arg.Int (fun n ->
      heuristic := {!heuristic with check_subsumption = n}),
      " perform subsumption checks (1,2)");
-   ("--pcp", Arg.Int (fun n -> heuristic := { !heuristic with pcp = n }),
+   ("--pcp", Arg.Int (fun n -> heuristic := {!heuristic with pcp = n}),
      " only consider prime critical pairs if set to 1 (but then no caching)");
    ("--keep-oriented", Arg.Unit (fun _ ->
-     settings := { !settings with keep_orientation = true}),
+     settings := {!settings with keep_orientation = true}),
      " preserve orientation of input axioms");
-   ("-N", Arg.Int (fun n -> heuristic := { !heuristic with n = n}), 
+   ("--growth-eqs", Arg.Int (fun n -> heuristic := {!heuristic with n = n}),
      "<n> select <n> active equations from CPs of TRS");
+     ("--growth-gls",
+       Arg.Int (fun n -> heuristic := {!heuristic with n_goals = n}),
+       "<n> select <n> active equations from CPs of TRS");
     ("--max-oriented", Arg.Int (fun n ->
-      heuristic := { !heuristic with max_oriented = n }), 
+      heuristic := { !heuristic with max_oriented = n }),
      "<n> every <n> iterations, orient as many equations as possible");
    ("--full-CPs-with-axioms", Arg.Unit (fun _ ->
-     heuristic := { !heuristic with full_CPs_with_axioms = true }),
+     heuristic := {!heuristic with full_CPs_with_axioms = true}),
      " compute CPs with axioms in both directions");
     ("--generate-order", Arg.Unit (fun _ ->
       Settings.generate_order := true;
@@ -123,12 +127,18 @@ let options = Arg.align
    ("--sizeage", Arg.Int (fun n ->
      heuristic := { !heuristic with size_age_ratio = n}), 
      "<r> percentage of size (vs age) decisions");
-   ("--size-bound", Arg.Int (fun n ->
-     heuristic := { !heuristic with size_bound_equations = n}),
-     "<b> upper bound for size of active equations");
-   ("--size-bound-goals", Arg.Int (fun n ->
-     heuristic := { !heuristic with size_bound_goals = n}),
-     "<b> upper bound for size of active goals");
+   ("--soft-bound-eqs", Arg.Int (fun n ->
+     heuristic := { !heuristic with soft_bound_equations = n}),
+     "<b> size bound for active equations");
+   ("--soft-bound-gls", Arg.Int (fun n ->
+     heuristic := { !heuristic with soft_bound_goals = n}),
+     "<b> size bound for active goals");
+   ("--hard-bound-eqs", Arg.Int (fun n ->
+     heuristic := { !heuristic with hard_bound_equations = n}),
+     "<b> hard size bound for equations");
+   ("--hard-bound-gls", Arg.Int (fun n ->
+     heuristic := { !heuristic with hard_bound_goals = n}),
+      "<b> hard size bound for goals");
    ("--term", Arg.Set only_termination,
      " perform termination check");
    ("-T", Arg.Float (fun f -> timeout := Some f),
@@ -291,15 +301,16 @@ let show_proof filename input res prf =
 ;;
 
 let interactive_mode proof =
+  let acs = !settings.ac_syms in
   let rewriter = match proof with
     | Completion rr ->
       Format.printf "Deciding equational theory.\n%!";
-      let rew = new Rewriter.rewriter rr !settings.ac_syms Order.default in
+      let rew = new Rewriter.rewriter !heuristic rr acs Order.default in
       rew#init ();
       rew
     | GroundCompletion (rr,ee,o) ->
-    Format.printf "Deciding ground theory over given signature.\n%!";
-      let rew = new Rewriter.rewriter rr !settings.ac_syms o in
+      Format.printf "Deciding ground theory over given signature.\n%!";
+      let rew = new Rewriter.rewriter !heuristic rr acs o in
       rew#init ();
       rew#add ee;
       rew

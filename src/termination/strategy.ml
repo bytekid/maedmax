@@ -123,6 +123,16 @@ let get_termination = function
   | _ -> failwith "Strategy.get_termination: empty settings list"
 ;;
 
+let strategy_ordered_with r1 r2 r3 r4 r5 = (* 8 12 41 10 50 *)
+  [
+    (ts_kbo, [], [MaxRed], IterationLimit r1, SizeAge 10);
+    (ts_lpo, [], [MaxRed], IterationLimit r2, Size);
+    (ts_kbo, [], [MaxRed], IterationLimit r3, Size);
+    (ts_kbo, [], [Oriented], IterationLimit r4, Size);
+    (ts_lpo, [], [MaxRed], IterationLimit r5, Size);
+    (ts_kbo, [], [MaxRed], IterationLimit 70, Size)
+  ]
+
 (*** TYPES ********************************************************************)
 type t = Settings.termination_strategy
 
