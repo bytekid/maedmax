@@ -1,5 +1,8 @@
 type t = Settings.termination_strategy
 
+val ts_lpo : Settings.t_term
+val ts_kbo : Settings.t_term
+
 val strategy_red : t
 val strategy_maxcomp : t
 val strategy_maxcomp_lpo : t

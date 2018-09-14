@@ -50,6 +50,20 @@ let track_proof file =
   Settings.track_equations := es @ gs;
 ;;
 
+let set_restart_frequency s =
+  let is = [int_of_string i | i <- String.split_on_char ',' s] in
+  let order i = if i mod 2 = 0 then Strategy.ts_kbo else Strategy.ts_lpo in
+  let tuple i = (order i, [], [Oriented], IterationLimit i, Size) in
+  let rec build is strat =
+    match is, strat with
+    | [], _ -> strat
+    | i :: is, [] -> tuple i :: (build is [])
+    | i :: is, (o, cs, ms, _, c) :: strat ->
+      (o, cs, ms, IterationLimit i, c) :: (build is strat)
+  in
+  heuristic := {!heuristic with strategy = build is S.strategy_ordered}
+;;
+
 let options =
   Arg.align 
   [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
@@ -96,6 +110,9 @@ let options =
      " perform subsumption checks (1,2)");
    ("--pcp", Arg.Int (fun n -> heuristic := {!heuristic with pcp = n}),
      " only consider prime critical pairs if set to 1 (but then no caching)");
+   ("--no-auto", Arg.Unit (fun _ ->
+     settings := {!settings with auto = false}),
+     " switch off auto mode");
    ("--keep-oriented", Arg.Unit (fun _ ->
      settings := {!settings with keep_orientation = true}),
      " preserve orientation of input axioms");
@@ -122,6 +139,8 @@ let options =
    ("--reduceAC-CPs", Arg.Unit (fun _ ->
      heuristic := { !heuristic with reduce_AC_equations_for_CPs = true}),
      " do not use ACx equations for CPs");
+   ("--restart-frequency", Arg.String (fun s -> set_restart_frequency s),
+        "<r1,..,rn> number of iterations in between forced restarts");
    ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
       "<s> fixed problem shape");
    ("--sizeage", Arg.Int (fun n ->

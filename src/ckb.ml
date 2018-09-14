@@ -257,13 +257,20 @@ let selections = ref 0
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
+  let ac_eq = Lit.are_ac_equivalent !settings.ac_syms in
+  let rec smallest acc = function
+    [] -> acc, []
+  | n :: ns ->
+    (*if A.little_progress 3 && !A.restarts mod 2 = 1 && List.exists (ac_eq n) acc then smallest acc ns else*) n :: acc, ns
+  in
   let rec select ns acc n =
     (* if ns is empty then there is also no interesting old node*)
     if n <= 0 || ns = [] then L.rev acc
     else (
       selections := !selections + 1;
       if !selections mod 20 < (!heuristic.size_age_ratio / 5) then
-          select (L.tl ns) (L.hd ns :: acc) (n - 1)
+        let acc',ns' = smallest acc ns in
+        select ns' acc' (n - 1)
       else if !selections mod 26 = 0 && all <> [] then
         let b = select_goal_similar all in
         select ns (b::acc) (n - 1)
@@ -400,7 +407,8 @@ let overlaps rr aa =
    if not !settings.unfailing then rr
    else
      let acs, cs = !settings.ac_syms, !settings.only_c_syms in
-     let aa' = NS.ac_equivalence_free acs (Listset.diff aa !acx_rules) in
+     let aa' = (*if List.length aa < 10 then aa else*) Listset.diff aa !acx_rules in
+     let aa' = NS.ac_equivalence_free acs aa' in
      let rr' = NS.ac_equivalence_free !settings.ac_syms rr in
      let aa' = NS.c_equivalence_free cs aa' in
      (*let rr' = NS.c_equivalence_free cs rr' in*)
@@ -847,9 +855,14 @@ let detect_shape es =
         size_age_ratio = 80
       }
     | Carbonio -> { h with
-        n = 5;
-        soft_bound_equations = 50;
-        soft_bound_goals = 50
+        full_CPs_with_axioms = true;
+        hard_bound_equations = 360;
+        hard_bound_goals = 270;
+        size_age_ratio = 60;
+        n = 10;
+        n_goals = 3;
+        soft_bound_equations = 40;
+        soft_bound_goals = 100;
       }
     | Calcio -> { h with n = 6 }
     | Magnesio
