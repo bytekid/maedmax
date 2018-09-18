@@ -61,3 +61,5 @@ val goal_similarity : Settings.t -> Literal.t -> float
 val restart : unit -> unit
 
 val add_state : int -> int -> int -> int -> unit
+
+val last_cp_count : unit -> int

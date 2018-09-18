@@ -148,7 +148,8 @@ let get_oldest_max_from nodelist max maxmax (aa,rew) =
 ;;
 
 let shape_changed es =
-  let shape = A.problem_shape (L.map Lit.terms (NS.to_list es)) in
+  let es = NS.to_list es in
+  let shape = A.problem_shape (L.map Lit.terms es) in
   !settings.auto && shape <> !(A.shape) && shape <> NoShape
 ;;
 
@@ -257,14 +258,16 @@ let selections = ref 0
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
-  (*let similar =
-    let acs, cs = !settings.ac_syms, !settings.only_c_syms in
+  (*let acs, cs = !settings.ac_syms, !settings.only_c_syms in
+  let little_progress = A.little_progress 3 in
+  let similar n n' =
     (Lit.are_ac_equivalent acs n n') || (Lit.are_c_equivalent cs n n')
   in*)
   let rec smallest acc = function
     [] -> acc, []
   | n :: ns ->
-    (*if A.little_progress 3 && !A.restarts mod 2 = 1 && List.exists (ac_eq n) acc then smallest acc ns else*) n :: acc, ns
+    (*if little_progress && List.exists (similar n) acc then smallest acc ns
+    else*) n :: acc, ns
   in
   let rec select ns acc n =
     (* if ns is empty then there is also no interesting old node*)
@@ -326,9 +329,9 @@ let select' ?(only_size = true) aarew k cc thresh =
   let kk = if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2 in
   if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
  in
- (*let aa =
-   if A.very_little_progress () then select_goal_similar size_sorted :: aa else aa
- in*)
+ let aa =
+   if A.little_progress 10 then select_goal_similar size_sorted :: aa else aa
+ in
  let pp = NS.diff_list cc aa in
  if debug 1 then log_select size_sorted aa;
  (aa,pp)
@@ -406,21 +409,21 @@ let cps rew n1 n2 =
 
 (* get overlaps for rules rr and equations aa *)
 let overlaps rr aa =
- let rr, aa =
-   if not !settings.unfailing then rr, []
+ let ns =
+   if not !settings.unfailing then rr
    else
      let acs, cs = !settings.ac_syms, !settings.only_c_syms in
      let aa' = (*if List.length aa < 10 then aa else*) Listset.diff aa !acx_rules in
      let aa' = NS.ac_equivalence_free acs aa' in
      let rr' = NS.ac_equivalence_free !settings.ac_syms rr in
      let aa' = NS.c_equivalence_free cs aa' in
-     (*let rr' = NS.c_equivalence_free cs rr' in*)
-     rr', aa'
+     let rr' = if A.last_cp_count () < 1000 then rr' else NS.c_equivalence_free cs rr' in
+     rr' @ aa'
  in
  (* only proper overlaps with rules*)
- let ovl = new Overlapper.overlapper ([a, false | a <- aa] @ [r, true | r <- rr]) in
+ let ovl = new Overlapper.overlapper ns in
  ovl#init ();
- let cps = NS.of_list [cp | n <- rr @ aa; cp <- ovl#cps n] in
+ let cps = NS.of_list [cp | n <- ns; cp <- ovl#cps n] in
  cps, ovl
 ;;
 
@@ -434,7 +437,8 @@ let overlaps_on rr aa _ gs =
   let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let ns = if goals_ground then aa else rr @ aa in
   let ns' = NS.ac_equivalence_free acs (Listset.diff ns !acx_rules) in
-  let ovl = new Overlapper.overlapper [eq, false | eq <- ns'] in
+  let ns' = NS.c_equivalence_free cs ns' in
+  let ovl = new Overlapper.overlapper [eq | eq <- ns'] in
   ovl#init ();
   let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
@@ -871,7 +875,12 @@ let detect_shape es =
     | Calcio -> { h with n = 6 }
     | Magnesio
     | NoShape -> { h with n = 6 }
-    | Elio -> { h with n = 6; strategy = St.strategy_ordered_lpo }
+    | Elio -> { h with 
+      hard_bound_equations = 30;
+      n = 6;
+      soft_bound_equations = 24;
+      strategy = St.strategy_ordered_lpo
+      }
     | Boro -> { h with
         hard_bound_equations = 20;
         hard_bound_goals = 20;
@@ -903,7 +912,18 @@ let set_iteration_stats aa gs =
        (if gnd then 1 else 0));
   if debug 1 then (
     A.print ();
-    A.show_proof_track !settings all_nodes)
+    A.show_proof_track !settings all_nodes);
+  (* re-evaluate symbols status not every iteration, too expensive *)
+  if i mod 2 = 0 then (
+    let t = Unix.gettimeofday () in
+    let rs = [Lit.terms e | e <- NS.to_list aa] in
+    let cs = Commutativity.symbols rs in
+    let acs = Ac.symbols rs in
+    if debug 1 && (acs <> !settings.ac_syms || cs <> !settings.only_c_syms) then
+      Format.printf "discovered %s symbols\n%!"
+        (if acs <> !settings.ac_syms then "AC" else "C");
+    settings := {!settings with ac_syms = acs; only_c_syms = cs};
+    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t))
 ;;
 
 

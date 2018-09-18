@@ -473,3 +473,5 @@ let restart _ =
   start_time := Unix.gettimeofday ();
   last_time := Unix.gettimeofday ()
 ;;
+
+let last_cp_count _ = match !cp_counts with cps :: _ -> cps | [] -> 0
