@@ -71,3 +71,9 @@ let is_instance_of t1 t2 =
 ;;
 
 let enc t1 t2 = List.exists (fun t -> is_instance_of t t2) (Term.subterms t1)
+
+let is_renaming subst =
+  let dom, ran = [x | x,_ <- subst], [t | _,t <- subst] in
+  (List.for_all is_variable ran) &&
+  (List.length (Listx.unique ran) = List.length dom)
+;;

@@ -140,6 +140,21 @@ let are_ac_equivalent acs l l' =
 
 let cequiv_table : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256
 
+let are_ac_equivalent cs l l' =
+  if cs = [] then false
+  else (
+    try Hashtbl.find equiv_table (l.terms, l'.terms)
+    with Not_found ->
+      let (s,t),(s',t') = l.terms, l'.terms in
+      let eq = Theory.Commutativity.equivalent cs (s,s') &&
+              Theory.Commutativity.equivalent cs (t,t') in
+      Hashtbl.add cequiv_table (l.terms, l'.terms) eq;
+      Hashtbl.add cequiv_table (l'.terms, l.terms) eq;
+      eq)
+;;
+
+let cequiv_table : (Rule.t * Rule.t, bool) Hashtbl.t = Hashtbl.create 256
+
 let are_c_equivalent cs l l' =
   try Hashtbl.find cequiv_table (l.terms, l'.terms)
   with Not_found ->

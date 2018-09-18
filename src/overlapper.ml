@@ -16,14 +16,14 @@ type term_cmp = Term.t -> Term.t -> bool
 exception Not_orientable
 
 (*** FUNCTIONS ****************************************************************)
-class overlapper (trs : Literal.t list) = object (self)
+class overlapper (trs : (Literal.t * bool) list) = object (self)
 
-  val unif_cache : (Term.t, Literal.t list) H.t = H.create 256
+  val unif_cache : (Term.t, (Literal.t * bool) list) H.t = H.create 256
   val mutable index = FingerprintIndex.empty
 
   method init () =
-    let indexed = [ fst (Lit.terms l),l | l <- trs; Lit.not_increasing l ] in
-    index <- FingerprintIndex.create indexed
+    let ixd = [ fst (Lit.terms l), (l, b) | l, b <- trs; Lit.not_increasing l ] in
+    index <- FingerprintIndex.create ixd
   ;;
 
   method trs = trs
@@ -37,7 +37,7 @@ class overlapper (trs : Literal.t list) = object (self)
       us)
   ;;
 
-  (* Computes CPs with given rule. *)
+  (* Computes CPs with given (outer) rule. *)
   method cps rl =
     let l = fst (Lit.terms rl) in
     List.concat [ self#cps_at rl p | p <- T.function_positions l ]
@@ -51,24 +51,26 @@ class overlapper (trs : Literal.t list) = object (self)
       Some ((l1, r1), p, (l2, r2), sigma)
     with Subst.Not_unifiable -> None
 
-
-  method cp_at rli rlo p = (* rli is inner, rlo is outer *)
+  (* rli is inner, rlo is outer *)
+  method cp_at (rli, only_proper) rlo p =
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
     else (
       let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
       match o with
         | None -> None
-        | Some o ->
-          let s,t = O.cp_of_overlap o in
-          let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
-          let is_goal = Lit.is_goal rlo in
-          if s = t && is_equality && not is_goal then None
+        | Some ((_,_,_,sigma) as o) ->
+          if only_proper && Subst.is_renaming sigma then None
           else (
-            let st' = V.normalize_rule (s,t) in
-            if !(Settings.do_proof) <> None then
-              (if is_goal then Trc.add_overlap_goal else Trc.add_overlap) st' o;
-            try Some (Lit.make st' is_equality is_goal)
-            with Lit.Too_large -> None))
+            let s,t = O.cp_of_overlap o in
+            let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
+            let is_goal = Lit.is_goal rlo in
+            if s = t && is_equality && not is_goal then None
+            else (
+              let st' = V.normalize_rule (s,t) in
+              if !(Settings.do_proof) <> None then
+                (if is_goal then Trc.add_overlap_goal else Trc.add_overlap) st' o;
+              try Some (Lit.make st' is_equality is_goal)
+              with Lit.Too_large -> None)))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)

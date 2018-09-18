@@ -109,8 +109,9 @@ if __name__ == "__main__":
         i = i + 1
 
   # run jobsfrom datetime import datetime
-  print("There are {} CPUs on this machine".format(multiprocessing.cpu_count()))
-  print("Doing {} jobs with {} processes".format(i,numprocs))
+  #print("There are {} CPUs on this machine".format(multiprocessing.cpu_count()))
+  #print("Doing {} jobs with {} processes".format(i,numprocs))
+  print(str(numprocs) + " procs")
   pool = multiprocessing.Pool(numprocs)
   total_tasks = i
   results = pool.map_async(work, jobs)
@@ -119,4 +120,4 @@ if __name__ == "__main__":
   accumulate(results.get(), configs)
   for c in configs:
     s = stats[c]
-    print "{}: {} SAT, {} UNSAT, {} timeouts, {} errors".format(c, s['SAT'], s['UNSAT'], s['timeouts'], s['errors'])
+    #print "{}: %d SAT, {} UNSAT, {} timeouts, {} errors".format(c, s['SAT'], s['UNSAT'], s['timeouts'], s['errors'])

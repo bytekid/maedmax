@@ -257,7 +257,10 @@ let selections = ref 0
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
-  let ac_eq = Lit.are_ac_equivalent !settings.ac_syms in
+  (*let similar =
+    let acs, cs = !settings.ac_syms, !settings.only_c_syms in
+    (Lit.are_ac_equivalent acs n n') || (Lit.are_c_equivalent cs n n')
+  in*)
   let rec smallest acc = function
     [] -> acc, []
   | n :: ns ->
@@ -403,8 +406,8 @@ let cps rew n1 n2 =
 
 (* get overlaps for rules rr and equations aa *)
 let overlaps rr aa =
- let ns =
-   if not !settings.unfailing then rr
+ let rr, aa =
+   if not !settings.unfailing then rr, []
    else
      let acs, cs = !settings.ac_syms, !settings.only_c_syms in
      let aa' = (*if List.length aa < 10 then aa else*) Listset.diff aa !acx_rules in
@@ -412,12 +415,13 @@ let overlaps rr aa =
      let rr' = NS.ac_equivalence_free !settings.ac_syms rr in
      let aa' = NS.c_equivalence_free cs aa' in
      (*let rr' = NS.c_equivalence_free cs rr' in*)
-     rr' @ aa'
+     rr', aa'
  in
- let ovl = new Overlapper.overlapper ns in
+ (* only proper overlaps with rules*)
+ let ovl = new Overlapper.overlapper ([a, false | a <- aa] @ [r, true | r <- rr]) in
  ovl#init ();
- let cps2 = NS.of_list [cp | n <- ns; cp <- ovl#cps n] in
- cps2, ovl
+ let cps = NS.of_list [cp | n <- rr @ aa; cp <- ovl#cps n] in
+ cps, ovl
 ;;
 
 let overlaps rr = A.take_time A.t_overlap (overlaps rr)
@@ -430,7 +434,7 @@ let overlaps_on rr aa _ gs =
   let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let ns = if goals_ground then aa else rr @ aa in
   let ns' = NS.ac_equivalence_free acs (Listset.diff ns !acx_rules) in
-  let ovl = new Overlapper.overlapper ns' in
+  let ovl = new Overlapper.overlapper [eq, false | eq <- ns'] in
   ovl#init ();
   let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
