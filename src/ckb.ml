@@ -810,14 +810,6 @@ if A.memory () > 6000 then (
   if debug 1 then F.printf "restart (memory limit of 6GB reached)\n%!";
   true)
 else
-  let to_eqs ns = L.map Lit.terms (NS.to_list ns) in
-  let shp = A.problem_shape (to_eqs es) in
-  if !settings.auto && shp <> !A.shape && shp <> NoShape && shp <> Piombo then (
-    if debug 1 then
-      Format.printf "restart (from %s new shape %s detected)\n%!"
-      (Settings.shape_to_string !(A.shape)) (Settings.shape_to_string shp);
-    false (*true*))
-else
   (* no progress measure *)
   let h = Hashtbl.hash (NS.size es, es, gs) in
   let rep = L.for_all ((=) h) !hash_iteration in
