@@ -310,31 +310,39 @@ let split k ns =
 ;;
 
 (* selection of small new nodes *)
-let select' ?(only_size = true) aarew k cc thresh =
- let k = if k = 0 then select_count !(A.iterations) else k in
- let acs = !settings.ac_syms in
- let small = NS.smaller_than thresh cc in
- let small',_ = L.partition (keep acs) small in
- let size_sorted = NS.sort_size_age small' in
- let aa = 
-   if only_size || !heuristic.size_age_ratio = 100 then
-     fst (Listx.split_at_most k size_sorted)
-   else
-     let size_sorted' = split k size_sorted in
-     Random.self_init();
-     select_size_age aarew size_sorted' (NS.smaller_than 16 cc) k
- in
- let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
- let aa =
-  let kk = if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2 in
-  if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
- in
- let aa =
-   if A.little_progress 10 then select_goal_similar size_sorted :: aa else aa
- in
- let pp = NS.diff_list cc aa in
- if debug 1 then log_select size_sorted aa;
- (aa,pp)
+let select' ?(only_size = true) is_restart aarew k cc thresh =
+  let k = if k = 0 then select_count !(A.iterations) else k in
+  let acs = !settings.ac_syms in
+  let small = NS.smaller_than thresh cc in
+  if not is_restart then (
+    if List.length small > 2000 then
+      heuristic := {!heuristic with soft_bound_equations = thresh - 1}
+    else if List.length small < 20 then 
+      heuristic := {!heuristic with soft_bound_equations = thresh + 1};
+    if debug 1 then
+      Format.printf "smaller than thresh: %d, reset to %d\n%!"
+        (List.length small) (thresh - 1)
+  );
+  let small',_ = L.partition (keep acs) small in
+  let size_sorted = NS.sort_size_age small' in
+  let aa = 
+    if only_size || !heuristic.size_age_ratio = 100 then
+      fst (Listx.split_at_most k size_sorted)
+    else
+      let size_sorted' = split k size_sorted in
+      Random.self_init();
+      select_size_age aarew size_sorted' (NS.smaller_than 16 cc) k
+  in
+  let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
+  let aa =
+    let kk = if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2 in
+    if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
+  in
+  let add_goal_sim = A.little_progress 10 && size_sorted <> [] in
+  let aa = if add_goal_sim then select_goal_similar size_sorted :: aa else aa in
+  let pp = NS.diff_list cc aa in
+  if debug 1 then log_select size_sorted aa;
+  (aa,pp)
 ;;
 
 (* there might be inequalities *)
@@ -357,7 +365,7 @@ let select_for_restart cc =
     else if not (is_big (axs ())) && is_big ccl then (fats ccl) @ ths
     else ths
   in
-  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
+  fst (select' true (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
   ;;
 
   let select_for_restart cc =
@@ -365,11 +373,11 @@ let select_for_restart cc =
     let rew = new Rewriter.rewriter !heuristic [] [] Order.default in
     let ths = Listset.diff (A.theory_equations (NS.to_list cc)) (axs ()) in
     let ths' = if shape_changed cc then ths else [] in
-  fst (select' (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
+  fst (select' true (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
 
 let select rew cc =
   let thresh = !heuristic.soft_bound_equations in
-  A.take_time A.t_select (select' ~only_size:false rew 0 cc) thresh
+  A.take_time A.t_select (select' ~only_size:false false rew 0 cc) thresh
 ;;
 
 let select_goals' grew k gg thresh =
@@ -860,7 +868,7 @@ let detect_shape es =
       }
     | Ossigeno -> { h with
         n = 12;
-        size_age_ratio = 80
+        size_age_ratio = 80;
       }
     | Carbonio -> { h with
         full_CPs_with_axioms = true;
@@ -876,9 +884,9 @@ let detect_shape es =
     | Magnesio
     | NoShape -> { h with n = 6 }
     | Elio -> { h with 
-      hard_bound_equations = 30;
+      hard_bound_equations = 60;
       n = 6;
-      soft_bound_equations = 24;
+      soft_bound_equations = 45;
       strategy = St.strategy_ordered_lpo
       }
     | Boro -> { h with
