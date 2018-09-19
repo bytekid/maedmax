@@ -441,6 +441,7 @@ let overlaps rr = A.take_time A.t_overlap (overlaps rr)
    Use rr only if the goals are not ground (otherwise, goals with rr are
    covered by rewriting). *)
 let overlaps_on rr aa _ gs =
+  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   let goals_ground = List.for_all Rule.is_ground !settings.gs in
   let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let ns = if goals_ground then aa else rr @ aa in
@@ -448,7 +449,6 @@ let overlaps_on rr aa _ gs =
   let ns' = NS.c_equivalence_free cs ns' in
   let ovl = new Overlapper.overlapper [eq | eq <- ns'] in
   ovl#init ();
-  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
   cps2
 ;;
@@ -765,9 +765,9 @@ let max_k ctx cc gs =
         Logic.require (!! (Logic.big_and ctx [ v | _,v <- rr ]));
         max_k ((L.map fst rr, c, order) :: acc) ctx (n-1))
      else (
-       if debug 2 then F.printf "no further TRS found\n%!"; 
-       if (n = k && L.length !heuristic.strategy > 1) then
-         raise (Restart (select_for_restart cc));
+       if (n = k && L.length !heuristic.strategy > 1) then (
+         if debug 2 then F.printf "restart (no further TRS found)\n%!";
+         raise (Restart (select_for_restart cc)));
        acc))
    in
    if has_comp () then
@@ -816,7 +816,7 @@ else
     if debug 1 then
       Format.printf "restart (from %s new shape %s detected)\n%!"
       (Settings.shape_to_string !(A.shape)) (Settings.shape_to_string shp);
-    true)
+    false (*true*))
 else
   (* no progress measure *)
   let h = Hashtbl.hash (NS.size es, es, gs) in
@@ -857,7 +857,11 @@ let detect_shape es =
         n = 10;
         n_goals = 1;
         reduce_AC_equations_for_CPs = true;
-        size_age_ratio = 60
+        hard_bound_equations = 90;
+        hard_bound_goals = 120;
+        size_age_ratio = 60;
+        soft_bound_equations = 70;
+        soft_bound_goals = 100
       }
     | Elio when fs_count > 3 -> { h with n = 10 }
     | Silicio -> { h with
@@ -869,22 +873,31 @@ let detect_shape es =
     | Ossigeno -> { h with
         n = 12;
         size_age_ratio = 80;
+        hard_bound_equations = 45;
+        hard_bound_goals = 45;
+        soft_bound_equations = 30;
+        soft_bound_goals = 30
       }
     | Carbonio -> { h with
         full_CPs_with_axioms = true;
         hard_bound_equations = 360;
         hard_bound_goals = 270;
-        size_age_ratio = 60;
         n = 10;
         n_goals = 3;
+        size_age_ratio = 60;
         soft_bound_equations = 40;
         soft_bound_goals = 100;
       }
     | Calcio -> { h with n = 6 }
-    | Magnesio
+    | Magnesio -> { h with n = 6;
+      hard_bound_equations = 40;
+      hard_bound_goals = 45;
+      soft_bound_equations = 25;
+      soft_bound_goals = 37
+      }
     | NoShape -> { h with n = 6 }
     | Elio -> { h with 
-      hard_bound_equations = 60;
+      hard_bound_equations = 65;
       n = 6;
       soft_bound_equations = 45;
       strategy = St.strategy_ordered_lpo

@@ -305,10 +305,11 @@ let json () =
 
 (* compare current state with respect to other proof *)
 let init_proof_track ls =
-  let es = [ Literal.size l  | l <- ls; not (Literal.is_goal l)] in
-  let gs = [ Literal.size l  | l <- ls; Literal.is_goal l] in
-  Format.printf "max eqsize: %d, max goal size: %d\n%!"
-    (List.fold_left max 0 es) (List.fold_left max 0 gs);
+  if !(Settings.track_equations) <> [] then (
+    let es = [ Literal.size l  | l <- ls; not (Literal.is_goal l)] in
+    let gs = [ Literal.size l  | l <- ls; Literal.is_goal l] in
+    Format.printf "max eqsize: %d, max goal size: %d\n%!"
+      (List.fold_left max 0 es) (List.fold_left max 0 gs));
   track_equations_state := [Literal.normalize l, Unseen | l <- ls]
 ;;
 
