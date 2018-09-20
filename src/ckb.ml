@@ -408,13 +408,15 @@ let overlaps rr aa =
      let aa' = NS.ac_equivalence_free acs aa' in
      let rr' = NS.ac_equivalence_free acs rr in
      let aa' = NS.c_equivalence_free cs aa' in
-     let rr' = if A.last_cp_count () < 1000  then rr' else NS.c_equivalence_free cs rr' in
+     let is_large_state = A.last_cp_count () < 1000 in
+     let rr' = if is_large_state then rr' else NS.c_equivalence_free cs rr' in
      rr' @ aa'
  in
  (* only proper overlaps with rules*)
- let ovl = new Overlapper.overlapper ns in
+ let ovl = new Overlapper.overlapper !heuristic ns in
  ovl#init ();
- let cps = NS.of_list [cp | n <- ns; cp <- ovl#cps n] in
+ let cpl = [cp | n <- ns; cp <- ovl#cps n] in
+ let cps = NS.of_list cpl in
  cps, ovl
 ;;
 
@@ -430,7 +432,7 @@ let overlaps_on rr aa _ gs =
   let ns = if goals_ground then aa else rr @ aa in
   let ns' = NS.ac_equivalence_free acs (Listset.diff ns !acx_rules) in
   let ns' = NS.c_equivalence_free cs ns' in
-  let ovl = new Overlapper.overlapper [eq | eq <- ns'] in
+  let ovl = new Overlapper.overlapper !heuristic [eq | eq <- ns'] in
   ovl#init ();
   let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
   cps2
@@ -827,14 +829,16 @@ let detect_shape es =
         n = 10;
         strategy = St.strategy_ordered_lpo
       }
-    | Zolfo -> { h with n = 10 }
+    | Zolfo -> { h with
+        n = 10;
+        restart_carry = 2
+      }
     | Xeno -> { h with
         n = 10;
         n_goals = 1;
         reduce_AC_equations_for_CPs = true;
         hard_bound_equations = 90;
         hard_bound_goals = 120;
-        restart_carry = 2;
         size_age_ratio = 60;
         soft_bound_equations = 70;
         soft_bound_goals = 100
@@ -912,15 +916,13 @@ let set_iteration_stats aa gs =
     A.show_proof_track !settings all_nodes);
   (* re-evaluate symbols status not every iteration, too expensive *)
   if i mod 2 = 0 then (
-    let t = Unix.gettimeofday () in
     let rs = [Lit.terms e | e <- NS.to_list aa] in
     let cs = Commutativity.symbols rs in
     let acs = Ac.symbols rs in
     if debug 1 && (acs <> !settings.ac_syms || cs <> !settings.only_c_syms) then
       Format.printf "discovered %s symbols\n%!"
         (if acs <> !settings.ac_syms then "AC" else "C");
-    settings := {!settings with ac_syms = acs; only_c_syms = cs};
-    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t))
+    settings := {!settings with ac_syms = acs; only_c_syms = cs})
 ;;
 
 
@@ -957,6 +959,8 @@ let equations_for_overlaps irr all =
     if debug 1 then
       Format.printf "subsumption check (ratio %.2f)\n%!" r;
     subsumption_ratios := r :: !subsumption_ratios;
+    (*if r <= 0.3 then
+      heuristic := {!heuristic with check_subsumption = 2};*)
     NS.to_list (eqs_for_overlaps irr')
 ;;
 
@@ -1012,7 +1016,6 @@ let rec phi ctx aa gs =
     let gcps = NS.filter (fun g -> Lit.size g < g_bound) gos in
     if NS.exists (fun g -> Lit.size g < g_bound) gos then
       incomplete := true;
-      let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs' = NS.diff (NS.add_all gs_big gcps) gs in
@@ -1021,11 +1024,8 @@ let rec phi ctx aa gs =
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
     store_remaining_nodes ctx rest;
     store_remaining_goals ctx grest;
-    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
-    let t = Unix.gettimeofday () in
     let cc = (axs (), cps, cps_large) in
-    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
     match succeeds ctx (rr, irr) rew cc ieqs gs with
        Some r ->
        if !(Settings.generate_benchmarks) then

@@ -1,3 +1,6 @@
+(*** OPENS *******************************************************************)
+open Settings
+
 (*** MODULES *****************************************************************)
 module T = Term
 module L = List
@@ -16,13 +19,14 @@ type term_cmp = Term.t -> Term.t -> bool
 exception Not_orientable
 
 (*** FUNCTIONS ****************************************************************)
-class overlapper (trs : Literal.t list) = object (self)
+class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
 
-  val unif_cache : (Term.t, Literal.t list) H.t = H.create 256
+  val unif_cache : (Term.t, (Literal.t * int) list) H.t = H.create 256
   val mutable index = FingerprintIndex.empty
 
   method init () =
-    let ixd = [ fst (Lit.terms l), l | l <- trs; Lit.not_increasing l ] in
+    let data l = fst (Lit.terms l), (l, Term.size (snd (Lit.terms l))) in
+    let ixd = [ data l | l <- trs; Lit.not_increasing l ] in
     index <- FingerprintIndex.create ixd
   ;;
 
@@ -55,27 +59,41 @@ class overlapper (trs : Literal.t list) = object (self)
   method cp_at rli rlo p =
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
     else (
+      let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
+      let is_goal = Lit.is_goal rlo in
+      let bd = if is_goal then h.hard_bound_goals else h.hard_bound_equations in
+      let tt = Unix.gettimeofday () in
       let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
+      A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. tt);
       match o with
         | None -> None
-        | Some o ->
+        | Some o -> (
+          let tt = Unix.gettimeofday () in
           let s,t = O.cp_of_overlap o in
-          let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
-          let is_goal = Lit.is_goal rlo in
-          if s = t && is_equality && not is_goal then None
+          A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
+          if Rule.size (s, t) > bd then None
+          else if s = t && is_equality && not is_goal then None
           else (
             let st' = V.normalize_rule (s,t) in
             if !(Settings.do_proof) <> None then
               (if is_goal then Trc.add_overlap_goal else Trc.add_overlap) st' o;
-            Some (Lit.make st' is_equality is_goal)))
+            Some (Lit.make st' is_equality is_goal))))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)
   method cps_at rl p =
     let l,r = Lit.terms rl in
-    let rs = self#unifiables (Term.subterm_at p l) in
+    let l' = Term.subterm_at p l in
+    let rs = self#unifiables l' in
+    let is_goal = Lit.is_goal rl in
+    let bd = if is_goal then h.hard_bound_goals else h.hard_bound_equations in
+    let max_size = bd - (Lit.size rl - (Term.size l')) in
     let add os = function None -> os | Some o -> o :: os in
-    List.fold_left add [] [ self#cp_at rl' rl p | rl' <- rs ]
+    let t = Unix.gettimeofday () in
+    let rl_cands = [rl' | rl', s <- rs; s <= max_size] in
+    let res = List.fold_left add [] [ self#cp_at rl' rl p | rl' <- rl_cands ] in
+    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
+    res
   ;;
 end
 

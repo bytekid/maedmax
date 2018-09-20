@@ -1,3 +1,6 @@
+(*** OPENS *******************************************************************)
+open Settings
+
 (*** MODULES *****************************************************************)
 module T = Term
 module L = List
@@ -13,7 +16,7 @@ exception Not_orientable
 exception Max_term_size_exceeded
 
 (*** FUNCTIONS ****************************************************************)
-class rewriter (h:Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
+class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   (ord : Order.t) =
   object (self)
 

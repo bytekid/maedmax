@@ -48,6 +48,8 @@ let is_trivial l = fst l.terms = snd l.terms
 
 let normalize l = { l with terms = Variant.normalize_rule l.terms }
 
+let rename l = { l with terms = Rule.rename l.terms }
+
 let not_increasing l = not (Term.is_subterm (fst l.terms) (snd l.terms))
 
 (* Iff none of the literals is a goal, filter out trivial CPs *)
