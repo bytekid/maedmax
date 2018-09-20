@@ -67,8 +67,7 @@ class overlapper (trs : Literal.t list) = object (self)
             let st' = V.normalize_rule (s,t) in
             if !(Settings.do_proof) <> None then
               (if is_goal then Trc.add_overlap_goal else Trc.add_overlap) st' o;
-            try Some (Lit.make st' is_equality is_goal)
-            with Lit.Too_large -> None))
+            Some (Lit.make st' is_equality is_goal)))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)

@@ -5,8 +5,6 @@ open Settings
 
 type t = Settings.literal
 
-exception Too_large
-
 let sizes : (int, int*int) Hashtbl.t = Hashtbl.create 100
 
 let print_sizes _ = 
@@ -72,6 +70,7 @@ let cps h l l' =
     [make (Variant.normalize_rule o) is_eq is_goal | o <- os']
 ;;
 
+(* FIXME if used, hard bound should be incorporated *)
 let pcps rew l l' =
   let prime ((l,_),_,_,tau) = rew#is_nf_below_root (Term.substitute tau l) in
   assert (not (l.is_goal && l'.is_goal));
@@ -84,18 +83,20 @@ let pcps rew l l' =
     if !(Settings.do_proof) <> None then (
       let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
       let add ((s,t),o) =
-        if s<>t then trace (Variant.normalize_rule (s,t)) o
+        if s <> t then trace (Variant.normalize_rule (s, t)) o
       in List.iter add os);
-    try [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
-    with Too_large -> []
+    [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
 ;;
 
 let rewriter_nf_with ?(max_size=0) l rewriter =
   let ts = l.terms in
   let s', rs = rewriter#nf (fst ts) in
-  if max_size <> 0 && Term.size s' > max_size then
+  let sz_s = Term.size s' in
+  if max_size <> 0 && sz_s > max_size then
     raise Rewriter.Max_term_size_exceeded;
   let t', rt = rewriter#nf (snd ts) in
+  if max_size <> 0 && Term.size t' + sz_s > max_size then
+    raise Rewriter.Max_term_size_exceeded;
   let rls = List.map fst (rs @ rt) in
   if s' = t' && not l.is_goal && l.is_equality then (
     if !(Settings.do_proof) <> None then (
@@ -105,14 +106,12 @@ let rewriter_nf_with ?(max_size=0) l rewriter =
     Some([], rls))
   else if Rule.equal ts (s',t') then None
   else (
-    try
-      let st' = Variant.normalize_rule (s',t') in
-      let g = make st' l.is_equality l.is_goal in
-      if !(Settings.do_proof) <> None then
-        (if l.is_goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
-      (* preserve goal/equality status *)
-      Some ([ g ], rls)
-    with Too_large -> None)
+    let st' = Variant.normalize_rule (s',t') in
+    let g = make st' l.is_equality l.is_goal in
+    if !(Settings.do_proof) <> None then
+      (if l.is_goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
+    (* preserve goal/equality status *)
+    Some ([ g ], rls))
 ;;
   
 let joins l trs =
