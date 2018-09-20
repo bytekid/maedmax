@@ -78,8 +78,8 @@ let age n =
 ;;
 
 let sort_size_age ns =
-  (*let nsx = List.fold_left (fun l n -> (n, Rule.size (Lit.terms n), age n)::l) [] ns in*)
-  let nsx = List.fold_right (fun n l -> (n, Rule.size (Lit.terms n), age n)::l) ns [] in
+  let map_app n l = (n, Rule.size (Lit.terms n), age n) :: l in
+  let nsx = List.fold_right map_app ns [] in
   let cmp (n1,s1,a1) (n2,s2,a2) =
     let d = s1 - s2 in if d <> 0 then d else a1 - a2
   in
@@ -89,7 +89,6 @@ let sort_size_age ns =
 let sort_size_diff ns =
   let diff n = let s,t = Lit.terms n in abs (Term.size s - Term.size t) in
   let nsx = [ n, Rule.size (Lit.terms n), diff n | n <- ns ] in
-  (*let nsx = List.fold_right (fun n l -> (n, Rule.size (Lit.terms n), age n)::l) ns [] in*)
   let cmp (n1,s1,a1) (n2,s2,a2) =
     let d = s1 - s2 in if d <> 0 then d else a1 - a2
   in
@@ -157,18 +156,6 @@ let print ppf ns = print_list ppf (to_list ns)
 let iter f = H.iter (fun n _ -> f n)
 
 let fold f = H.fold (fun n _ -> f n)
-
-let rec add_unless_subsumed n ns =
-  if not (exists (subsumed n) ns) then
-    H.add ns n true
-  else
-    Format.printf "%a is subsumed by %a\n%!" Lit.print n Lit.print (match find (subsumed n) ns with Some x -> x | None -> failwith "boo");
-  ns
-;;
-
-let add_list_unless_subsumed l ns =
-  L.fold_left (fun h n -> add_unless_subsumed n h) ns l
-;;
 
 let ac_equivalence_free acs ns =
   if acs = [] then ns
