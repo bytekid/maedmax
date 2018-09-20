@@ -88,7 +88,7 @@ let has_comp () = L.mem S.Comp (constraints ())
 
 let debug d = !settings.debug >= d
 
-let check_subsumption n = !heuristic.check_subsumption == n
+let check_subsumption n = !heuristic.check_subsumption >= n
 
 let nth_iteration n = !A.iterations mod n == 0
 
@@ -315,13 +315,16 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
   let acs = !settings.ac_syms in
   let small = NS.smaller_than thresh cc in
   if not is_restart then (
-    if List.length small > 2000 then
-      heuristic := {!heuristic with soft_bound_equations = thresh - 1}
+    if List.length small > 1500 then
+      heuristic := {!heuristic with
+        soft_bound_equations = thresh - 1;
+        hard_bound_equations = !heuristic.hard_bound_equations - (if thresh > 20 then 1 else 0)}
     else if List.length small < 20 then 
-      heuristic := {!heuristic with soft_bound_equations = thresh + 1};
+      heuristic := {!heuristic with soft_bound_equations = thresh + 1;
+      hard_bound_equations = !heuristic.hard_bound_equations + 1};
     if debug 1 then
       Format.printf "smaller than thresh: %d, reset to %d\n%!"
-        (List.length small) (thresh - 1)
+        (List.length small) !heuristic.soft_bound_equations
   );
   let small',_ = L.partition (keep acs) small in
   let size_sorted = NS.sort_size_age small' in
@@ -348,28 +351,8 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
 (* there might be inequalities *)
 let axs _ = !settings.axioms
 
-let select_for_restart cc =
-  let big (l,r) = Pervasives.max (Term.size l) (Term.size r) > 65 in
-  let deep (l,r) = Pervasives.max (Term.depth l) (Term.depth r) > 10 in
-  let bigl l = big (Lit.terms l) in
-  let deepl l = deep (Lit.terms l) in
-  let is_big es = L.exists bigl es && L.exists deepl es in
-  let fats es = [L.find bigl es; L.find deepl es] in
-  let k = !(A.restarts) * 2 in
-  let rew = new Rewriter.rewriter !heuristic [] [] Order.default in
-  let ccl = NS.to_list cc in
-  let ths = Listset.diff (A.theory_equations ccl) (axs ()) in
-  let ths' =
-    if not (shape_changed cc) then []
-    (* piombo *)
-    else if not (is_big (axs ())) && is_big ccl then (fats ccl) @ ths
-    else ths
-  in
-  fst (select' true (NS.empty (),rew) k (NS.diff_list cc (axs () @ ths)) 30) @ ths'
-  ;;
-
   let select_for_restart cc =
-    let k = !(A.restarts) * 2 in
+    let k = !A.restarts * !heuristic.restart_carry in
     let rew = new Rewriter.rewriter !heuristic [] [] Order.default in
     let ths = Listset.diff (A.theory_equations (NS.to_list cc)) (axs ()) in
     let ths' = if shape_changed cc then ths else [] in
@@ -423,9 +406,9 @@ let overlaps rr aa =
      let acs, cs = !settings.ac_syms, !settings.only_c_syms in
      let aa' = (*if List.length aa < 10 then aa else*) Listset.diff aa !acx_rules in
      let aa' = NS.ac_equivalence_free acs aa' in
-     let rr' = NS.ac_equivalence_free !settings.ac_syms rr in
+     let rr' = NS.ac_equivalence_free acs rr in
      let aa' = NS.c_equivalence_free cs aa' in
-     let rr' = if A.last_cp_count () < 1000 then rr' else NS.c_equivalence_free cs rr' in
+     let rr' = if A.last_cp_count () < 1000  then rr' else NS.c_equivalence_free cs rr' in
      rr' @ aa'
  in
  (* only proper overlaps with rules*)
@@ -851,6 +834,7 @@ let detect_shape es =
         reduce_AC_equations_for_CPs = true;
         hard_bound_equations = 90;
         hard_bound_goals = 120;
+        restart_carry = 2;
         size_age_ratio = 60;
         soft_bound_equations = 70;
         soft_bound_goals = 100

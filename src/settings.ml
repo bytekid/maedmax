@@ -93,6 +93,7 @@ type heuristic = {
   max_oriented : int;
   pcp : int; (* use critical pair criterion *)
   reduce_trss : bool; (* interreduce TRSs *)
+  restart_carry : int; (* restart_carry * #restarts: equations carried over *)
   size_age_ratio: int;
   soft_bound_equations: int;
   soft_bound_goals: int;
@@ -149,6 +150,7 @@ let default_heuristic = {
   check_subsumption = 1;
   pcp = 0;
   reduce_trss = true;
+  restart_carry = 3;
   size_age_ratio = 100;
   soft_bound_equations = 200;
   soft_bound_goals = 30;
