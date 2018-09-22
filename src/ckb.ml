@@ -42,6 +42,7 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
 
 (* maintain list of created nodes to speed up selection by age *)
 let all_nodes = ref []
+let all_nodes_set = NS.empty ()
 let all_goals = ref []
 
 let acx_rules = ref []
@@ -100,7 +101,7 @@ let pop_strategy _ =
   | _ :: ss -> heuristic := { !heuristic with strategy = ss }
 ;;
 
-let t_strategies _ = L.map (fun (ts,_,_,_,_) -> ts) !heuristic.strategy
+let t_strategies _ = L.map (fun (ts,_,_,_,_) -> ts) !heuristic.strategy 
 
 let normalize = Variant.normalize_rule
 
@@ -110,8 +111,14 @@ let store_remaining_nodes ctx ns =
   if has_comp () then
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   let ns = NS.smaller_than !heuristic.soft_bound_equations ns in
-  let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
-  all_nodes := L.rev_append (L.rev !all_nodes) ns_sized
+  let tt = Unix.gettimeofday () in
+  let ns' = [n | n <- ns; not (NS.mem all_nodes_set n)] in 
+  A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. tt);
+  (*Format.printf "store %d (%d new), in total %d\n%!"
+    (List.length ns) (List.length ns') (NS.size all_nodes_set);*)
+  let ns_sized = [n, Lit.size n | n <- NS.sort_size ns' ] in
+  all_nodes := L.rev_append (L.rev !all_nodes) ns_sized;
+  ignore (NS.add_list ns' all_nodes_set)
 ;;
 
 let store_remaining_goals ctx ns =
@@ -120,7 +127,7 @@ let store_remaining_goals ctx ns =
   all_goals := L.rev_append (L.rev !all_goals) ns_sized
 ;;
 
-let get_oldest_max_from nodelist max maxmax (aa,rew) =
+let get_oldest_max_from nodelist onodeset max maxmax (aa,rew) =
   let rec get_oldest acc max k =
     if k > 5000 then (
       nodelist := List.rev acc @ !nodelist;
@@ -130,6 +137,7 @@ let get_oldest_max_from nodelist max maxmax (aa,rew) =
       | [] -> None
       | ((n, size_n) as na) :: ns -> (
         nodelist := ns;
+        (match onodeset with Some nss -> ignore (NS.remove n nss) | None -> ());
         let s,t = Lit.terms n in
         let nfs =
           try Some (rew#nf s, rew#nf t)
@@ -235,11 +243,11 @@ let select_goal_similar ns =
   n
 ;;
 
-let get_old_nodes_from nodeset maxsize aarew n =
+let get_old_nodes_from nodeset onodeset maxsize aarew n =
   let maxmaxsize = maxsize + 6 in
   let rec get_old_nodes n =
     if n = 0 then []
-    else match get_oldest_max_from nodeset maxsize maxmaxsize aarew with
+    else match get_oldest_max_from nodeset onodeset maxsize maxmaxsize aarew with
     | Some b ->
       if debug 1 then (
         F.printf "extra age selected: %a  (%i) (%i)\n%!"
@@ -250,9 +258,9 @@ let get_old_nodes_from nodeset maxsize aarew n =
   in get_old_nodes n
 ;;
 
-let get_old_nodes = get_old_nodes_from all_nodes
+let get_old_nodes = get_old_nodes_from all_nodes (Some all_nodes_set)
 
-let get_old_goals = get_old_nodes_from all_goals
+let get_old_goals = get_old_nodes_from all_goals None
 
 let selections = ref 0
 
@@ -568,7 +576,7 @@ let rlred ctx cc (s,t) =
       let b = is_rule rl && (red t || red s) in
       Hashtbl.add redc (j, i) b; b)
   in
-  Logic.big_or ctx [ C.find_rule rl | rl <- ccs; redcbl rl ]
+  Logic.big_or ctx [ C.rule_var ctx rl | rl <- ccs; redcbl rl ]
 ;;
 
 let c_red ctx cc = L.iter (fun rl -> Logic.require (rlred ctx cc rl)) cc
@@ -644,6 +652,7 @@ let c_max_red_pre ctx cc =
   L.iter (fun st -> update_rdcbl_constr st cc) cc_newl;
   L.iter (fun st -> update_rdcbl_constr st cc_newl) cc_old
 ;;
+
 let c_max_red_pre ctx = A.take_time A.t_cred (c_max_red_pre ctx)
 
 let c_max_red ctx cc =
@@ -821,6 +830,8 @@ let detect_shape es =
   if debug 1 then
     F.printf "detected shape %s %i\n%!" (Settings.shape_to_string shape) fs_count;
   let h = {!heuristic with hard_bound_equations = 200;hard_bound_goals = 100} in
+  let emax k = L.fold_left max k [ Lit.size l  | l <- !settings.axioms] in
+  let gmax k = L.fold_left max k [ Rule.size l  | l <- !settings.gs] in
   let h' =
     match shape with
     | Piombo -> { h with
@@ -840,23 +851,32 @@ let detect_shape es =
         hard_bound_equations = 90;
         hard_bound_goals = 120;
         size_age_ratio = 60;
-        soft_bound_equations = 70;
-        soft_bound_goals = 100
+        soft_bound_equations = emax 70;
+        soft_bound_goals = gmax 100
       }
-    | Elio when fs_count > 3 -> { h with n = 10 }
+    | Elio when fs_count > 3 -> { h with n = 10;
+        hard_bound_equations = 45;
+        hard_bound_goals = 45;
+        soft_bound_equations = emax 30;
+        soft_bound_goals = gmax 30
+    }
     | Silicio -> { h with
         n = 10;
         n_goals = 1;
         size_age_ratio = 80;
-        strategy = St.strategy_ordered_lpo
+        strategy = St.strategy_ordered_lpo;
+        hard_bound_equations = 45;
+        hard_bound_goals = 45;
+        soft_bound_equations = emax 30;
+        soft_bound_goals = gmax 30
       }
     | Ossigeno -> { h with
         n = 12;
         size_age_ratio = 80;
         hard_bound_equations = 45;
         hard_bound_goals = 45;
-        soft_bound_equations = 30;
-        soft_bound_goals = 30
+        soft_bound_equations = emax 30;
+        soft_bound_goals = gmax 30
       }
     | Carbonio -> { h with
         full_CPs_with_axioms = true;
@@ -865,17 +885,22 @@ let detect_shape es =
         n = 10;
         n_goals = 3;
         size_age_ratio = 60;
-        soft_bound_equations = 40;
-        soft_bound_goals = 100;
+        soft_bound_equations = emax 40;
+        soft_bound_goals = gmax 100;
       }
     | Calcio -> { h with n = 6 }
     | Magnesio -> { h with n = 6;
       hard_bound_equations = 40;
       hard_bound_goals = 45;
-      soft_bound_equations = 25;
-      soft_bound_goals = 37
+      soft_bound_equations = emax 25;
+      soft_bound_goals = gmax 37
       }
-    | NoShape -> { h with n = 6 }
+    | NoShape -> { h with n = 6;
+      hard_bound_equations = 60;
+      hard_bound_goals = 90;
+      soft_bound_equations = emax 40;
+      soft_bound_goals = gmax 70
+      }
     | Elio -> { h with 
       hard_bound_equations = 65;
       n = 6;
@@ -887,7 +912,7 @@ let detect_shape es =
         hard_bound_goals = 20;
         n = 14;
         size_age_ratio = 70;
-        soft_bound_equations = 16;
+        soft_bound_equations = emax 16;
         strategy = St.strategy_ordered_kbo
       }
   in
@@ -959,7 +984,7 @@ let equations_for_overlaps irr all =
     if debug 1 then
       Format.printf "subsumption check (ratio %.2f)\n%!" r;
     subsumption_ratios := r :: !subsumption_ratios;
-    (*if r <= 0.3 then
+    (*if r <= 0.3 then (* might be useful for GRP505 - GRP508 *)
       heuristic := {!heuristic with check_subsumption = 2};*)
     NS.to_list (eqs_for_overlaps irr')
 ;;
@@ -1016,6 +1041,7 @@ let rec phi ctx aa gs =
     let gcps = NS.filter (fun g -> Lit.size g < g_bound) gos in
     if NS.exists (fun g -> Lit.size g < g_bound) gos then
       incomplete := true;
+    let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs' = NS.diff (NS.add_all gs_big gcps) gs in
@@ -1114,6 +1140,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     let es0 = L.sort Pervasives.compare es' in
     let gs0 = L.map Lit.normalize gs in
     all_nodes := [ e, Lit.size e | e <- es0 ];
+    Hashtbl.clear all_nodes_set;
+    NS.add_list es0 all_nodes_set;
     init_settings flags es0 [ Lit.terms g | g <- gs0 ];
     remember_state es gs;
     try

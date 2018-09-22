@@ -34,6 +34,8 @@ val variable_condition : t -> bool
 
 val rename : t -> t
 
+val rename_canonical : ?from:int -> t -> t
+
 val flip : t -> t
 
 val variant : t -> t -> bool

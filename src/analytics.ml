@@ -364,7 +364,9 @@ let show_proof_track settings all_nodes =
     let ststr l = function
       | Unseen -> "unseen"
       | Active i -> "active"
-      | Passive i -> "passive (" ^ (pos l) ^ ")"
+      | Passive i ->
+        let size = string_of_int (Literal.size l) in
+        "passive (" ^ (pos l) ^ ") (" ^ size ^ ")"
     in
     printf "Proof track:\n";
     let show (l,s) =

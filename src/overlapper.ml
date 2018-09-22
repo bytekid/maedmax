@@ -19,6 +19,18 @@ type term_cmp = Term.t -> Term.t -> bool
 exception Not_orientable
 
 (*** FUNCTIONS ****************************************************************)
+
+let mgu_table : (Rule.t, Subst.t option) Hashtbl.t = Hashtbl.create 256
+
+let mgu s t =
+  try Hashtbl.find mgu_table (s,t)
+  with Not_found -> (
+    let sigma = try Some (Subst.mgu s t) with _ -> None in
+    Hashtbl.add mgu_table (s,t) sigma;
+    sigma
+  )
+;;
+
 class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
 
   val unif_cache : (Term.t, (Literal.t * int) list) H.t = H.create 256
@@ -49,11 +61,10 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
   
   (* as in Overlap module, but without variant optimization *)
   method overlap_between_at rule1 rule2 p =
-    let l1,r1 = rule1 and l2, r2 = Rule.rename rule2 in
-    try
-      let sigma = Subst.mgu (Term.subterm_at p l2) l1 in
-      Some ((l1, r1), p, (l2, r2), sigma)
-    with Subst.Not_unifiable -> None
+    let l1,r1 = rule1 and l2, r2 = Rule.rename_canonical rule2 in
+    match mgu (Term.subterm_at p l2) l1 with
+      | Some sigma -> Some ((l1, r1), p, (l2, r2), sigma)
+      | None -> None
 
   (* rli is inner, rlo is outer *)
   method cp_at rli rlo p =
@@ -62,9 +73,7 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
       let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
       let is_goal = Lit.is_goal rlo in
       let bd = if is_goal then h.hard_bound_goals else h.hard_bound_equations in
-      let tt = Unix.gettimeofday () in
       let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
-      A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. tt);
       match o with
         | None -> None
         | Some o -> (
