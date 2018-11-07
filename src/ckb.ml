@@ -1141,7 +1141,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     let gs0 = L.map Lit.normalize gs in
     all_nodes := [ e, Lit.size e | e <- es0 ];
     Hashtbl.clear all_nodes_set;
-    NS.add_list es0 all_nodes_set;
+    ignore (NS.add_list es0 all_nodes_set);
     init_settings flags es0 [ Lit.terms g | g <- gs0 ];
     remember_state es gs;
     try

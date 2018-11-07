@@ -79,7 +79,8 @@ type t = {
   tmp : int; (* various purpose parameter *)
   output_tproof : bool;
   extended_signature: bool;
-  keep_orientation: bool
+  keep_orientation: bool;
+  trace_selection: bool
 }
 
 type heuristic = {
@@ -136,6 +137,7 @@ let default = {
   output_tproof = false;
   extended_signature = false;
   keep_orientation = false;
+  trace_selection = false
 }
 
 (* default settings *)

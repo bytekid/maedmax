@@ -163,12 +163,15 @@ let options =
    ("-T", Arg.Float (fun f -> timeout := Some f),
      "<t> timeout");
    ("--track", Arg.String (fun s -> track_file := Some s),
-     " <track file> keep track of equations in proof file");
+     "<track_file> keep track of equations in proof file");
+   ("--trace-selection", Arg.Unit (fun _ ->
+     settings := { !settings with trace_selection = true}),
+     " output selection track");
    ("--tmp", Arg.Int (fun s -> Settings.tmp := s),
     "<n> various purposes");
    ("--xsig",  Arg.Unit (fun _ ->
      settings := { !settings with extended_signature = true}),
-     " consider signature plus infinitely many constants (ordered completion)")
+     "consider signature plus infinitely many constants (ordered completion)")
  ]
 
 (*** FUNCTIONS ***************************************************************)
