@@ -7,7 +7,7 @@ module R = Rule
 
 type t = (Literal.t, bool) Hashtbl.t
 
-let empty () = H.create 128
+let empty () : t = H.create 128
 
 let is_empty ns = H.length ns = 0
 
