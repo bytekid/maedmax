@@ -64,7 +64,7 @@ type shape =
 
 type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
 
-type proof_format = CPF | TPTP
+type proof_format = CPF | TPTP | SelectionTrace
 
 type t = {
   auto : bool; (* automatic mode *)
@@ -79,8 +79,7 @@ type t = {
   tmp : int; (* various purpose parameter *)
   output_tproof : bool;
   extended_signature: bool;
-  keep_orientation: bool;
-  trace_selection: bool
+  keep_orientation: bool
 }
 
 type heuristic = {
@@ -136,8 +135,7 @@ let default = {
   tmp = 0;
   output_tproof = false;
   extended_signature = false;
-  keep_orientation = false;
-  trace_selection = false
+  keep_orientation = false
 }
 
 (* default settings *)

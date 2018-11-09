@@ -77,6 +77,8 @@ let age n =
     a
 ;;
 
+let max_age _ = Hashtbl.length age_table
+
 let sort_size_age ns =
   let map_app n l = (n, Rule.size (Lit.terms n), age n) :: l in
   let nsx = List.fold_right map_app ns [] in

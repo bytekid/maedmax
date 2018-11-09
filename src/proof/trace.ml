@@ -433,6 +433,12 @@ let subst_append (s, sconv) (t, tconv) =
   subst_conversion sigma  (s, sconv @ tconv)
 ;;
 
+let goal_conv (s, t) (rs, rt) =
+  let t', rtconv = rev (t,rewrite_conv' t rt) in
+  let pg_conv = subst_append (s, rewrite_conv' s rs) (t', rtconv) in
+  equation_of pg_conv, pg_conv
+;;
+
 (* (s,t) is the goal that was proven, (rs,rt) the rules used to rewrite it to
    the common normal form, g_orig is the normalized original goal *)
 let goal_proof g_orig (s, t) (rs, rt) sigma =
@@ -440,11 +446,7 @@ let goal_proof g_orig (s, t) (rs, rt) sigma =
     F.printf "\n0. ORIGINAL GOAL %a\n%!" R.print g_orig;
     F.printf "\n1. PROVEN GOAL %a\n%!" R.print (s, t);
     if sigma <> Sub.empty then F.printf "(substituted)\n%!");
-  let goal_conv =
-    let t', rtconv = rev (t,rewrite_conv' t rt) in
-    let pg_conv = subst_append (s, rewrite_conv' s rs) (t', rtconv) in
-    equation_of pg_conv, pg_conv
-  in
+  let goal_conv = goal_conv (s, t) (rs, rt) in
   if S.do_proof_debug () then
     (F.printf "2. THE GOAL CONVERSION:\n%!"; print (snd goal_conv));
   (* in case (s,t) is not the original goal we need to trace it back.

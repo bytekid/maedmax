@@ -165,7 +165,7 @@ let options =
    ("--track", Arg.String (fun s -> track_file := Some s),
      "<track_file> keep track of equations in proof file");
    ("--trace-selection", Arg.Unit (fun _ ->
-     settings := { !settings with trace_selection = true}),
+     Settings.do_proof := Some SelectionTrace),
      " output selection track");
    ("--tmp", Arg.Int (fun s -> Settings.tmp := s),
     "<n> various purposes");
@@ -211,7 +211,7 @@ let json_settings settings s =
  `Assoc [s; n; sa]
 ;;
 
-let print_json (es, gs) f (a,p) settings proof =
+let print_json (es, gs) f (a,p) settings =
   let res_str = match p with
     | Completion rr -> trs_string rr
     | GroundCompletion (rr,ee,_)
@@ -227,8 +227,7 @@ let print_json (es, gs) f (a,p) settings proof =
     "trs", `String res_str;
     "statistics", Analytics.json ();
     "settings", json_settings settings (Strategy.to_string strat);
-    "characteristics", Analytics.analyze es gs;
-    "proof", `String (match proof with Some s -> s | _ -> "")
+    "characteristics", Analytics.analyze es gs
   ] in
   F.printf "%s\n%!" (pretty_to_string t)
 ;;
@@ -286,7 +285,7 @@ let clean es0 =
     | Proof p -> Proof p
 ;;
 
-let cpf_proof_string readable (es,gs) =
+let cpf_proof_string ?(readable = false) (es, gs) =
   let result_string p =
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ^ 
       "<?xml-stylesheet type=\"text/xsl\" href=\"cpfHTML.xsl\"?>\n" ^
@@ -312,14 +311,26 @@ let cpf_proof_string readable (es,gs) =
   | _ -> failwith "Main.show_proof: not yet supported for inequality axioms"
 ;;
 
-
-let proof_string filename ?(readable=true) input prf = function
-    | CPF -> cpf_proof_string readable input prf
-    | TPTP -> Tptp.proof_string filename input prf
+let selection_trace (es, gs) = function
+    Proof ((s, t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
+      let goal = Literal.terms (List.hd gs) in
+      let es = List.map Literal.terms es in
+      SelectionTrace.for_goal_proof es goal ((s, t), (rs, rt), sigma)
+  | Completion rr ->
+      let es = List.map Literal.terms es in
+      SelectionTrace.for_ground_completion es (rr, [])
+  | GroundCompletion (rr, ee, o) ->
+      let es = List.map Literal.terms es in
+      SelectionTrace.for_ground_completion es (rr, ee)
+  | Disproof (rr, ee, _, rst) ->
+      SelectionTrace.for_goal_disproof (rr, ee) rst
+  | _ -> failwith "Main.selection_trace: not yet supported"
 ;;
 
-let show_proof filename input res prf =
-  let p = proof_string filename input res prf in Format.printf "%s\n" p
+let show_proof filename input res = function
+  | CPF -> Format.printf "%s\n" (cpf_proof_string input res)
+  | TPTP -> Format.printf "%s\n" (Tptp.proof_string filename input res)
+  | SelectionTrace -> selection_trace input res
 ;;
 
 let interactive_mode proof =
@@ -393,14 +404,9 @@ let run file ((es, gs) as input) =
   let secs = Timer.length ~res:Timer.Seconds timer in
   if !(Settings.interactive) then
     interactive_mode proof
-  else if !settings.json then (
-    let proofstr =
-      match !(Settings.do_proof) with
-      | Some ft -> Some (proof_string file ~readable:false input proof ft)
-      | None -> None
-    in
-    print_json (es,gs) secs (ans,clean es proof) settings proofstr
-  ) else (
+  else if !settings.json then
+    print_json (es,gs) secs (ans,clean es proof) settings
+  else (
     match !(Settings.do_proof) with
     | Some fmt when not !Settings.benchmark -> show_proof file input proof fmt
     | None -> (

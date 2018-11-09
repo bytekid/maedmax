@@ -353,6 +353,8 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
   let aa = if add_goal_sim then select_goal_similar size_sorted :: aa else aa in
   let pp = NS.diff_list cc aa in
   if debug 1 then log_select size_sorted aa;
+  if !(S.do_proof) = Some SelectionTrace then
+    SelectionTrace.log aa (NS.to_list cc);
   (aa,pp)
 ;;
 
@@ -371,18 +373,20 @@ let select rew cc =
   A.take_time A.t_select (select' ~only_size:false false rew 0 cc) thresh
 ;;
 
-let select_goals' grew k gg thresh =
+let select_goals' grew aa k gg thresh =
  let acs = !settings.ac_syms in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let gg_a = fst (Listx.split_at_most k sorted) in
  let gg_p = NS.diff_list gg gg_a in 
  if debug 1 then log_select (NS.to_list gg) gg_a;
+ if !(S.do_proof) = Some SelectionTrace then
+   SelectionTrace.log gg_a (NS.to_list aa);
  (gg_a, gg_p)
 ;;
 
-let select_goals grew k cc =
-  A.take_time A.t_select (select_goals' grew k cc) !heuristic.soft_bound_goals
+let select_goals gr aa k cc =
+  A.take_time A.t_select (select_goals' gr aa k cc) !heuristic.soft_bound_goals
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -1045,7 +1049,7 @@ let rec phi ctx aa gs =
     let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs' = NS.diff (NS.add_all gs_big gcps) gs in
-    let gg, grest = select_goals (gs,rew) !heuristic.n_goals gs' in
+    let gg, grest = select_goals (gs,rew) aa !heuristic.n_goals gs' in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
     store_remaining_nodes ctx rest;
