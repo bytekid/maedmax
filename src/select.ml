@@ -109,7 +109,8 @@ let get_old_nodes_from nodeset onodeset maxsize aarew n =
 
 let get_old_nodes = get_old_nodes_from all_nodes (Some all_nodes_set)
 
-let get_old_goals : int -> (NS.t * Rewriter.rewriter) -> int -> Literal.t list = (get_old_nodes_from all_goals None)
+let get_old_goals : int -> (NS.t * Rewriter.rewriter) -> int -> Literal.t list
+  = (get_old_nodes_from all_goals None)
 
 let selections = ref 0
 
@@ -166,24 +167,29 @@ let split k ns =
   fst (Listx.split_at_most k (NS.sort_size_age about_k))
 ;;
 
+let adjust_bounds thresh small_count =
+  if small_count > 1500 then
+    let delta = if thresh > 20 then 1 else 0 in
+    heuristic := {!heuristic with
+      soft_bound_equations = thresh - 1;
+      hard_bound_equations = !heuristic.hard_bound_equations - delta}
+  else if small_count < 20 then 
+    heuristic := {!heuristic with soft_bound_equations = thresh + 1;
+    hard_bound_equations = !heuristic.hard_bound_equations + 1};
+  if debug 1 then
+    Format.printf "smaller than thresh: %d, reset to %d\n%!"
+      small_count !heuristic.soft_bound_equations
+;;
+
+
 (* selection of small new nodes *)
 let select' ?(only_size = true) is_restart aarew k cc thresh =
   let k = if k = 0 then select_count !(A.iterations) else k in
   let acs = !settings.ac_syms in
   let small = NS.smaller_than thresh cc in
-  if not is_restart then (
-    if List.length small > 1500 then
-      heuristic := {!heuristic with
-        soft_bound_equations = thresh - 1;
-        hard_bound_equations = !heuristic.hard_bound_equations - (if thresh > 20 then 1 else 0)}
-    else if List.length small < 20 then 
-      heuristic := {!heuristic with soft_bound_equations = thresh + 1;
-      hard_bound_equations = !heuristic.hard_bound_equations + 1};
-    if debug 1 then
-      Format.printf "smaller than thresh: %d, reset to %d\n%!"
-        (List.length small) !heuristic.soft_bound_equations
-  );
-  let small',_ = L.partition (keep acs) small in
+  if not is_restart then
+    adjust_bounds (List.length small) thresh;
+  let small', _ = L.partition (keep acs) small in
   let size_sorted = NS.sort_size_age small' in
   let aa = 
     if only_size || !heuristic.size_age_ratio = 100 then
@@ -216,7 +222,7 @@ let select_for_restart cc =
 fst (select' true (NS.empty (),rew) k (NS.diff_list cc (axs @ ths)) 30) @ ths'
 ;;
 
-let select_goals' grew aa k gg thresh =
+let select_goals' (aa, _) k gg thresh =
  let acs = !settings.ac_syms in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
@@ -229,7 +235,7 @@ let select_goals' grew aa k gg thresh =
 ;;
 
 
-(* * NAIVE BAYES PROBABILITY ESTIMATION  * * * * * ** * * * * * * * * * * * * *)
+(* * SELECTION BY CLASSIFICATION * * * * * * * * * ** * * * * * * * * * * * * *)
 let count_subterms_where pred cc n =
   let tt = Unix.gettimeofday () in
   let s, t = Literal.terms n in
@@ -294,8 +300,6 @@ let node_features n cc inst_count =
    (*List.iter (fun f -> Format.printf "%.2f " f) fs; Format.printf "-\n%!";*)
   fs
 ;;
-
-
 
 let svc_predict fs =
   (*let cs = [
@@ -368,35 +372,41 @@ let select_random k cc thresh =
   let small = NS.smaller_than thresh cc in
   let small', _ = L.partition (keep !settings.ac_syms) small in
   let aa = take k small' in
-  (*log_select size_sorted aa;*)
+  if debug 1 then log_select [] aa;
   aa, NS.diff_list cc aa
 ;;
 
-
-let select rew cc =
-  let thresh = !heuristic.soft_bound_equations in
-  A.take_time A.t_select (select' ~only_size:false false rew 0 cc) thresh
+let select_by_age select_goals aarew k cc thresh =
+  let k = if k = 0 then select_count !(A.iterations) else k in
+  let small = NS.smaller_than thresh cc in
+  adjust_bounds thresh (List.length small);
+  let size_sorted = split k (NS.sort_size_age small) in
+  Random.self_init();
+  let min = try Lit.size (List.hd size_sorted) + 10 with _ -> 20 in
+  let max = if !A.equalities > 100 then min else 200 in
+  let get = if select_goals then get_old_goals else get_old_nodes in
+  let aa = get max aarew k in
+  if debug 1 then log_select size_sorted aa;
+  aa, NS.diff_list cc aa
 ;;
 
-let select_goals gr aa k cc =
-  A.take_time A.t_select (select_goals' gr aa k cc) !heuristic.soft_bound_goals
-;;
-
-(* selection by size + classification*)
+(* selection by size/age/classification*)
 let select rew cc =
   let select = match !settings.selection with
-    | S.SizeAgeSelect -> select' ~only_size:false false rew 0 cc
+    | S.MixedSelect -> select' ~only_size:false false rew 0 cc
     | S.ClassifiedSelect -> select_classified (fst rew) 0 cc
     | S.RandomSelect -> select_random 0 cc
+    | S.AgeSelect -> select_by_age false rew 0 cc
   in
   A.take_time A.t_select select !heuristic.soft_bound_equations
 ;;
 
-let select_goals gr aa k cc =
+let select_goals aarew k cc =
   let select = match !settings.selection with
-    | S.SizeAgeSelect -> select_goals' gr aa k cc
-    | S.ClassifiedSelect -> select_classified aa k cc
+    | S.MixedSelect -> select_goals' aarew k cc
+    | S.ClassifiedSelect -> select_classified (fst aarew) k cc
     | S.RandomSelect -> select_random k cc
+    | S.AgeSelect -> select_by_age true aarew k cc
   in
   A.take_time A.t_select select !heuristic.soft_bound_goals
 ;;

@@ -66,7 +66,7 @@ type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
 
 type proof_format = CPF | TPTP | SelectionTrace
 
-type selection_mode = SizeAgeSelect | ClassifiedSelect | RandomSelect
+type selection_mode = MixedSelect | AgeSelect | ClassifiedSelect | RandomSelect
 
 type t = {
   auto : bool; (* automatic mode *)
@@ -139,7 +139,7 @@ let default = {
   output_tproof = false;
   extended_signature = false;
   keep_orientation = false;
-  selection = SizeAgeSelect
+  selection = MixedSelect
 }
 
 (* default settings *)

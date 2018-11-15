@@ -838,7 +838,7 @@ let rec phi ctx aa gs =
     let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs' = NS.diff (NS.add_all gs_big gcps) gs in
-    let gg, grest = Select.select_goals (gs,rew) aa !heuristic.n_goals gs' in
+    let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
     store_remaining_nodes ctx rest;

@@ -145,13 +145,14 @@ let options =
       "<s> fixed problem shape");
   ("--selection-mode", Arg.String (fun s ->
     let sm = 
-      if s = "size-age" then SizeAgeSelect
+      if s = "mixed" then MixedSelect
       else if s = "classified" then ClassifiedSelect
       else if s = "random" then RandomSelect
+      else if s = "age" then AgeSelect
       else failwith "unsupported option for selection mode"
     in
     settings := { !settings with selection = sm }),
-    "<mode> size-age, classified, or random");
+    "<mode> random, age, classified, or mixed (default)");
    ("--sizeage", Arg.Int (fun n ->
      heuristic := { !heuristic with size_age_ratio = n}), 
      "<r> percentage of size (vs age) decisions");
