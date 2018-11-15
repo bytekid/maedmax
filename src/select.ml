@@ -6,10 +6,13 @@ module S = Settings
 module Lit = Literal
 module NS = Nodes
 module Ac = Theory.Ac
+module T = Term
+module FI = FingerprintIndex
 
 (*** OPENS *******************************************************************)
 open Prelude
 open Settings
+open SelectionTrace
 
 (*** GLOBALS *****************************************************************)
 let settings = ref Settings.default
@@ -213,11 +216,6 @@ let select_for_restart cc =
 fst (select' true (NS.empty (),rew) k (NS.diff_list cc (axs @ ths)) 30) @ ths'
 ;;
 
-let select rew cc =
-  let thresh = !heuristic.soft_bound_equations in
-  A.take_time A.t_select (select' ~only_size:false false rew 0 cc) thresh
-;;
-
 let select_goals' grew aa k gg thresh =
  let acs = !settings.ac_syms in
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
@@ -230,6 +228,177 @@ let select_goals' grew aa k gg thresh =
  (gg_a, gg_p)
 ;;
 
+
+(* * NAIVE BAYES PROBABILITY ESTIMATION  * * * * * ** * * * * * * * * * * * * *)
+let count_subterms_where pred cc n =
+  let tt = Unix.gettimeofday () in
+  let s, t = Literal.terms n in
+  let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
+  let matched_by (s',t') =
+    let matching u =
+      (is_rule (s,t) && pred u s) || (is_rule (t,s) && pred u t)
+    in
+    List.exists matching (T.subterms s' @ (T.subterms t'))
+  in
+  let r = List.length (List.filter matched_by cc) in
+  A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. tt);
+  r
+;;
+
+let matchings = count_subterms_where Subst.is_instance_of
+
+let unifiables = count_subterms_where Subst.unifiable
+
+let count_instances_in cc =
+  let cc = [Lit.terms n | n <- cc] in
+  let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
+  let subts r = [ u, (u, r) | u <- T.subterms (fst r); not (T.is_variable u)] in
+  let ts = List.concat [subts (l,r) @ subts (r,l) | l,r <- cc] in
+  let idx = FingerprintIndex.create ts in
+  let insts u = [ v,rl | v,rl <- FI.get_instances u idx; Subst.is_instance_of v u] in
+  let inst_count n =
+    let s,t = Literal.terms n in
+    let insts (l, r) = if is_rule (l,r) then L.length (insts l) else 0 in 
+    insts (s,t) + insts (t,s)
+  in
+  let norm i = (float_of_int i) /. (float_of_int (List.length cc + 1)) in 
+  (fun n -> norm (inst_count n))
+;;
+
+let node_features n cc inst_count =
+  let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_subterm l r) in
+  let s, t = Literal.terms n in
+  let a  = Nodes.age n in
+  let max_age = float_of_int (Nodes.max_age ()) in
+  let age = (max_age -. float_of_int a) /. max_age in 
+  {
+    is_goal = Literal.is_goal n;
+    size = Rule.size (s, t);
+    size_diff = abs (Term.size s - Term.size t);
+    linear = Rule.linear (s, t);
+    age = age;
+    orientable = (is_rule (s, t), is_rule (t, s));
+    duplicating = (Rule.is_duplicating (s, t), Rule.is_duplicating (t, s));
+    matchings = inst_count n;
+    cps = 0. (*norm (unifiables cc n)*)
+  }
+;;
+
+let node_features n cc inst_count =
+  let fs = node_features n cc inst_count in
+  let fb b = if b then 1. else 0. in
+  let f = float_of_int in
+  let fs = [fb fs.is_goal; f fs.size; f fs.size_diff; fb fs.linear; fs.age;
+   fb (fst fs.orientable); fb (snd fs.orientable);
+   fb (fst fs.duplicating); fb (snd fs.duplicating); fs.matchings(*;fs.cps*)] in
+   (*List.iter (fun f -> Format.printf "%.2f " f) fs; Format.printf "-\n%!";*)
+  fs
+;;
+
+
+
+let svc_predict fs =
+  (*let cs = [
+    -1.03892064; -1.25077127e-02; 1.14185105e-02; -3.24667191e-01;
+    -2.44949523e-01; -5.93731421e-01;  -5.46609473e-01;  -4.10947563e-01;
+    -4.81426762e-01; 1.30578948; 7.92451989e-03;  -1.09787315e-02;
+    1.52099283e-04; 6.85348305e-02
+  ]
+  in
+  let intercept = 2.12155573 in*)
+  let cs =[ -1.06793059; -1.01833444e-02; 9.15323182e-03; -2.76104995e-01;
+  -2.00477817e-01; -6.25611314e-01; -4.54663792e-01; -4.23847899e-01;
+  -3.98430179e-01; 1.39753975; -1.13906581e-02;   1.17095294e-04;
+   7.69841867e-02]
+   in
+  let intercept = 1.98866295 in
+  let v = List.fold_left2 (fun s c f -> s +. c *. f) intercept cs fs in
+  v > 0.0
+;;
+
+let ptable : (Settings.literal, bool) Hashtbl.t = Hashtbl.create 256
+
+let predict n fs =
+  try Hashtbl.find ptable n with 
+  Not_found -> (
+    (*Format.printf "%.8f \n%!" (classify fs);*)
+    let v = svc_predict fs in
+    Hashtbl.add ptable n v;
+    v)
+;;
+
+let predict_select aa ns =
+  let fs = SelectionTrace.state_features () in
+  let sfs = L.map float_of_int [fs.equations; fs.goals; fs.iterations] in
+  let aa = NS.to_list aa in
+  let inst_count = count_instances_in aa in
+  let featured = [ n, node_features n aa inst_count @ sfs | n <- ns ] in
+  [ n, predict n fs | n, fs <- featured ]
+;;
+
+let select_classified aa k cc thresh =
+  (*Format.printf "start select\n%!";*)
+  let k = if k = 0 then select_count !(A.iterations) else k in
+  let small = NS.smaller_than thresh cc in
+  let small', _ = L.partition (keep !settings.ac_syms) small in
+  let size_sorted = NS.sort_size_age small' in
+  let size_sorted_pred = predict_select aa size_sorted in
+  let aa = Listx.take_at_most k [ e | e, p <- size_sorted_pred; p] in
+  (*log_select size_sorted aa;*)
+  aa, NS.diff_list cc aa
+;;
+
+let select_random k cc thresh =
+  Random.self_init ();
+  let rec remove_nth i = function
+    | [] -> failwith "Select.select_random: empty list"
+    | x :: xs ->
+      if i = 0 then x, xs
+      else
+        let y, ys = remove_nth (i - 1) xs in
+        y, x :: ys
+  in
+  let rec take m xs =
+    if m = 0 || xs = [] then []
+    else
+    let y, ys = remove_nth (Random.int (List.length xs)) xs in
+    y :: (take (m - 1) ys)
+  in
+  let k = if k = 0 then select_count !(A.iterations) else k in
+  let small = NS.smaller_than thresh cc in
+  let small', _ = L.partition (keep !settings.ac_syms) small in
+  let aa = take k small' in
+  (*log_select size_sorted aa;*)
+  aa, NS.diff_list cc aa
+;;
+
+
+let select rew cc =
+  let thresh = !heuristic.soft_bound_equations in
+  A.take_time A.t_select (select' ~only_size:false false rew 0 cc) thresh
+;;
+
 let select_goals gr aa k cc =
   A.take_time A.t_select (select_goals' gr aa k cc) !heuristic.soft_bound_goals
 ;;
+
+(* selection by size + classification*)
+let select rew cc =
+  let select = match !settings.selection with
+    | S.SizeAgeSelect -> select' ~only_size:false false rew 0 cc
+    | S.ClassifiedSelect -> select_classified (fst rew) 0 cc
+    | S.RandomSelect -> select_random 0 cc
+  in
+  A.take_time A.t_select select !heuristic.soft_bound_equations
+;;
+
+let select_goals gr aa k cc =
+  let select = match !settings.selection with
+    | S.SizeAgeSelect -> select_goals' gr aa k cc
+    | S.ClassifiedSelect -> select_classified aa k cc
+    | S.RandomSelect -> select_random k cc
+  in
+  A.take_time A.t_select select !heuristic.soft_bound_goals
+;;
+
+

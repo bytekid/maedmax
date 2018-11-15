@@ -109,9 +109,7 @@ let store_remaining_nodes ctx ns =
   if has_comp () then
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   let ns = NS.smaller_than !heuristic.soft_bound_equations ns in
-  let tt = Unix.gettimeofday () in
-  let ns' = [n | n <- ns; not (NS.mem Select.all_nodes_set n)] in 
-  A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. tt);
+  let ns' = [n | n <- ns; not (NS.mem Select.all_nodes_set n)] in
   (*Format.printf "store %d (%d new), in total %d\n%!"
     (List.length ns) (List.length ns') (NS.size all_nodes_set);*)
   let ns_sized = [n, Lit.size n | n <- NS.sort_size ns' ] in
@@ -708,7 +706,8 @@ let detect_shape es =
         strategy = St.strategy_ordered_kbo
       }
   in
-  heuristic := h'
+  heuristic := h';
+  Select.heuristic := h'
 ;;
 
 
@@ -912,8 +911,10 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
 
 let remember_state es gs =
  let h = Hashtbl.hash (termination_strategy (), es,gs) in
- if h = !hash_initial then
+ if h = !hash_initial then (
    heuristic := { !heuristic with n = Pervasives.max (!heuristic.n + 1) 15};
+   Select.heuristic := !heuristic;
+ );
  hash_initial := h
 ;;
 

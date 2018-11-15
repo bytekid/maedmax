@@ -92,6 +92,24 @@ let get_matches t trie =
   if is_empty trie then [] else retrieve (F.of_term t) trie
 ;;
 
+let get_instances t trie =
+  let rec retrieve fs0 = function
+    | Leaf rs -> rs
+    | Node h ->
+      let ret f fs = try retrieve fs (H.find h f) with Not_found -> [] in
+      let nb k = (k = F.N) || (k = F.B) in
+      match fs0 with
+        | F.Sym f :: fs -> ret (F.Sym f) fs 
+        | F.A :: fs -> (* all symbols and A *)
+          H.fold (fun k t rs -> if nb k then rs else retrieve fs t @ rs) h []
+        | F.B :: fs -> (* follow all features *)
+          H.fold (fun k t rs -> retrieve fs t @ rs) h []
+        | F.N :: fs -> ret F.N fs
+        | _ -> failwith "FingerprintIndex matches: too short fingerprint"
+  in
+  if is_empty trie then [] else retrieve (F.of_term t) trie
+;;
+
 let get_unifiables t trie =
   let rec retrieve fs0 = function
     | Leaf rs -> rs

@@ -52,7 +52,8 @@ let count_subterms_where pred cc n =
     in
     List.exists matching (Term.subterms s' @ (Term.subterms t'))
   in
-  List.length (List.filter matched_by cc) 
+  let r = List.length (List.filter matched_by cc) in
+  r
 ;;
 
 let matchings = count_subterms_where Subst.is_instance_of

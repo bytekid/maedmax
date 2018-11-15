@@ -193,3 +193,4 @@ let is_prefix xs ys =
   in check (xs, ys)
 ;;
 
+let zip xs ys = List.map2 (fun x y -> (x, y)) xs ys
