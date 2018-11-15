@@ -64,6 +64,10 @@ type shape =
 
 type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
 
+type clause = literal list
+
+type input = Unit of literal list * literal list | NonUnit of literal list
+
 type proof_format = CPF | TPTP | SelectionTrace
 
 type selection_mode = MixedSelect | AgeSelect | ClassifiedSelect | RandomSelect

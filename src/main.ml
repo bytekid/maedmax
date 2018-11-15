@@ -46,8 +46,9 @@ let do_unordered _ =
 ;;
 
 let track_proof file =
-  let es,gs = Read.file file in
-  Settings.track_equations := es @ gs;
+  match Read.file file with
+  | Unit (es,gs) -> Settings.track_equations := es @ gs;
+  | _ -> failwith "Main.track_file: proof tracking only supports unit equality"
 ;;
 
 let set_restart_frequency s =
@@ -435,9 +436,11 @@ let () =
   Arg.parse options 
    (fun x -> filenames := !filenames @ [x]) short_usage;
   strategy := !heuristic.strategy;
-  match !filenames with
-  | [f] -> 
-    let (es,gs) as input = Read.file f in
+  if List.length !filenames <> 1 then
+     (eprintf "%s%!" short_usage; exit 1)
+  let f = List.hd !filenames in
+  match Read.file f with
+  | Unit (es,gs) -> (
     Settings.input_file := Filename.remove_extension (Filename.basename f);
     (match !track_file with
     | Some f -> track_proof f
@@ -448,7 +451,7 @@ let () =
       printf "input problem: %s\n%!" f;
     if not !only_termination && not !analyze then
       try
-        match fst (Timer.run_timed !timeout (run f) input) with
+        match fst (Timer.run_timed !timeout (run f) (es,gs)) with
         | None -> printf "%s SZS status Timeout\n%!" "%"
         | Some _ -> ()
       with e -> (printf "%s SZS status GaveUp\n%!" "%"; raise e)
@@ -468,5 +471,6 @@ let () =
         printf "%s\n" a;
         printf "%s %.2f %s@." "time:" secs "seconds")
       )
-  | _ -> eprintf "%s%!" short_usage; exit 1
+    )
+  | NonUnit cls -> Format.printf "oh no, it's not unit!\n%!"
 ;;

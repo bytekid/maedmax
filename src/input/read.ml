@@ -67,8 +67,10 @@ let read_tptp orig_filename =
 ;;
 
 let file filename = 
-  if Filename.check_suffix filename "trs"  then fst (read_trs filename), []
-  else read_tptp filename
+  if Filename.check_suffix filename "trs"  then
+    Settings.Unit(fst (read_trs filename), [])
+  else
+    let es, gs = read_tptp filename in Settings.Unit (es,gs)
 
 let equation_or_inequality s =
   let lexbuf = from_string s in
