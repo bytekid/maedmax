@@ -51,6 +51,7 @@ rule token = parse
   | "]"    { RBRACKET }
   | ","    { COMMA }
   | "."    { DOT }
+  | "|"    { OR }
   | "'" (letter+ as s) "'" { FILE s }
   | "%" (any*) { COMMENT }
   | "%" ([^ '\n']*) { COMMENT }

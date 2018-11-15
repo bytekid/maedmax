@@ -37,6 +37,8 @@ let is_inequality l = not l.is_equality
 
 let is_equal l l' = compare l l' = 0
 
+let to_goal l = { l with is_goal = true }
+
 let flip l = { l with terms = Rule.flip l.terms }
 
 let is_subsumed l l' =
@@ -163,3 +165,5 @@ let make_goal ts = make ts true true
 let make_neg_goal ts = make ts false true
 
 let is_unifiable l = let u,v = l.terms in Subst.unifiable u v
+
+let substitute sigma l = { l with terms = Rule.substitute sigma l.terms }

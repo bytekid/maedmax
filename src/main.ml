@@ -472,5 +472,5 @@ let () =
         printf "%s %.2f %s@." "time:" secs "seconds")
       )
     )
-  | NonUnit cls -> Format.printf "oh no, it's not unit!\n%!"
+  | NonUnit (cls, gs) -> Format.printf "oh no, it's not unit!\n%!"
 ;;

@@ -14,15 +14,17 @@ let syntax_error msg =
   Format.eprintf "File %S at line %d, character %d:@.%s@." 
     p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol + 1) msg;
   failwith "Syntax error"
+;;
 
-let make_literal (e,eq) = if eq then L.make_axiom e else L.make_neg_axiom e
+let make_literal (e, eq) = if eq then L.make_axiom e else L.make_neg_axiom e
 
-let add_axioms a (axs,ls,gs) =  a::axs, ls, gs
+let make_clause = List.map make_literal
 
-let add_equation eq (axs,ls,gs) =
-  let l = make_literal eq in 
-  axs, l::ls, gs;;
-let add_goal g (axs,es,gs) = axs, es, L.make_neg_goal g::gs;;
+let add_axioms a (axs, cs, gs) =  a :: axs, cs, gs
+
+let add_clause c (axs, cs, gs) = axs, make_clause c :: cs, gs
+
+let add_goal_clause g (axs, cs, gs) = axs, cs, make_clause g :: gs
 
 %}
 
@@ -30,11 +32,11 @@ let add_goal g (axs,es,gs) = axs, es, L.make_neg_goal g::gs;;
 %token <string> VAR
 %token <string> FILE
 %token LPAREN RPAREN LBRACKET RBRACKET
-%token EQ NEQ COMMA SEMICOLON EOF TICK DOT COMMENT
+%token EQ NEQ COMMA SEMICOLON EOF TICK DOT OR COMMENT
 %token CNF AXIOM HYPOTHESIS CONJECTURE NCONJECTURE INCLUDEAXIOMS
 %token FILE_KEY STATUS_KEY INFERENCE_KEY PLAIN
 
-%type <string list * Literal.t list * Literal.t list> toplevel
+%type <string list * Literal.t list list * Literal.t list list> toplevel
 %type <Literal.t> equation_or_inequality
 %start toplevel
 %start equation_or_inequality
@@ -46,37 +48,44 @@ toplevel:
 
 decl:
   | INCLUDEAXIOMS LPAREN FILE RPAREN DOT decl { add_axioms $3 $6}
-  | axiom decl { add_equation $1 $2 }
-  | hypothesis decl { add_equation $1 $2 }
-  | eq_conjecture decl { add_equation $1 $2 }
-  | ineq_conjecture decl { add_goal (fst $1) $2 }
-  | COMMENT decl { $2 }
-  | { [],[],[]}
-  | error { syntax_error "Syntax error." }
+  | axiom decl      { add_clause $1 $2 }
+  | hypothesis decl { add_clause $1 $2 }
+  | conjecture decl { add_goal_clause $1 $2 }
+  | COMMENT decl    { $2 }
+  |                 { [],[],[]}
+  | error           { syntax_error "Syntax error." }
 
 axiom:
- | CNF LPAREN IDENT COMMA axiom_or_plain COMMA LPAREN equation RPAREN source_option { $8 }
- | CNF LPAREN IDENT COMMA axiom_or_plain COMMA LPAREN inequality RPAREN source_option { $8 }
+ | CNF LPAREN IDENT COMMA axiom_type COMMA LPAREN clause RPAREN source { $8 }
 
-axiom_or_plain:
+axiom_type:
  | AXIOM {}
  | PLAIN {}
 
 hypothesis:
- | CNF LPAREN IDENT COMMA HYPOTHESIS COMMA LPAREN equation RPAREN source_option { $8 }
+ | CNF LPAREN IDENT COMMA HYPOTHESIS COMMA LPAREN clause RPAREN source { $8 }
 
-ineq_conjecture:
- | CNF LPAREN IDENT COMMA CONJECTURE COMMA LPAREN equation RPAREN source_option { $8 }
- | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN inequality RPAREN source_option { $8 }
+conjecture:
+ | CNF LPAREN IDENT COMMA conj_type COMMA LPAREN clause RPAREN source { $8 }
 
-eq_conjecture:
- | CNF LPAREN IDENT COMMA NCONJECTURE COMMA LPAREN equation RPAREN source_option { $8 }
+conj_type:
+ | CONJECTURE  {}
+ | NCONJECTURE {}
 
-source_option:
+source:
  | RPAREN DOT { }
  | COMMA inference RPAREN DOT { }
  | COMMA FILE_KEY LPAREN FILE COMMA IDENT RPAREN RPAREN DOT { }
  | COMMA FILE_KEY LPAREN FILE RPAREN RPAREN DOT { }
+
+clause:
+ | equation literals   { $1 :: $2 }
+ | inequality literals { $1 :: $2 }
+
+literals:
+  | OR equation literals   { $2 :: $3 }
+  | OR inequality literals { $2 :: $3 }
+  |                        { [] }
 
 equation_or_inequality:
  | equation EOF { make_literal $1 }
