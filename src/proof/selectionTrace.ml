@@ -6,6 +6,8 @@ open Settings
 (*** MODULES *****************************************************************)
 module L = List
 module T = Term
+module H = Hashtbl
+module Sig = Signature
 
 (*** GLOBALS ********************* *******************************************)
 let selections : selection_features list ref = ref []
@@ -124,13 +126,42 @@ let extend p q t =
   ext_p (p - 1) (ext_q t)
 ;;
 
-type node = Fun of Signature.sym | Var | Dummy
+type node = Fun of int | Var | Dummy
 
 type pq_gram = node list
 
+let sym_table : (Sig.sym, int) Hashtbl.t = Hashtbl.create 32
+
+(* maximal number of symbols differentiated per arity *)
+let bound = 2
+
+let sym_norm f =
+  try Hashtbl.find sym_table f with
+  Not_found -> failwith "SelectionTrace.sym_norm: unknown symbol"
+;;
+
+let init_pq_grams fs =
+  L.iter (fun (c, a) -> H.add sym_table c a) [c, a | (c, a) <- fs; a <= 2];
+  L.iter (fun t -> H.add sym_table t 3) [t | (t, a) <- fs; a > 2]
+;;
+
+let all b =
+  let cs = [ Fun 0 ] in
+  let ncs = [Fun 1; Fun 2; Fun 3] in
+  let all = Var :: Dummy :: cs @ ncs in
+  [[n1; n2; n3; n4] | n1 <- Dummy :: ncs; n2 <- ncs; n3 <- all; n4 <- all;
+    not (n3 = Dummy && n4 = Dummy) ]
+;;
+
+let print_pq_grams =
+  let nstr = function Dummy -> "*" | Fun i -> string_of_int i | _ -> "X" in
+  let pnode f n = Format.fprintf f "%s" (nstr n) in
+  let pl = Formatx.print_list pnode "." in
+  Formatx.print_list pl "\n"
+;;
+
 let pq_grams p q t =
   let tx = extend p q t in
-  let incomplete g = List.length g < (p + q) in
   let complete g = List.length g = (p + q) in
   let rec takeq ts =
     if List.length ts < q then []
@@ -142,11 +173,23 @@ let pq_grams p q t =
     | T.F (f, _) -> Fun f
   in
   let rec pqs = function
-    | T.V _ -> [[Var]]
-    | T.F (d, []) when d = dummy -> [[Dummy]]
+    | T.V _ -> []
+    | T.F (d, []) when d = dummy -> []
     | T.F (f, ts) as t ->
+      let gs = List.concat [pqs ti | ti <- ts] in
+      let gs_c, gs_i = List.partition complete gs in
       [ node t :: g | g <- takeq [node ti | ti <- ts]] @
-      [ node t :: g | g <- pqs t; incomplete g ]
+      [ node t :: g | g <- gs_i ] @ gs_c
   in
   [g | g <- pqs tx; complete g]
+;;
+
+let test_pq_gram_term t = 
+  Format.printf "%a has pq-grams:\n%a\n" Term.print t print_pq_grams
+    (pq_grams 2 2 t)
+;;
+
+let test_pq_grams es =
+  Format.printf "all pq-grams:\n%a\n" print_pq_grams (all bound);
+  List.iter (fun (l,r) -> test_pq_gram_term l; test_pq_gram_term r) es
 ;;
