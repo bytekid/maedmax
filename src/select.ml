@@ -203,7 +203,7 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
   let acs = !settings.ac_syms in
   let small = NS.smaller_than thresh cc in
   if not is_restart then
-    adjust_bounds (List.length small) thresh;
+    adjust_bounds thresh (List.length small);
   let small', _ = L.partition (keep acs) small in
   let size_sorted = NS.sort_size_age small' in
   let aa = 
