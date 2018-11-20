@@ -13,6 +13,7 @@ open Yojson.Basic
 let short_usage = "maedmax v0.9\nUsage: maedmax <options> <file>\n"
 let filenames = ref []
 let track_file = ref None
+let classify_file = ref None
 
 let settings = ref Settings.default
 let heuristic = ref Settings.default_heuristic
@@ -49,6 +50,11 @@ let track_proof file =
   match Read.file file with
   | Unit (es,gs) -> Settings.track_equations := es @ gs;
   | _ -> failwith "Main.track_file: proof tracking only supports unit equality"
+;;
+
+let set_classification json =
+  let classify = Select.get_classification json in
+  settings := {!settings with select_classify = Some classify}
 ;;
 
 let set_restart_frequency s =
@@ -147,13 +153,15 @@ let options =
   ("--selection-mode", Arg.String (fun s ->
     let sm = 
       if s = "mixed" then MixedSelect
-      else if s = "classified" then ClassifiedSelect
       else if s = "random" then RandomSelect
       else if s = "age" then AgeSelect
+      else if s = "size" then SizeSelect
       else failwith "unsupported option for selection mode"
     in
     settings := { !settings with selection = sm }),
     "<mode> random, age, classified, or mixed (default)");
+    ("--selection-classify", Arg.String (fun s -> classify_file := Some s),
+      "<json> json file with decision tree(s) for classification");
    ("--sizeage", Arg.Int (fun n ->
      heuristic := { !heuristic with size_age_ratio = n}), 
      "<r> percentage of size (vs age) decisions");
@@ -442,9 +450,8 @@ let () =
   match Read.file f with
   | Unit (es,gs) -> (
     Settings.input_file := Filename.remove_extension (Filename.basename f);
-    (match !track_file with
-    | Some f -> track_proof f
-    | None -> ());
+    (match !track_file with | Some f -> track_proof f | _ -> ());
+    (match !classify_file with | Some f -> set_classification f | _ -> ());
     if !(Settings.interactive) && gs <> [] then
       failwith "Input for interactive mode is not supposed to contain goals";
     if !settings.debug > 0 then
@@ -472,5 +479,9 @@ let () =
         printf "%s %.2f %s@." "time:" secs "seconds")
       )
     )
-  | NonUnit (cls, gs) -> Format.printf "oh no, it's not unit!\n%!"
+  | NonUnit (cls, gs) ->
+    Format.printf "oh no, it's not unit!\n%!";
+    match Instgen.start (!settings, !heuristic) (cls @ gs) with
+    | SAT -> Format.printf "SAT\n%!"
+    | UNSAT -> Format.printf "UNSAT\n%!"
 ;;

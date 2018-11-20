@@ -46,6 +46,8 @@ let mk_context _ =
 
 let del_context _ = ()
 
+let reset _ = mk_context ()
+
 let show x = Format.printf "%s\n%!" (Expr.to_string x.expr)
 
 let mk_true ctx = mk ctx (B.mk_true ctx.ctx)

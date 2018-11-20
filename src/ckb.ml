@@ -45,6 +45,16 @@ let acx_rules = ref []
 let incomplete = ref false
 
 (*** FUNCTIONS ***************************************************************)
+let set_settings s =
+  settings := s;
+  Select.settings := s
+;;
+
+let set_heuristic h =
+  heuristic := h;
+  Select.heuristic := h
+;;
+
 (* shorthands for settings *)
 let termination_strategy _ = 
   match !heuristic.strategy with 
@@ -93,7 +103,7 @@ let pop_strategy _ =
  match !heuristic.strategy with
   | [] -> failwith "no strategy left in pop"
   | [s] -> ()
-  | _ :: ss -> heuristic := { !heuristic with strategy = ss }
+  | _ :: ss -> set_heuristic { !heuristic with strategy = ss }
 ;;
 
 let t_strategies _ = L.map (fun (ts,_,_,_,_) -> ts) !heuristic.strategy 
@@ -706,8 +716,7 @@ let detect_shape es =
         strategy = St.strategy_ordered_kbo
       }
   in
-  heuristic := h';
-  Select.heuristic := h'
+  set_heuristic h'
 ;;
 
 
@@ -739,8 +748,7 @@ let set_iteration_stats aa gs =
       Format.printf "discovered %s symbols\n%!"
         (if acs <> !settings.ac_syms then "AC" else "C");
     let s = {!settings with ac_syms = acs; only_c_syms = cs} in
-    settings := s;
-    Select.settings := s)
+    set_settings s)
 ;;
 
 
@@ -896,35 +904,28 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
         n = heuristic_flags.n;
       }
   in
-  settings := s;
-  Select.settings := s;
-  heuristic := h;
-  Select.heuristic := h;
+  set_settings s;
+  set_heuristic h;
   if settings_flags.auto && not is_large then detect_shape axs_eqs;
   if !(Settings.do_proof) <> None then Trace.add_initials axs_eqs;
   if !heuristic.reduce_AC_equations_for_CPs then (
     let acx = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
     acx_rules := [ Lit.flip r | r <- acx ] @ acx);
   A.init_proof_track !(Settings.track_equations);
-  A.update_proof_track axs [] 0
+  A.update_proof_track axs [] 0;
 ;;
 
 let remember_state es gs =
  let h = Hashtbl.hash (termination_strategy (), es,gs) in
- if h = !hash_initial then (
-   heuristic := { !heuristic with n = Pervasives.max (!heuristic.n + 1) 15};
-   Select.heuristic := !heuristic;
- );
+ if h = !hash_initial then
+   set_heuristic {!heuristic with n = Pervasives.max (!heuristic.n + 1) 15};
  hash_initial := h
 ;;
 
-
-let ckb ((settings_flags, heuristic_flags) as flags) input =
-  settings := settings_flags;
-  heuristic := heuristic_flags;
-  Select.settings := settings_flags;
-  Select.heuristic := heuristic_flags;
-  let rec ckb (es, gs) =
+let ckb_with_context (*ctx*) ((settings_flags, heuristic_flags) as flags) input =
+  set_settings settings_flags;
+  set_heuristic heuristic_flags;
+  let rec ckb (*ctx*) (es, gs) =
     (* TODO check positive/negative goals??? *)
     let eq_ok e = Lit.is_equality e || Lit.is_ground e in
     if not (L.for_all eq_ok es) then
@@ -938,9 +939,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     let es' = L.map Lit.normalize est in
     let es0 = L.sort Pervasives.compare es' in
     let gs0 = L.map Lit.normalize gs in
-    Select.all_nodes := [ e, Lit.size e | e <- es0 ];
-    Hashtbl.clear Select.all_nodes_set;
-    ignore (NS.add_list es0 Select.all_nodes_set);
+    Select.init es0 gs0;
     init_settings flags es0 [ Lit.terms g | g <- gs0 ];
     remember_state es gs;
     try
@@ -972,7 +971,16 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       NS.reset_age ();
       A.mem_diffs := [];
       A.time_diffs := [];
-      ckb ((if gs = [] then es0 else es_new @ es0), gs))
+      (*Logic.del_context ctx;
+      let ctx = Logic.mk_context () in*)
+      ckb (*ctx*) ((if gs = [] then es0 else es_new @ es0), gs))
   in
-  ckb input
+  ckb (*ctx*) input
 ;;
+
+let ckb flags input =
+  (*let ctx = Logic.mk_context () in*)
+  let r = ckb_with_context (*ctx*) flags input in
+  (*(try Logic.del_context ctx with _ -> ());*)
+  r
+;; 

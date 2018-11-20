@@ -30,6 +30,8 @@ let mk_context = mk_context
 
 let del_context = del_context
 
+let reset ctx = reset ctx; ctx
+
 let show x = pp_expr x.expr
 
 let mk_true ctx = mk ctx (mk_true ctx)

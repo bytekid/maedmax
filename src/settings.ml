@@ -72,7 +72,32 @@ type input =
 
 type proof_format = CPF | TPTP | SelectionTrace
 
-type selection_mode = MixedSelect | AgeSelect | ClassifiedSelect | RandomSelect
+
+type state_features = {
+  equations: int;
+  goals: int;
+  iterations: int;
+}
+
+type equation_features = {
+  is_goal_selection: bool;
+  size: int;
+  size_diff: int;
+  linear: bool;
+  age: float; (* (max age - node age) / max age *)
+  orientable: bool * bool;
+  duplicating: bool * bool;
+  matches: float; (* normalized by number of nodes *)
+  cps: float (* normalized by number of nodes *)
+}
+
+type selection_features = literal * equation_features * state_features
+
+type selection_mode =
+  | MixedSelect
+  | AgeSelect
+  | RandomSelect
+  | SizeSelect
 
 type t = {
   auto : bool; (* automatic mode *)
@@ -88,7 +113,8 @@ type t = {
   output_tproof : bool;
   extended_signature: bool;
   keep_orientation: bool;
-  selection: selection_mode
+  selection: selection_mode;
+  select_classify: (equation_features -> state_features -> bool) option;
 }
 
 type heuristic = {
@@ -145,7 +171,8 @@ let default = {
   output_tproof = false;
   extended_signature = false;
   keep_orientation = false;
-  selection = MixedSelect
+  selection = MixedSelect;
+  select_classify = None
 }
 
 (* default settings *)

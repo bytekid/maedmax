@@ -29,14 +29,24 @@ let ac_eqs () = [ Variant.normalize_rule e | e <- Ac.eqs !settings.ac_syms ]
 
 let debug d = !settings.debug >= d
 
-let log_select cc ss =
+let log_select cc ss thresh =
+  let sorted = NS.sort_size_age (NS.smaller_than thresh cc) in
   let pnode f n =
     F.fprintf f "%a  (%i) (%i)" Lit.print n (Nodes.age n) (Lit.size n)
   in
-  let plist = Formatx.print_list pnode "\n " in
-  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (L.length cc) plist ss;
+  let pl = Formatx.print_list pnode "\n " in
+  F.printf "select %i from %i:\n%a\n%!" (L.length ss) (L.length sorted) pl ss;
   if debug 1 then
-    F.printf "all:\n%a\n%!" plist cc
+    F.printf "all:\n%a\n%!" pl sorted
+;;
+
+let init es0 gs0 =
+  all_nodes := [ e, Lit.size e | e <- es0 ];
+  Hashtbl.clear all_nodes_set;
+  ignore (NS.add_list es0 all_nodes_set);
+  (* pseudo-selected, but still valuable *)
+  if !(S.do_proof) = Some SelectionTrace then
+    SelectionTrace.log (es0 @ gs0) es0
 ;;
 
 let shape_changed es =
@@ -45,7 +55,9 @@ let shape_changed es =
   !settings.auto && shape <> !(A.shape) && shape <> NoShape
 ;;
 
-let get_oldest_max_from nodelist onodeset max maxmax (aa,rew) =
+let yes _ = true
+
+let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
   let rec get_oldest acc max k =
     if k > 5000 then (
       nodelist := List.rev acc @ !nodelist;
@@ -65,8 +77,10 @@ let get_oldest_max_from nodelist onodeset max maxmax (aa,rew) =
         | None -> get_oldest acc max (k+1)
         | Some ((s',rss),(t',rst)) ->
           (* check for subsumption by other literals seems not beneficial *)
-          if s' = t' || NS.mem aa n then get_oldest acc max (k+1)
-          else if size_n > max then get_oldest (na :: acc) max (k+1)
+          if s' = t' || NS.mem aa n then
+            get_oldest acc max (k+1)
+          else if size_n > max || not (accept n) then
+            get_oldest (na :: acc) max (k+1)
           else (nodelist := List.rev acc @ !nodelist; Some n)
         )
   in
@@ -92,11 +106,11 @@ let select_goal_similar ns =
   n
 ;;
 
-let get_old_nodes_from nodeset onodeset maxsize aarew n =
+let get_old_nodes_from accept nodeset onodeset maxsize aarew n =
   let maxmaxsize = maxsize + 6 in
   let rec get_old_nodes n =
     if n = 0 then []
-    else match get_oldest_max_from nodeset onodeset maxsize maxmaxsize aarew with
+    else match get_oldest_max_from accept nodeset onodeset maxsize maxmaxsize aarew with
     | Some b ->
       if debug 1 then (
         F.printf "extra age selected: %a  (%i) (%i)\n%!"
@@ -107,10 +121,11 @@ let get_old_nodes_from nodeset onodeset maxsize aarew n =
   in get_old_nodes n
 ;;
 
-let get_old_nodes = get_old_nodes_from all_nodes (Some all_nodes_set)
+let get_old_nodes ?(accept = yes) =
+  get_old_nodes_from accept all_nodes (Some all_nodes_set)
+;;
 
-let get_old_goals : int -> (NS.t * Rewriter.rewriter) -> int -> Literal.t list
-  = (get_old_nodes_from all_goals None)
+let get_old_goals ?(accept = yes) = (get_old_nodes_from accept all_goals None)
 
 let selections = ref 0
 
@@ -207,9 +222,6 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
   let add_goal_sim = A.little_progress 10 && size_sorted <> [] in
   let aa = if add_goal_sim then select_goal_similar size_sorted :: aa else aa in
   let pp = NS.diff_list cc aa in
-  if debug 1 then log_select size_sorted aa;
-  if !(S.do_proof) = Some SelectionTrace then
-    SelectionTrace.log aa (NS.to_list cc);
   (aa,pp)
 ;;
 
@@ -227,16 +239,13 @@ let select_goals' (aa, _) k gg thresh =
  let small,_ = L.partition (keep acs) (NS.smaller_than thresh gg) in
  let sorted = NS.sort_size_unif small in
  let gg_a = fst (Listx.split_at_most k sorted) in
- let gg_p = NS.diff_list gg gg_a in 
- if debug 1 then log_select (NS.to_list gg) gg_a;
- if !(S.do_proof) = Some SelectionTrace then
-   SelectionTrace.log gg_a (NS.to_list aa);
+ let gg_p = NS.diff_list gg gg_a in
  (gg_a, gg_p)
 ;;
 
 
 (* * SELECTION BY CLASSIFICATION * * * * * * * * * ** * * * * * * * * * * * * *)
-let count_subterms_where pred cc n =
+(*let count_subterms_where pred cc n =
   let tt = Unix.gettimeofday () in
   let s, t = Literal.terms n in
   let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
@@ -251,17 +260,17 @@ let count_subterms_where pred cc n =
   r
 ;;
 
-let matchings = count_subterms_where Subst.is_instance_of
+let matches = count_subterms_where Subst.is_instance_of
 
-let unifiables = count_subterms_where Subst.unifiable
+let unifiables = count_subterms_where Subst.unifiable*)
 
-let count_instances_in cc =
+let count_term_cond retrieve check cc =
   let cc = [Lit.terms n | n <- cc] in
   let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
   let subts r = [ u, (u, r) | u <- T.subterms (fst r); not (T.is_variable u)] in
   let ts = List.concat [subts (l,r) @ subts (r,l) | l,r <- cc] in
   let idx = FingerprintIndex.create ts in
-  let insts u = [ v,rl | v,rl <- FI.get_instances u idx; Subst.is_instance_of v u] in
+  let insts u = [ v,rl | v,rl <- retrieve u idx; check v u] in
   let inst_count n =
     let s,t = Literal.terms n in
     let insts (l, r) = if is_rule (l,r) then L.length (insts l) else 0 in 
@@ -271,35 +280,38 @@ let count_instances_in cc =
   (fun n -> norm (inst_count n))
 ;;
 
-let node_features n cc inst_count =
+let count_instances = count_term_cond FI.get_instances Subst.is_instance_of
+
+let count_unifiables = count_term_cond FI.get_unifiables Subst.unifiable 
+
+let node_features n inst_count unif_count =
   let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_subterm l r) in
   let s, t = Literal.terms n in
   let a  = Nodes.age n in
   let max_age = float_of_int (Nodes.max_age ()) in
   let age = (max_age -. float_of_int a) /. max_age in 
   {
-    is_goal = Literal.is_goal n;
+    is_goal_selection = Literal.is_goal n;
     size = Rule.size (s, t);
     size_diff = abs (Term.size s - Term.size t);
     linear = Rule.linear (s, t);
     age = age;
     orientable = (is_rule (s, t), is_rule (t, s));
     duplicating = (Rule.is_duplicating (s, t), Rule.is_duplicating (t, s));
-    matchings = inst_count n;
-    cps = 0. (*norm (unifiables cc n)*)
+    matches = inst_count n;
+    cps = unif_count n
   }
 ;;
-
-let node_features n cc inst_count =
-  let fs = node_features n cc inst_count in
+(*
+let node_features n inst_count unif_count =
+  let fs = node_features' n inst_count unif_count in
   let fb b = if b then 1. else 0. in
   let f = float_of_int in
-  let fs = [fb fs.is_goal; f fs.size; f fs.size_diff; fb fs.linear; fs.age;
-   fb (fst fs.orientable); fb (snd fs.orientable);
-   fb (fst fs.duplicating); fb (snd fs.duplicating); fs.matchings(*;fs.cps*)] in
-   (*List.iter (fun f -> Format.printf "%.2f " f) fs; Format.printf "-\n%!";*)
-  fs
+  [fb fs.is_goal_selection; f fs.size; f fs.size_diff; fb fs.linear;
+   fs.age; fb (fst fs.orientable); fb (snd fs.orientable);
+   fb (fst fs.duplicating); fb (snd fs.duplicating); fs.matches; fs.cps]
 ;;
+
 
 let svc_predict fs =
   (*let cs = [
@@ -336,7 +348,7 @@ let predict_select aa ns =
   let sfs = L.map float_of_int [fs.equations; fs.goals; fs.iterations] in
   let aa = NS.to_list aa in
   let inst_count = count_instances_in aa in
-  let featured = [ n, node_features n aa inst_count @ sfs | n <- ns ] in
+  let featured = [ n, node_features n inst_count @ sfs | n <- ns ] in
   [ n, predict n fs | n, fs <- featured ]
 ;;
 
@@ -351,9 +363,86 @@ let select_classified aa k cc thresh =
   (*log_select size_sorted aa;*)
   aa, NS.diff_list cc aa
 ;;
+*)
+let classify_random_tree n s =
+  if n.age <= 0. then
+    if n.size_diff <= 3 then
+      false (*[[ 78.   0.]]*)
+    else (* if n.size_diff > 3 *)
+      if s.equations <= 223 then
+        if n.matches <= 0. then
+          if s.goals <= 8 then
+            false (*[[ 3.  1.]]*)
+          else (* if s.goals > 8 *)
+            false (*[[ 11.   0.]]*)
+        else (* if n.matchings > 0 *)
+          true (*[[ 0.  4.]]*)
+      else (* if s.equations > 223 *)
+        if n.cps <= 0. then
+          false (*[[ 1.  0.]]*)
+        else (* if n.cps > 0 *)
+          true (*[[  0.  12.]]*)
+  else (* if n.age > 0 *)
+    if s.equations <= 166 then
+      if s.equations <= 141 then
+        if n.size <= 7 then
+          if n.age <= 0. then
+            false (*[[ 2.  0.]]*)
+          else (* if n.age > 0 *)
+            true (*[[ 12.  24.]]*)
+        else (* if n.size > 7 *)
+          if not n.linear then
+            false (*[[ 18.   1.]]*)
+          else (* if n.linear > 0 *)
+            false (*[[ 12.   6.]]*)
+      else (* if s.equations > 141 *)
+        if n.matches <= 0. then
+          if n.age <= 0. then
+            true (*[[  67.  160.]]*)
+          else (* if n.age > 0 *)
+            false (*[[ 15.   9.]]*)
+        else (* if n.matchings > 0 *)
+          if s.equations <= 163 then
+            true (*[[  3.  54.]]*)
+          else (* if s.equations > 163 *)
+            false (*[[ 1.  1.]]*)
+    else (* if s.equations > 166 *)
+      if s.iterations <= 11 then
+        if n.matches <= 0. then
+          if n.size <= 8 then
+            false (*[[ 37.  16.]]*)
+          else (* if n.size > 8 *)
+            false (*[[ 53.   4.]]*)
+        else (* if n.matchings > 0 *)
+          if not (fst n.duplicating) then
+            true (*[[ 2.  9.]]*)
+          else (* if fst n.duplicating > 0 *)
+            false (*[[ 2.  0.]]*)
+      else (* if s.iterations > 11 *)
+        if n.age <= 0. then
+          if s.goals <= 79 then
+            true (*[[  7.  16.]]*)
+          else (* if s.goals > 79 *)
+            false (*[[ 9.  3.]]*)
+        else (* if n.age > 0 *)
+          true (*[[  0.  12.]]*)
+;;
 
-let select_random k cc thresh =
-  Random.self_init ();
+let classify aa =
+  match !settings.select_classify with
+  | None -> fun _ -> true
+  | Some classify ->
+    let inst_count = count_instances (NS.to_list aa) in
+    let unif_count = count_unifiables (NS.to_list aa) in
+    (fun n ->
+      let s = SelectionTrace.state_features () in
+      let n = node_features n inst_count unif_count in
+      classify n s
+    )
+;;
+
+let select_random aa k cc thresh =
+  let classify = classify aa in
   let rec remove_nth i = function
     | [] -> failwith "Select.select_random: empty list"
     | x :: xs ->
@@ -362,18 +451,22 @@ let select_random k cc thresh =
         let y, ys = remove_nth (i - 1) xs in
         y, x :: ys
   in
-  let rec take m xs =
+  let rec take m attempts xs =
     if m = 0 || xs = [] then []
     else
-    let y, ys = remove_nth (Random.int (List.length xs)) xs in
-    y :: (take (m - 1) ys)
+      let i = Random.int (List.length xs) in
+      let y = List.nth xs i in
+      if classify y || attempts > List.length xs then 
+        let y, ys = remove_nth i xs in
+        y :: (take (m - 1) 0 ys)
+      else take m (attempts + 1) xs
   in
+  let _ = Random.self_init () in
   let k = if k = 0 then select_count !(A.iterations) else k in
   let small = NS.smaller_than thresh cc in
   let small', _ = L.partition (keep !settings.ac_syms) small in
-  let aa = take k small' in
-  if debug 1 then log_select [] aa;
-  aa, NS.diff_list cc aa
+  let ss = take k 0 small' in
+  ss, NS.diff_list cc ss
 ;;
 
 let select_by_age select_goals aarew k cc thresh =
@@ -384,31 +477,135 @@ let select_by_age select_goals aarew k cc thresh =
   Random.self_init();
   let min = try Lit.size (List.hd size_sorted) + 10 with _ -> 20 in
   let max = if !A.equalities > 100 then min else 200 in
+  let classify = classify (fst aarew) in
   let get = if select_goals then get_old_goals else get_old_nodes in
-  let aa = get max aarew k in
-  if debug 1 then log_select size_sorted aa;
+  let aa = get ~accept:classify max aarew k in
   aa, NS.diff_list cc aa
 ;;
 
+let select_by_size aarew k cc thresh =
+  let k = if k = 0 then select_count !(A.iterations) else k in
+  let small = NS.smaller_than thresh cc in
+  adjust_bounds thresh (List.length small);
+  let size_sorted = NS.sort_size_age small in
+  let classify = classify (fst aarew) in
+  let rec take m xs =
+    if m = 0 then []
+    else
+      match xs with
+      | [] -> []
+      | y :: ys -> if classify y then y :: (take (m - 1) ys) else take m ys
+  in
+  (*let aa = split k size_sorted in*)
+  let aa = take k size_sorted in
+  let aa' = split (k - (List.length aa)) size_sorted in
+  let aa_all = aa @ aa' in (* avoid that nothing is selected *)
+  aa_all, NS.diff_list cc aa_all
+;;
+
 (* selection by size/age/classification*)
-let select rew cc =
+let select aarew cc =
   let select = match !settings.selection with
-    | S.MixedSelect -> select' ~only_size:false false rew 0 cc
-    | S.ClassifiedSelect -> select_classified (fst rew) 0 cc
-    | S.RandomSelect -> select_random 0 cc
-    | S.AgeSelect -> select_by_age false rew 0 cc
+    | S.MixedSelect -> select' ~only_size:false false aarew 0 cc
+    | S.RandomSelect -> select_random (fst aarew) 0 cc
+    | S.AgeSelect -> select_by_age false aarew 0 cc
+    | S.SizeSelect -> select_by_size aarew 0 cc
   in
-  A.take_time A.t_select select !heuristic.soft_bound_equations
+  let aa, cc' = A.take_time A.t_select select !heuristic.soft_bound_equations in
+  if debug 1 then
+    log_select cc aa !heuristic.soft_bound_equations;
+  if !(S.do_proof) = Some SelectionTrace then
+    SelectionTrace.log aa (NS.to_list (fst aarew));
+  aa, cc'
 ;;
 
-let select_goals aarew k cc =
+let select_goals aarew k gg =
   let select = match !settings.selection with
-    | S.MixedSelect -> select_goals' aarew k cc
-    | S.ClassifiedSelect -> select_classified (fst aarew) k cc
-    | S.RandomSelect -> select_random k cc
-    | S.AgeSelect -> select_by_age true aarew k cc
+    | S.MixedSelect -> select_goals' aarew k gg
+    | S.RandomSelect -> select_random (fst aarew) k gg
+    | S.AgeSelect -> select_by_age true aarew k gg
+    | S.SizeSelect -> select_by_size aarew 0 gg
   in
-  A.take_time A.t_select select !heuristic.soft_bound_goals
+  let aa, gg' = A.take_time A.t_select select !heuristic.soft_bound_goals in
+  if debug 1 then
+    log_select gg aa !heuristic.soft_bound_goals;
+  if !(S.do_proof) = Some SelectionTrace then
+    SelectionTrace.log aa (NS.to_list (fst aarew));
+  aa, gg'
 ;;
 
+let read_file filename =
+  let chan = open_in filename in
+  let rec add_lines lines =
+    try add_lines (input_line chan :: lines)
+    with End_of_file -> close_in chan; lines
+  in
+  List.fold_left (^) "" (List.rev (add_lines []))
+;;
 
+let get_classification json_file =
+  let t = Unix.gettimeofday () in
+  let thresh = function
+  | `Int i -> float_of_int i
+  | `Float f -> f
+  | _ -> failwith "Select.get_classification: unexpected threshhold"
+  in
+  let attr att n s =
+    match att with
+    | `String a ->
+      let f = float_of_int in
+      let b2f b = if b then 1.0 else 0.0 in
+      if a = "is_goal" then b2f n.is_goal_selection
+      else if a = "node_size" then f n.size
+      else if a = "node_size_diff" then f n.size_diff
+      else if a = "is_linear" then b2f n.linear
+      else if a = "age" then n.age
+      else if a = "orientable_lr" then b2f (fst n.orientable)
+      else if a = "orientable_rl" then b2f (snd n.orientable)
+      else if a = "duplicating_lr" then b2f (fst n.duplicating)
+      else if a = "duplicating_rl" then b2f (snd n.duplicating)
+      else if a = "matches" then n.matches
+      else if a = "cps" then n.cps
+      else if a = "state_equations" then f s.equations
+      else if a = "state_goals" then f s.goals
+      else if a = "state_iterations" then f s.iterations
+      else failwith ("Select.get_classification: unexpected attribute " ^ a)
+    | _ -> failwith "Select.get_classification: unexpected attribute type"
+  in
+  let assoc l =
+    let assoc s = List.assoc s l in
+    try (attr (assoc "attr"), thresh (assoc "thresh"), assoc "leq", assoc "gt")
+    with Not_found -> failwith "Select.get_classification: unexpected json"
+  in
+  let rec decision_tree (json : Yojson.Basic.json) n s = match json with
+  | `Int c -> c
+  | `Assoc l ->
+    let attr_of, th, leq, gt = assoc l in
+    if attr_of n s <= th then decision_tree leq n s else decision_tree gt n s
+  | _ -> failwith "Select.get_classification: unexpected tree structure"
+  in
+  (*let rec tree_string ind (json : Yojson.Basic.json) = match json with
+  | `Int c -> ind ^ (string_of_int c) ^ "\n"
+  | `Assoc l ->
+    let attr_of, th, leq, gt = assoc l in
+    let ind = " " ^ ind in
+    (*Format.printf "%s if %s <= %.2f then \n%!" ind (match List.assoc "attr" l with `String a -> a | _ -> "?") th; *)
+    let leq = tree_string ind leq in
+    let gt = tree_string ind gt in
+    ind ^ "if " ^ (match List.assoc "attr" l with `String a -> a | _ -> "?") ^
+    " <= " ^ (string_of_float th) ^ " then\n" ^ leq ^ ind ^ "else\n" ^ gt
+  | _ -> failwith "Select.get_classification: unexpected tree structure"
+  in*)
+  let majority_vote fs n s =
+    let sum = List.fold_left (+) 0 [f n s | f <- fs] in
+    sum >= List.length fs / 2 (* >=: accept on draw since false neg are worse *)
+  in
+  let json = Yojson.Basic.from_string (read_file json_file) in
+  let c = 
+  match json with
+  | `List tjsons -> majority_vote [decision_tree j | j <- tjsons]
+  | _ -> failwith "Select.get_classification: unexpected tree representation"
+  in
+  A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
+  c
+;;

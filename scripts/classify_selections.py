@@ -37,7 +37,7 @@ labels = [
   "is_linear",
   "age",
   "orientable_lr", "orientable_rl",
-  "duplicating_lr", "duplicating_lr",
+  "duplicating_lr", "duplicating_rl",
   "matches", "cps",
   "state_equations", "state_goals", "state_iterations"
 ]
@@ -72,6 +72,7 @@ def get_X_dir(dir):
   X = []
   target = []
   cnt = 0
+  fs = []
   for subdir, dirs, logs in os.walk(dir):
     for filename in logs:
       f = os.path.join(subdir,filename)
@@ -79,7 +80,11 @@ def get_X_dir(dir):
       X = X + d
       target = target + t
       if len(t) > 0:
+        fs.append(subdir[subdir.rfind("/"):])
         cnt = cnt + 1
+  fs.sort()
+  for f in fs:
+    print(f)
   return X, target, cnt
 
 def randBalanceData(X,y):
@@ -204,28 +209,71 @@ def bayes(X, y):
 
 
 def showTree(tree):
-  feature_names = [f.replace(" ", "_") for f in labels]
-  print("let tree %s =" % (" ".join(feature_names)))
+  ocaml_features = [ "n.is_goal", "n.size", "n.size_diff", "n.linear", "n.age",
+    "fst n.orientable", "snd n.orientable", "fst n.duplicating",
+    "snd n.duplicating", "n.matchings", "n.cps",
+    "s.equations", "s.goals", "s.iterations"
+  ]
+  print("let tree %s =" % (" ".join(ocaml_features)))
 
   def recurse(node, depth):
     indent = "  " * depth
     if tree.feature[node] != _tree.TREE_UNDEFINED:
-      name = feature_names[tree.feature[node]]
+      name = ocaml_features[tree.feature[node]]
       threshold = tree.threshold[node]
       print("%sif %s <= %d then" % (indent, name, int(threshold)))
       recurse(tree.children_left[node], depth + 1)
       print("%selse (* if %s > %d *)" % (indent, name, int(threshold)))
       recurse(tree.children_right[node], depth + 1)
     else:
-      print("%s%d %d" % (indent, int(tree.value[node][0][0]), int(tree.value[node][0][1])))
+      v_max = 0
+      i_max = 0
+      for i, cnt in enumerate(tree.value[node][0]):
+        (v_max, i_max) = (cnt, i) if cnt > v_max else (v_max, i_max)
+      answer = "true" if i_max == 1 else "false"
+      print("{}{} (*{}*)".format(indent, answer, tree.value[node]))
+      #print("%s%d %d" % (indent, int(tree.value[node][0][0]), int(tree.value[node][0][1])))
 
   recurse(0, 1)
+
+def tree2json(tree):
+  def json_of_node(node):
+    if tree.feature[node] != _tree.TREE_UNDEFINED:
+      name = labels[tree.feature[node]]
+      threshold = tree.threshold[node]
+      leq = json_of_node(tree.children_left[node])
+      gt = json_of_node(tree.children_right[node])
+      return {"attr" : name, "thresh" : threshold, "leq" : leq, "gt" : gt}
+    else:
+      v_max = 0
+      i_max = 0
+      # count which class has more members
+      for i, cnt in enumerate(tree.value[node][0]):
+        (v_max, i_max) = (cnt, i) if cnt > v_max else (v_max, i_max)
+      return i_max
+
+  return json_of_node(0)  
+
+
+def precision_recall_graph(r, p, thresholds, t):
+  plt.figure(figsize=(8,8))
+  plt.title("Precision and Recall curve ^ = current threshold")
+  plt.step(r, p, color='b', alpha=0.2, where='post')
+  plt.fill_between(r, p, step='post', alpha=0.2, color='b')
+  plt.ylim([-.1, 1.2]);
+  plt.xlim([-.1, 1.2]);
+  plt.xlabel('Recall');
+  plt.ylabel('Precision');
+
+  close_default_clf = np.argmin(np.abs(thresholds - t))
+  plt.plot(r[close_default_clf], p[close_default_clf], '^', c='k', markersize=15)
+  plt.show()
 
 def dtrees(X, y):
   print("decision trees (depth 3)")
 
   X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
-  clf = DecisionTreeClassifier(max_depth=4).fit(X_train, y_train)
+  clf = DecisionTreeClassifier(max_depth=5).fit(X_train, y_train)
   y_pred = clf.predict(X_test)
   tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
   fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
@@ -243,20 +291,59 @@ def dtrees(X, y):
   y_pred_adj = [1 if y >= t else 0 for y in y_scores]
   print(pd.DataFrame(confusion_matrix(y_test, y_pred_adj),
                       columns=['pred_neg', 'pred_pos'], index=['neg', 'pos']))
-  plt.figure(figsize=(8,8))
-  plt.title("Precision and Recall curve ^ = current threshold")
-  plt.step(r, p, color='b', alpha=0.2, where='post')
-  plt.fill_between(r, p, step='post', alpha=0.2, color='b')
-  plt.ylim([-.1, 1.2]);
-  plt.xlim([-.1, 1.2]);
-  plt.xlabel('Recall');
-  plt.ylabel('Precision');
-
-  close_default_clf = np.argmin(np.abs(thresholds - t))
-  plt.plot(r[close_default_clf], p[close_default_clf], '^', c='k', markersize=15)
-  plt.show()
-
+  #precision_recall_graph(r, p, thresholds, t)
   #showTree(clf.tree_)
+  print(json.dumps([tree2json(clf.tree_)]))
+
+def xtrees(X, y):
+  estimators = 10
+  print("extra trees (%d est)" % (estimators))
+
+  X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
+  clf = ExtraTreesClassifier(n_estimators=estimators, random_state=0, max_depth=8).fit(X_train, y_train)
+  y_pred = clf.predict(X_test)
+  tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
+  fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
+  fn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 0 ])
+  tn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 0 ])
+  print("  true positives: %d, false positives: %d, true negatives: %d, false negatives: %d (from %d)" % (tp, fp, tn, fn, len(y_test)))
+  prec = float(tp) / (tp + fp) if tp + fp != 0 else -1
+  recall = float(tp) / (tp + fn) if tp + fn != 0 else -1
+  my_f1 = 2 * prec * recall / (prec + recall) if prec + recall != 0 else -1
+  print("  precision: %0.2f, recall: %0.2f, f1: %0.2f" % (prec, recall, my_f1))
+
+  #print("Feature importance:")
+  #print(zip(labels,clf.feature_importances_))
+
+  trees = []
+  for i in range(0, estimators):
+    t = clf.estimators_[i].tree_
+    trees.append(tree2json(t))
+  #print(json.dumps(trees))
+
+def random_forest(X, y):
+  estimators = 10
+  print("random forest (%d est)" % (estimators))
+
+  X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
+  clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=8).fit(X_train, y_train)
+  y_pred = clf.predict(X_test)
+  tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
+  fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
+  fn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 0 ])
+  tn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 0 ])
+  print("  true positives: %d, false positives: %d, true negatives: %d, false negatives: %d (from %d)" % (tp, fp, tn, fn, len(y_test)))
+  prec = float(tp) / (tp + fp) if tp + fp != 0 else -1
+  recall = float(tp) / (tp + fn) if tp + fn != 0 else -1
+  my_f1 = 2 * prec * recall / (prec + recall) if prec + recall != 0 else -1
+  print("  precision: %0.2f, recall: %0.2f, f1: %0.2f" % (prec, recall, my_f1))
+
+  trees = []
+  for i in range(0, estimators):
+    t = clf.estimators_[i].tree_
+    trees.append(tree2json(t))
+  print(json.dumps(trees))
+
 
 def graphs(X,y):
   #usefulness vs size
@@ -282,24 +369,28 @@ def classifyWithAll(X,y):
          #"SVM",
          #"Gaussian",
          "Decision Tree",
-         "Random Forest",
+         "Random Forest 8", "Random Forest 12",
          "Neural Nets",
          "AdaBoost",
          "Naive Bayes",
-         "Extra Trees",
-         "QDA"]
+         "Extra Trees 8", "Extra Trees 12"
+         #"QDA"
+         ]
 
   classifiers = [
         KNeighborsClassifier(5),
         SVC(kernel="linear", C=0.025), # slow
         #SVC(gamma=2, C=1),
-        DecisionTreeClassifier(max_depth=7),
-        RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
+        DecisionTreeClassifier(max_depth=4),
+        RandomForestClassifier(n_estimators=10, max_features=1, max_depth=8),
+        RandomForestClassifier(n_estimators=10, max_features=1, max_depth=12),
         MLPClassifier(alpha=1),
         AdaBoostClassifier(),
         GaussianNB(),
-        ExtraTreesClassifier(n_estimators=250, random_state=0),
-        QuadraticDiscriminantAnalysis()]
+        ExtraTreesClassifier(n_estimators=10, max_features=1, max_depth=10),
+        ExtraTreesClassifier(n_estimators=10, max_features=1, max_depth=12)
+        #QuadraticDiscriminantAnalysis()
+        ]
   
   for name, clf in zip(names, classifiers):
     classify(name, clf, X, y)
@@ -322,7 +413,7 @@ if __name__ == "__main__":
   #  "state_equations", "state_goals", "state_iterations"
   #]
 
-  X = np.delete(X, 10, 1) # drop CPs
+  #X = np.delete(X, 10, 1) # drop CPs
   #X = np.delete(X, 11, 1) 
   #X = np.delete(X, 11, 1) 
 
@@ -343,16 +434,12 @@ if __name__ == "__main__":
 
   classifyWithAll(X,y)
   
-  print("Feature importance:")
-  forest = ExtraTreesClassifier(n_estimators=250,
-                              random_state=0)
-  forest.fit(X, y)
-  print(zip(labels,forest.feature_importances_))
 
-  graphs(X,y)
+  #graphs(X,y)
 
   #bayes(X,y)
-  #qda(X,y)
   #dtrees(X,y)
+  #xtrees(X,y)
+  random_forest(X,y)
   #pcaClassify("Gaussian",  GaussianProcessClassifier(kernel=1.0 * RBF(1.0), random_state=0), X, y, 3)
   #pcaClassify("SVC linear",  SVC(kernel="linear", C=0.025), X, y, 2)

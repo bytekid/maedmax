@@ -7,6 +7,7 @@ sig
   val ctx : t -> context
   val mk_context : unit -> context
   val del_context : context -> unit
+  val reset : context -> context
   val show : t -> unit
   val mk_true : context -> t
   val mk_false : context -> t
