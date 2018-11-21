@@ -77,9 +77,7 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
       match o with
         | None -> None
         | Some o -> (
-          let tt = Unix.gettimeofday () in
           let s,t = O.cp_of_overlap o in
-          A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
           if Rule.size (s, t) > bd then None
           else if s = t && is_equality && not is_goal then None
           else (
@@ -98,10 +96,8 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
     let bd = if is_goal then h.hard_bound_goals else h.hard_bound_equations in
     let max_size = bd - (Lit.size rl - (Term.size l')) in
     let add os = function None -> os | Some o -> o :: os in
-    let t = Unix.gettimeofday () in
     let rl_cands = [rl' | rl', s <- rs; s <= max_size] in
     let res = List.fold_left add [] [ self#cp_at rl' rl p | rl' <- rl_cands ] in
-    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
     res
   ;;
 end

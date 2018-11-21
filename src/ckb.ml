@@ -940,8 +940,6 @@ let ckb_with_context (*ctx*) ((settings_flags, heuristic_flags) as flags) input 
     let es0 = L.sort Pervasives.compare es' in
     let gs0 = L.map Lit.normalize gs in
     Select.init es0 gs0;
-    (*SelectionTrace.init_pq_grams (Rules.signature [Lit.terms l | l <- es0@gs0]);
-    SelectionTrace.test_pq_grams [ Lit.terms l | l <- fst input];*)
     init_settings flags es0 [ Lit.terms g | g <- gs0 ];
     remember_state es gs;
     try

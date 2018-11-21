@@ -13,6 +13,116 @@ module Sig = Signature
 let selections : selection_features list ref = ref []
 
 (*** FUNCTIONS ***************************************************************)
+(* * * * * * PQ-GRAMS * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
+let dummy = -1
+
+(* extend with dummies and replace function names by arities *)
+let extend p q t =
+  let dummies = Listx.copy (q - 1) (T.F (dummy, [])) in
+  let rec ext_q = function
+    | (T.V _ as t) -> t
+    | T.F (_, []) -> T.F (0, [])
+    | T.F (_, ts) -> T.F(L.length ts, dummies @ [ext_q ti | ti <- ts] @ dummies)
+  in
+  let rec ext_p i t = if i = 0 then t else T.F(dummy, [ext_p (i - 1) t]) in
+  ext_p (p - 1) (ext_q t)
+;;
+
+type node = Fun of int | Var | Dummy
+
+type pq_gram = node list
+
+let sym_table : (Sig.sym, int) Hashtbl.t = Hashtbl.create 32
+
+(* fixed for now *)
+let pq = ref (1, 2)
+
+let all =
+  let cs = [ Fun 0 ] in
+  let ncs = [Fun 1; Fun 2; Fun 3] in
+  let all = Var :: Dummy :: cs @ ncs in
+  (*[[n1; n2; n3; n4] | n1 <- Dummy :: ncs; n2 <- ncs; n3 <- all; n4 <- all;
+    not (n3 = Dummy && n4 = Dummy) ]*)
+  let no_dummies n3 n4 = not (n3 = Dummy && n4 = Dummy) in
+  let gs = [[n2; n3; n4] | n2 <- ncs; n3 <- all; n4 <- all; no_dummies n3 n4] in
+  List.sort compare gs
+;;
+
+let init_pq_grams fs =
+  L.iter (fun (c, a) -> H.add sym_table c a) [c, a | (c, a) <- fs; a <= 2];
+  L.iter (fun t -> H.add sym_table t 3) [t | (t, a) <- fs; a > 2];
+;;
+
+let print_pq_gram =
+  let nstr = function Dummy -> "*" | Fun i -> string_of_int i | _ -> "X" in
+  let pnode f n = Format.fprintf f "%s" (nstr n) in
+  Formatx.print_list pnode "."
+;;
+
+let print_pq_grams = Formatx.print_list print_pq_gram "\n"
+
+let pq_grams p q t =
+  let tx = extend p q t in
+  let complete g = List.length g = (p + q) in
+  let rec takeq ts =
+    if List.length ts < q then []
+    else Listx.take q ts :: (takeq (List.tl ts))
+  in
+  let node = function
+    | T.V _ -> Var
+    | T.F (d, _) when d = dummy -> Dummy
+    | T.F (f, _) -> Fun f (* after extend: gets abstracted to arity *)
+  in
+  let rec pqs = function
+    | T.V _ -> []
+    | T.F (d, []) when d = dummy -> []
+    | T.F (f, ts) as t ->
+      let gs = List.concat [pqs ti | ti <- ts] in
+      let gs_c, gs_i = List.partition complete gs in
+      [ node t :: g | g <- takeq [node ti | ti <- ts]] @
+      [ node t :: g | g <- gs_i ] @ gs_c
+  in
+  [g | g <- pqs tx; complete g]
+;;
+
+let count_vector t =
+  let p,q = fst !pq, snd !pq in
+  let gs = List.sort compare (pq_grams p q t) in
+  let ggs = Listx.group_by (fun x -> x) gs in
+  let rec count = function
+    | (_, []) -> []
+    | ((g, os) :: gs, a :: all') when g = a -> L.length os :: (count (gs, all'))
+    | (gs, a :: all') -> 0 :: (count (gs, all'))
+  in
+  count (ggs, all)
+;;
+
+let print_vector =
+  let pval f n = Format.fprintf f "%d" n in
+  Formatx.print_list pval " "
+;;
+
+let pq_gram_features (s, t) = count_vector s, count_vector t
+
+let test_pq_gram_term t = 
+  Format.printf "%a has pq-grams:\n%a\n" Term.print t print_pq_grams
+    (pq_grams 1 2 t)
+;;
+
+let test_pq_grams es =
+  let p,q = fst !pq, snd !pq in
+  Format.printf "all pq-grams:\n%a\n" print_pq_grams all;
+  let pq_gram_features (s, t) =
+    let vs, vt = count_vector s, count_vector t in
+    Format.printf "%a has pq-grams:\n%a\n%a\n"
+      Term.print s print_pq_grams (pq_grams p q s) print_vector vs;
+    Format.printf "%a has pq-grams:\n%a\n%a\n"
+      Term.print t print_pq_grams (pq_grams p q t) print_vector vt
+  in
+  List.iter (fun e -> pq_gram_features e) es
+;;
+
+(* * * * * * STATE FEATURES * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let state_features _ =
   let ee = !Analytics.equalities in
   let gg = !Analytics.goals in
@@ -89,7 +199,9 @@ let report ancs =
     let sn_fs = node_feature_string n_fs in
     let sst_fs = state_feature_string st_fs in
     let u = if used rl then 1 else 0 in
-    Format.printf "-- %a\n%s %s %d\n" Rule.print rl sn_fs sst_fs u; 
+    let vs, vt = pq_gram_features rl in
+    Format.printf "-- %a\n%s %s %a %a %d\n"
+      Rule.print rl sn_fs sst_fs print_vector vs print_vector vt u; 
   in
   List.iter show !selections
 ;;
@@ -110,117 +222,4 @@ let for_goal_proof es0 g_orig ((s, t), (rs, rt), sigma) =
 let for_ground_completion ee0 (rr, ee) =
   let ancs = Trace.ancestors (ee @ rr) in
   report (List.map fst ancs)
-;;
-
-(* * * * * * PQ-GRAMS * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let dummy = -1
-
-let extend p q t =
-  let dummies = Listx.copy (q - 1) (T.F (dummy, [])) in
-  let rec ext_q = function
-    | (T.V _ as t)
-    | (T.F (_, []) as t) -> t
-    | T.F (f, ts) -> T.F(f, dummies @ [ext_q ti | ti <- ts] @ dummies )
-  in
-  let rec ext_p i t = if i = 0 then t else T.F(dummy, [ext_p (i - 1) t]) in
-  ext_p (p - 1) (ext_q t)
-;;
-
-type node = Fun of int | Var | Dummy
-
-type pq_gram = node list
-
-let sym_table : (Sig.sym, int) Hashtbl.t = Hashtbl.create 32
-
-(* maximal number of symbols differentiated per arity *)
-let bound = 2
-let pq = ref (1, 2)
-
-
-let sym_norm f =
-  try Hashtbl.find sym_table f with
-  Not_found -> failwith "SelectionTrace.sym_norm: unknown symbol"
-;;
-
-let all =
-  let cs = [ Fun 0 ] in
-  let ncs = [Fun 1; Fun 2; Fun 3] in
-  let all = Var :: Dummy :: cs @ ncs in
-  (*[[n1; n2; n3; n4] | n1 <- Dummy :: ncs; n2 <- ncs; n3 <- all; n4 <- all;
-    not (n3 = Dummy && n4 = Dummy) ]*)
-  let no_dummies n3 n4 = not (n3 = Dummy && n4 = Dummy) in
-  let gs = [[n2; n3; n4] | n2 <- ncs; n3 <- all; n4 <- all; no_dummies n3 n4] in
-  List.sort compare gs
-;;
-
-let init_pq_grams fs =
-  L.iter (fun (c, a) -> H.add sym_table c a) [c, a | (c, a) <- fs; a <= 2];
-  L.iter (fun t -> H.add sym_table t 3) [t | (t, a) <- fs; a > 2];
-;;
-
-let print_pq_grams =
-  let nstr = function Dummy -> "*" | Fun i -> string_of_int i | _ -> "X" in
-  let pnode f n = Format.fprintf f "%s" (nstr n) in
-  let pl = Formatx.print_list pnode "." in
-  Formatx.print_list pl "\n"
-;;
-
-let pq_grams p q t =
-  let tx = extend p q t in
-  let complete g = List.length g = (p + q) in
-  let rec takeq ts =
-    if List.length ts < q then []
-    else Listx.take q ts :: (takeq (List.tl ts))
-  in
-  let node = function
-    | T.V _ -> Var
-    | T.F (d, _) when d = dummy -> Dummy
-    | T.F (f, _) -> Fun f
-  in
-  let rec pqs = function
-    | T.V _ -> []
-    | T.F (d, []) when d = dummy -> []
-    | T.F (f, ts) as t ->
-      let gs = List.concat [pqs ti | ti <- ts] in
-      let gs_c, gs_i = List.partition complete gs in
-      [ node t :: g | g <- takeq [node ti | ti <- ts]] @
-      [ node t :: g | g <- gs_i ] @ gs_c
-  in
-  [g | g <- pqs tx; complete g]
-;;
-
-let count_vector t =
-  let p,q = fst !pq, snd !pq in
-  let gs = List.sort compare (pq_grams p q t) in
-  let ggs = Listx.group_by (fun x -> x) gs in
-  let rec count = function
-    | (_, []) -> []
-    | ((g, os) :: gs, a :: all') when g = a -> L.length os :: (count (gs, all'))
-    | (gs, a :: all') -> 0 :: (count (gs, all'))
-  in
-  count (ggs, all)
-;;
-
-let print_vector =
-  let pval f n = Format.fprintf f "%d" n in
-  Formatx.print_list pval " "
-;;
-
-let pq_gram_features eq =
-  let s,t = Literal.terms eq in
-  let p,q = fst !pq, snd !pq in
-  let vs, (vt : int list) = count_vector s, count_vector t in
-  Format.printf "%a has pq-grams:\n%a\n%a\n"
-    Term.print t print_pq_grams (pq_grams p q t) print_vector vt;
-  vs,vt
-;;
-
-let test_pq_gram_term t = 
-  Format.printf "%a has pq-grams:\n%a\n" Term.print t print_pq_grams
-    (pq_grams 1 2 t)
-;;
-
-let test_pq_grams es =
-  Format.printf "all pq-grams:\n%a\n" print_pq_grams all;
-  List.iter (fun e -> ignore (pq_gram_features e)) es
 ;;

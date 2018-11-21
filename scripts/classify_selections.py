@@ -38,7 +38,7 @@ labels = [
   "age",
   "orientable_lr", "orientable_rl",
   "duplicating_lr", "duplicating_rl",
-  "matches", "cps",
+  "matches", #"cps",
   "state_equations", "state_goals", "state_iterations"
 ]
 
@@ -82,9 +82,6 @@ def get_X_dir(dir):
       if len(t) > 0:
         fs.append(subdir[subdir.rfind("/"):])
         cnt = cnt + 1
-  fs.sort()
-  for f in fs:
-    print(f)
   return X, target, cnt
 
 def randBalanceData(X,y):
@@ -326,7 +323,7 @@ def random_forest(X, y):
   print("random forest (%d est)" % (estimators))
 
   X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
-  clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=8).fit(X_train, y_train)
+  clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=9).fit(X_train, y_train)
   y_pred = clf.predict(X_test)
   tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
   fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
@@ -365,7 +362,7 @@ def graphs(X,y):
 
 def classifyWithAll(X,y):
   names = ["5 Nearest Neighbors",
-         "Linear SVM", #"RBF SVM", 
+         #"Linear SVM", #"RBF SVM", 
          #"SVM",
          #"Gaussian",
          "Decision Tree",
@@ -379,10 +376,10 @@ def classifyWithAll(X,y):
 
   classifiers = [
         KNeighborsClassifier(5),
-        SVC(kernel="linear", C=0.025), # slow
+        #SVC(kernel="linear", C=0.025), # slow
         #SVC(gamma=2, C=1),
         DecisionTreeClassifier(max_depth=4),
-        RandomForestClassifier(n_estimators=10, max_features=1, max_depth=8),
+        RandomForestClassifier(n_estimators=10, max_features=1),
         RandomForestClassifier(n_estimators=10, max_features=1, max_depth=12),
         MLPClassifier(alpha=1),
         AdaBoostClassifier(),
@@ -413,7 +410,8 @@ if __name__ == "__main__":
   #  "state_equations", "state_goals", "state_iterations"
   #]
 
-  #X = np.delete(X, 10, 1) # drop CPs
+  X = np.delete(X, 10, 1) # drop CPs
+  #X = np.delete(X, 9, 1) # drop CPs
   #X = np.delete(X, 11, 1) 
   #X = np.delete(X, 11, 1) 
 
