@@ -34,7 +34,7 @@ let mgu s t =
 class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
 
   val unif_cache : (Term.t, (Literal.t * int) list) H.t = H.create 256
-  val mutable index = FingerprintIndex.empty
+  val mutable index = FingerprintIndex.empty []
 
   method init () =
     let data l = fst (Lit.terms l), (l, Term.size (snd (Lit.terms l))) in
@@ -106,7 +106,7 @@ end
 class overlapper_with (trs : (Rule.t * Logic.t) list) = object (self)
 
   val unif_cache : (Term.t, (Rule.t * Logic.t) list) H.t = H.create 256
-  val mutable index = FingerprintIndex.empty
+  val mutable index = FingerprintIndex.empty []
 
   method init () =
     let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in

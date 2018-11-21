@@ -24,7 +24,7 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
     = H.create 256
   val mutable step_table: (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t
     = H.create 256
-  val mutable index = FingerprintIndex.empty
+  val mutable index = FingerprintIndex.empty []
   val mutable order = ord
 
   method init () =
@@ -182,7 +182,7 @@ end
 class reducibility_checker (eqs : (Rule.t * Logic.t) list) = object (self)
 
 val red_table : (Term.t, Logic.t list) H.t = H.create 256
-val mutable index = FingerprintIndex.empty
+val mutable index = FingerprintIndex.empty []
 val mutable checker = None
 
 method init (rdc : reducibility_checker option) =

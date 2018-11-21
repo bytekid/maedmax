@@ -9,7 +9,7 @@ module Fingerprint = struct
 
   type t = feature list
 
-  let poss = [[]; [0]; [1]; (*[0;0]; [1;0]*)] (* fixed for now *)
+  let poss_set = [[]; [0]; [1]; (*[0;0]; [1;0]*)] (* fixed for now *)
 
   let rec feature_of_term t p =
     match p, t with
@@ -20,7 +20,7 @@ module Fingerprint = struct
       | _ -> N (* non-root position, not in t *)
   ;;
 
-  let of_term t = L.map (feature_of_term t) poss
+  let of_term ?(poss = poss_set) t = L.map (feature_of_term t) poss
 
   let feature_string = function
     | Sym f -> Sig.get_fun_name f
@@ -34,11 +34,15 @@ end
 
 module F = Fingerprint
 
-type 'a t = Leaf of 'a | Node of (F.feature, 'a t) H.t
+type 'a trie = Leaf of 'a | Node of (F.feature, 'a trie) H.t
+
+type 'a t = F.t list * 'a trie
 
 let rec to_string = function
   | Leaf rs -> "[" ^ (string_of_int (L.length rs)) ^ "]"
-  | Node h -> Hashtbl.fold (fun f t r -> (F.feature_string f) ^ " -> @[" ^ (to_string t) ^"@]\n"^ r) h ""
+  | Node h ->
+    let sb f t r = (F.feature_string f) ^ " -> @[" ^ (to_string t) ^"@]\n"^ r in
+    Hashtbl.fold sb h ""
 ;;
 
 let rec print ppf = function
@@ -49,17 +53,20 @@ let rec print ppf = function
     Hashtbl.iter binding h
 ;;
 
-let empty = Leaf []
+let empty poss = (poss, Leaf [])
 
-let is_empty = function Leaf [] -> true | _ -> false
+let is_empty = function (_, Leaf []) -> true | _ -> false
 
-let rec copy = function
-  | Leaf l -> Leaf l
-  | Node h ->
-    let h' = H.create 16 in H.iter (fun f t -> H.add h' f (copy t)) h; Node h'
+let copy (ps, trie) =
+  let rec copy = function
+    | Leaf l -> Leaf l
+    | Node h ->
+      let h' = H.create 16 in H.iter (fun f t -> H.add h' f (copy t)) h; Node h'
+  in
+  (ps, copy trie)
 ;;
 
-let insert trie (term, value) =
+let insert (ps, trie) (term, value) =
   let rec insert fs trie = match fs, trie with
     | [], Leaf rs -> Leaf (value :: rs)
     | f :: fs', Leaf [] ->
@@ -70,14 +77,13 @@ let insert trie (term, value) =
       try Hashtbl.replace h f (insert fs' (H.find h f)); Node h
       with Not_found -> (H.add h f (insert fs' (Leaf [])); Node h))
     | _ -> failwith ("FingerprintIndex insertion: unexpected pattern" ^ (F.to_string fs) ^ " and " ^ (to_string trie))
-  in let res = insert (F.of_term term) trie in
-  (*Format.printf "insert %a with %s yields %a\n%!" Term.print term (F.to_string (F.of_term term)) print res;*)
-  res
+  in let res = insert (F.of_term ~poss:ps term) trie in
+  (ps, res)
 ;;
 
-let create xs = L.fold_left insert empty xs
+let create ?(poss = F.poss_set) xs = L.fold_left insert (empty poss) xs
 
-let get_matches t trie =
+let get_matches t ((ps, trie) as idx) =
   let rec retrieve fs0 = function
     | Leaf rs -> assert (fs0 = []); rs
     | Node h ->
@@ -89,10 +95,10 @@ let get_matches t trie =
         | F.N :: fs -> ret F.B fs @ ret F.N fs
         | _ -> failwith "FingerprintIndex matches: too short fingerprint"
   in
-  if is_empty trie then [] else retrieve (F.of_term t) trie
+  if is_empty idx then [] else retrieve (F.of_term ~poss:ps t) trie
 ;;
 
-let get_instances t trie =
+let get_instances t ((ps, trie) as idx) =
   let rec retrieve fs0 = function
     | Leaf rs -> rs
     | Node h ->
@@ -107,10 +113,10 @@ let get_instances t trie =
         | F.N :: fs -> ret F.N fs
         | _ -> failwith "FingerprintIndex matches: too short fingerprint"
   in
-  if is_empty trie then [] else retrieve (F.of_term t) trie
+  if is_empty idx then [] else retrieve (F.of_term ~poss:ps t) trie
 ;;
 
-let get_unifiables t trie =
+let get_unifiables t (ps, trie) =
   let rec retrieve fs0 = function
     | Leaf rs -> rs
     | Node h ->
@@ -123,7 +129,6 @@ let get_unifiables t trie =
           H.fold (fun k t rs -> retrieve fs t @ rs) h []
         | F.N :: fs -> ret F.B fs @ ret F.N fs
         | _ -> failwith "FingerprintIndex overlaps: too short fingerprint"
-  in let res = retrieve (F.of_term t) trie in
-  (*Format.printf "%d results for %a in %a\n%!" (List.length res) Term.print t print trie;*)
+  in let res = retrieve (F.of_term ~poss:ps t) trie in
   res
 ;;
