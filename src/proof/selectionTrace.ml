@@ -134,23 +134,28 @@ let sym_table : (Sig.sym, int) Hashtbl.t = Hashtbl.create 32
 
 (* maximal number of symbols differentiated per arity *)
 let bound = 2
+let pq = ref (1, 2)
+
 
 let sym_norm f =
   try Hashtbl.find sym_table f with
   Not_found -> failwith "SelectionTrace.sym_norm: unknown symbol"
 ;;
 
-let init_pq_grams fs =
-  L.iter (fun (c, a) -> H.add sym_table c a) [c, a | (c, a) <- fs; a <= 2];
-  L.iter (fun t -> H.add sym_table t 3) [t | (t, a) <- fs; a > 2]
-;;
-
-let all b =
+let all =
   let cs = [ Fun 0 ] in
   let ncs = [Fun 1; Fun 2; Fun 3] in
   let all = Var :: Dummy :: cs @ ncs in
-  [[n1; n2; n3; n4] | n1 <- Dummy :: ncs; n2 <- ncs; n3 <- all; n4 <- all;
-    not (n3 = Dummy && n4 = Dummy) ]
+  (*[[n1; n2; n3; n4] | n1 <- Dummy :: ncs; n2 <- ncs; n3 <- all; n4 <- all;
+    not (n3 = Dummy && n4 = Dummy) ]*)
+  let no_dummies n3 n4 = not (n3 = Dummy && n4 = Dummy) in
+  let gs = [[n2; n3; n4] | n2 <- ncs; n3 <- all; n4 <- all; no_dummies n3 n4] in
+  List.sort compare gs
+;;
+
+let init_pq_grams fs =
+  L.iter (fun (c, a) -> H.add sym_table c a) [c, a | (c, a) <- fs; a <= 2];
+  L.iter (fun t -> H.add sym_table t 3) [t | (t, a) <- fs; a > 2];
 ;;
 
 let print_pq_grams =
@@ -184,12 +189,38 @@ let pq_grams p q t =
   [g | g <- pqs tx; complete g]
 ;;
 
+let count_vector t =
+  let p,q = fst !pq, snd !pq in
+  let gs = List.sort compare (pq_grams p q t) in
+  let ggs = Listx.group_by (fun x -> x) gs in
+  let rec count = function
+    | (_, []) -> []
+    | ((g, os) :: gs, a :: all') when g = a -> L.length os :: (count (gs, all'))
+    | (gs, a :: all') -> 0 :: (count (gs, all'))
+  in
+  count (ggs, all)
+;;
+
+let print_vector =
+  let pval f n = Format.fprintf f "%d" n in
+  Formatx.print_list pval " "
+;;
+
+let pq_gram_features eq =
+  let s,t = Literal.terms eq in
+  let p,q = fst !pq, snd !pq in
+  let vs, (vt : int list) = count_vector s, count_vector t in
+  Format.printf "%a has pq-grams:\n%a\n%a\n"
+    Term.print t print_pq_grams (pq_grams p q t) print_vector vt;
+  vs,vt
+;;
+
 let test_pq_gram_term t = 
   Format.printf "%a has pq-grams:\n%a\n" Term.print t print_pq_grams
-    (pq_grams 2 2 t)
+    (pq_grams 1 2 t)
 ;;
 
 let test_pq_grams es =
-  Format.printf "all pq-grams:\n%a\n" print_pq_grams (all bound);
-  List.iter (fun (l,r) -> test_pq_gram_term l; test_pq_gram_term r) es
+  Format.printf "all pq-grams:\n%a\n" print_pq_grams all;
+  List.iter (fun e -> ignore (pq_gram_features e)) es
 ;;
