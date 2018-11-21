@@ -262,27 +262,53 @@ let select_goals' (aa, _) k gg thresh =
 
 let matches = count_subterms_where Subst.is_instance_of
 
-let unifiables = count_subterms_where Subst.unifiable*)
+let unifiables = count_subterms_where Subst.unifiable
 
-let count_term_cond retrieve check cc =
-  let cc = [Lit.terms n | n <- cc] in
+let count_term_cond retrieve check idx cc_len =
   let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
-  let subts r = [ u, (u, r) | u <- T.subterms (fst r); not (T.is_variable u)] in
-  let ts = List.concat [subts (l,r) @ subts (r,l) | l,r <- cc] in
-  let idx = FingerprintIndex.create ts in
   let insts u = [ v,rl | v,rl <- retrieve u idx; check v u] in
-  let inst_count n =
+  let count_node n =
     let s,t = Literal.terms n in
     let insts (l, r) = if is_rule (l,r) then L.length (insts l) else 0 in 
     insts (s,t) + insts (t,s)
   in
-  let norm i = (float_of_int i) /. (float_of_int (List.length cc + 1)) in 
-  (fun n -> norm (inst_count n))
+  let norm i = (float_of_int i) /. (float_of_int (cc_len + 1)) in
+  (fun n -> norm (count_node n))
+;;
+
+let count_instances_unifiables cc =
+  let cc = [Lit.terms n | n <- cc] in
+  let subts r = [ u, (u, r) | u <- T.subterms (fst r); not (T.is_variable u)] in
+  let ts = List.concat [subts (l,r) @ subts (r,l) | l,r <- cc] in
+  let idx = FingerprintIndex.create ts in
+  let n = List.length cc in
+  let count_inst = count_term_cond FI.get_instances Sub.is_instance_of idx n in
+  let count_unif = count_term_cond FI.get_unifiables Sub.unifiable idx n in
+  count_inst, count_unif
+;;
+*)
+
+let count_term_cond retrieve check cc =
+  let cc = [Lit.terms n | n <- cc] in
+  let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
+  let subts r = [ u, u | u <- T.subterms (fst r); not (T.is_variable u)] in
+  let ts = List.concat [subts (l,r) @ subts (r,l) | l,r <- cc] in
+  let idx = FingerprintIndex.create ts in
+  let insts u = [ v | v <- retrieve u idx; check v u] in
+  let count_node n =
+    let s, t = Literal.terms n in
+    let insts (l, r) = if is_rule (l,r) then L.length (insts l) else 0 in 
+    insts (s,t) + insts (t,s)
+  in
+  let len = float_of_int (List.length cc + 1) in
+  let norm i = (float_of_int i) /. len in
+  (fun n -> norm (count_node n))
 ;;
 
 let count_instances = count_term_cond FI.get_instances Subst.is_instance_of
 
-let count_unifiables = count_term_cond FI.get_unifiables Subst.unifiable 
+let count_unifiables = count_term_cond FI.get_unifiables Subst.unifiable
+
 
 let node_features n inst_count unif_count =
   let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_subterm l r) in
@@ -290,6 +316,9 @@ let node_features n inst_count unif_count =
   let a  = Nodes.age n in
   let max_age = float_of_int (Nodes.max_age ()) in
   let age = (max_age -. float_of_int a) /. max_age in 
+  let tt = Unix.gettimeofday () in
+  let m, c = inst_count n, 0. (*unif_count n*) in
+  A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
   {
     is_goal_selection = Literal.is_goal n;
     size = Rule.size (s, t);
@@ -298,8 +327,8 @@ let node_features n inst_count unif_count =
     age = age;
     orientable = (is_rule (s, t), is_rule (t, s));
     duplicating = (Rule.is_duplicating (s, t), Rule.is_duplicating (t, s));
-    matches = inst_count n;
-    cps = unif_count n
+    matches = m;
+    cps = c
   }
 ;;
 (*
@@ -434,10 +463,13 @@ let classify aa =
   | Some classify ->
     let inst_count = count_instances (NS.to_list aa) in
     let unif_count = count_unifiables (NS.to_list aa) in
+    let s = SelectionTrace.state_features () in
     (fun n ->
-      let s = SelectionTrace.state_features () in
+    let t = Unix.gettimeofday () in
       let n = node_features n inst_count unif_count in
-      classify n s
+      let c = classify n s in
+      A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
+      c
     )
 ;;
 
