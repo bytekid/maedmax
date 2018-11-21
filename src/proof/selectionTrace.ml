@@ -32,7 +32,7 @@ type node = Fun of int | Var | Dummy
 
 type pq_gram = node list
 
-let sym_table : (Sig.sym, int) Hashtbl.t = Hashtbl.create 32
+let pq_count_table : (Term.t, int list) Hashtbl.t = Hashtbl.create 256
 
 (* fixed for now *)
 let pq = ref (1, 2)
@@ -46,11 +46,6 @@ let all =
   let no_dummies n3 n4 = not (n3 = Dummy && n4 = Dummy) in
   let gs = [[n2; n3; n4] | n2 <- ncs; n3 <- all; n4 <- all; no_dummies n3 n4] in
   List.sort compare gs
-;;
-
-let init_pq_grams fs =
-  L.iter (fun (c, a) -> H.add sym_table c a) [c, a | (c, a) <- fs; a <= 2];
-  L.iter (fun t -> H.add sym_table t 3) [t | (t, a) <- fs; a > 2];
 ;;
 
 let print_pq_gram =
@@ -94,7 +89,8 @@ let count_vector t =
     | ((g, os) :: gs, a :: all') when g = a -> L.length os :: (count (gs, all'))
     | (gs, a :: all') -> 0 :: (count (gs, all'))
   in
-  count (ggs, all)
+  try Hashtbl.find pq_count_table t with
+  Not_found -> let v = count (ggs, all) in Hashtbl.add pq_count_table t v; v
 ;;
 
 let print_vector =
