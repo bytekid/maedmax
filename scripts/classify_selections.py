@@ -38,7 +38,7 @@ labels = [
   "age",
   "orientable_lr", "orientable_rl",
   "duplicating_lr", "duplicating_rl",
-  "matches", #"cps",
+  "matches", "cps",
   "state_equations", "state_goals", "state_iterations"
 ]
 
@@ -55,7 +55,7 @@ def get_X_file(filename):
       continue
     cnt = cnt + 1
     parts = line.strip().split(" ")
-    if len(parts) != 15:
+    if len(parts) < 15 or "export" in line:
       continue # timeout/printing?
     features = []
     for p in parts[0:-1]:
@@ -234,6 +234,7 @@ def showTree(tree):
   recurse(0, 1)
 
 def tree2json(tree):
+  labels = labels + ["f"+str(i) for i in range(0, 240)]
   def json_of_node(node):
     if tree.feature[node] != _tree.TREE_UNDEFINED:
       name = labels[tree.feature[node]]
@@ -249,22 +250,7 @@ def tree2json(tree):
         (v_max, i_max) = (cnt, i) if cnt > v_max else (v_max, i_max)
       return i_max
 
-  return json_of_node(0)  
-
-
-def precision_recall_graph(r, p, thresholds, t):
-  plt.figure(figsize=(8,8))
-  plt.title("Precision and Recall curve ^ = current threshold")
-  plt.step(r, p, color='b', alpha=0.2, where='post')
-  plt.fill_between(r, p, step='post', alpha=0.2, color='b')
-  plt.ylim([-.1, 1.2]);
-  plt.xlim([-.1, 1.2]);
-  plt.xlabel('Recall');
-  plt.ylabel('Precision');
-
-  close_default_clf = np.argmin(np.abs(thresholds - t))
-  plt.plot(r[close_default_clf], p[close_default_clf], '^', c='k', markersize=15)
-  plt.show()
+  return json_of_node(0) 
 
 def dtrees(X, y):
   print("decision trees (depth 3)")
@@ -323,7 +309,7 @@ def random_forest(X, y):
   print("random forest (%d est)" % (estimators))
 
   X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
-  clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=9).fit(X_train, y_train)
+  clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=25).fit(X_train, y_train)
   y_pred = clf.predict(X_test)
   tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
   fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
@@ -361,30 +347,30 @@ def graphs(X,y):
   
 
 def classifyWithAll(X,y):
-  names = ["5 Nearest Neighbors",
+  names = [#"5 Nearest Neighbors",
          #"Linear SVM", #"RBF SVM", 
          #"SVM",
          #"Gaussian",
          "Decision Tree",
-         "Random Forest 8", "Random Forest 12",
+         "Random Forest inf", "Random Forest 12",
          "Neural Nets",
          "AdaBoost",
          "Naive Bayes",
-         "Extra Trees 8", "Extra Trees 12"
+         "Extra Trees inf", "Extra Trees 12"
          #"QDA"
          ]
 
   classifiers = [
-        KNeighborsClassifier(5),
+        #KNeighborsClassifier(5),
         #SVC(kernel="linear", C=0.025), # slow
         #SVC(gamma=2, C=1),
         DecisionTreeClassifier(max_depth=4),
-        RandomForestClassifier(n_estimators=10, max_features=1),
+        RandomForestClassifier(n_estimators=10, max_features=1, max_depth=25),
         RandomForestClassifier(n_estimators=10, max_features=1, max_depth=12),
         MLPClassifier(alpha=1),
         AdaBoostClassifier(),
         GaussianNB(),
-        ExtraTreesClassifier(n_estimators=10, max_features=1, max_depth=10),
+        ExtraTreesClassifier(n_estimators=10, max_features=1, max_depth=25),
         ExtraTreesClassifier(n_estimators=10, max_features=1, max_depth=12)
         #QuadraticDiscriminantAnalysis()
         ]
@@ -410,8 +396,7 @@ if __name__ == "__main__":
   #  "state_equations", "state_goals", "state_iterations"
   #]
 
-  X = np.delete(X, 10, 1) # drop CPs
-  #X = np.delete(X, 9, 1) # drop CPs
+  #X = np.delete(X, 10, 1) # drop CPs
   #X = np.delete(X, 11, 1) 
   #X = np.delete(X, 11, 1) 
 
