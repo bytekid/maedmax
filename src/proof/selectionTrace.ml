@@ -130,6 +130,7 @@ let state_feature_string fs =
   Printf.sprintf "%d %d %d" fs.equations fs.goals fs.iterations
 ;;
 
+(*
 let count_subterms_where pred cc n =
   let s, t = Literal.terms n in
   let is_rule (l,r) = Rule.is_rule (l,r) && not (T.is_embedded l r) in
@@ -147,6 +148,28 @@ let count_subterms_where pred cc n =
 let matches = count_subterms_where Subst.is_instance_of
 
 let unifiables = count_subterms_where Subst.unifiable
+*)
+let count_term_cond retrieve cc =
+  let cc = [Literal.terms n | n <- cc] in
+  let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
+  let subts r = [ u, u | u <- T.subterms (fst r); not (T.is_variable u)] in
+  let ts = List.concat [subts (l,r) @ subts (r,l) | l,r <- cc] in
+  let ps = [[]; [0]; [1]; [0;0]; [0;1]; [1;0]; [1;1]] in
+  let idx = FingerprintIndex.create ~poss:ps ts in
+  let insts u = [ v | v <- retrieve u idx] in
+  let count_node n =
+    let s, t = Literal.terms n in
+    let insts (l, r) = if is_rule (l,r) then L.length (insts l) else 0 in 
+    insts (s,t) + insts (t,s)
+  in
+  let len = float_of_int (List.length cc + 1) in
+  let norm i = (float_of_int i) /. len in
+  (fun n -> norm (count_node n))
+;;
+
+let count_instances = count_term_cond FingerprintIndex.get_instances
+
+let count_unifiables = count_term_cond FingerprintIndex.get_unifiables
 
 let node_features n cc =
   let is_rule (l,r) = Rule.is_rule (l,r) && not (T.is_subterm l r) in
@@ -154,7 +177,6 @@ let node_features n cc =
   let a  = Nodes.age n in
   let max_age = float_of_int (Nodes.max_age ()) in
   let age = (max_age -. float_of_int a) /. max_age in
-  let norm i = (float_of_int i) /. (float_of_int (List.length cc + 1)) in 
   {
     is_goal_selection = Literal.is_goal n;
     size = Rule.size (s, t);
@@ -163,8 +185,8 @@ let node_features n cc =
     age = age;
     orientable = (is_rule (s, t), is_rule (t, s));
     duplicating = (Rule.is_duplicating (s, t), Rule.is_duplicating (t, s));
-    matches = norm (matches cc n);
-    cps = norm (unifiables cc n)
+    matches = count_instances cc n;
+    cps = count_unifiables cc n
   }
 ;;
 

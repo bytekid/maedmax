@@ -801,6 +801,7 @@ let rec phi ctx aa gs =
   if do_restart aa gs then raise (Restart (Select.select_for_restart aa));
   let redcount, cp_count = ref 0, ref 0 in
   set_iteration_stats aa gs;
+  Select.reset ();
   let aa =
     if check_subsumption 2 && nth_iteration 3 then NS.subsumption_free aa
     else aa

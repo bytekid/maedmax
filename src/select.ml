@@ -250,7 +250,12 @@ let count_term_cond retrieve check cc =
   let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_embedded l r) in
   let subts r = [ u, u | u <- T.subterms (fst r); not (T.is_variable u)] in
   let ts = List.concat [subts (l,r) @ subts (r,l) | l,r <- cc] in
-  let idx = FingerprintIndex.create ts in
+  let ps = [[]; [0]; [1]; [0;0]; [0;1]; [1;0]; [1;1]] in
+  let idx = FingerprintIndex.create ~poss:ps ts in
+  let check v u =
+    let c = check v u in
+    c
+  in
   let insts u = [ v | v <- retrieve u idx; check v u] in
   let count_node n =
     let s, t = Literal.terms n in
@@ -266,6 +271,10 @@ let count_instances = count_term_cond FI.get_instances Subst.is_instance_of
 
 let count_unifiables = count_term_cond FI.get_unifiables Subst.unifiable
 
+let count_instances = SelectionTrace.count_instances
+
+let count_unifiables = SelectionTrace.count_unifiables
+
 
 let node_features n inst_count unif_count =
   let is_rule (l,r) = Rule.is_rule (l,r) && not (Term.is_subterm l r) in
@@ -273,9 +282,7 @@ let node_features n inst_count unif_count =
   let a  = Nodes.age n in
   let max_age = float_of_int (Nodes.max_age ()) in
   let age = (max_age -. float_of_int a) /. max_age in 
-  let tt = Unix.gettimeofday () in
-  let m, c = inst_count n, 0. (*unif_count n*) in
-  A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
+  let m, c = inst_count n, unif_count n in
   {
     is_goal_selection = Literal.is_goal n;
     size = Rule.size (s, t);
@@ -289,6 +296,22 @@ let node_features n inst_count unif_count =
   }
 ;;
 
+let classification_table : (Literal.t, bool) Hashtbl.t = Hashtbl.create 256
+
+let pqgram_table : (Term.t, float array) Hashtbl.t = Hashtbl.create 256
+
+let pq_grams (s, t) =
+  let pqs t = 
+  try Hashtbl.find pqgram_table t
+  with Not_found -> (
+    let v = SelectionTrace.count_vector t in
+    let a = Array.make 105 0.0 in
+    List.iter (fun (i, c) -> a.(i) <- float_of_int c) (Listx.index v);
+    Hashtbl.add pqgram_table t a;
+    a)
+  in (pqs s, pqs t)
+;;
+
 let classify aa =
   match !settings.select_classify with
   | None -> fun _ -> true
@@ -296,14 +319,26 @@ let classify aa =
     let inst_count = count_instances (NS.to_list aa) in
     let unif_count = count_unifiables (NS.to_list aa) in
     let s = SelectionTrace.state_features () in
-    (fun n ->
-    let t = Unix.gettimeofday () in
-      let n = node_features n inst_count unif_count in
-      let c = classify n s in
-      A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
-      c
+    (fun node ->
+      try Hashtbl.find classification_table node with
+      Not_found ->
+        let t = Unix.gettimeofday () in
+        let n = node_features node inst_count unif_count in
+        let pqs = pq_grams (Lit.terms node) in
+        A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
+        let bnd =
+          if !Settings.tmp > 0.01 then !Settings.tmp 
+          else (*if !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio then 0.15 else*) 0.1
+        in
+        let t = Unix.gettimeofday () in
+        let c = classify ~bound:bnd n s pqs in
+        A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
+        Hashtbl.add classification_table node c;
+        c
     )
 ;;
+
+let reset _ = Hashtbl.reset classification_table
 
 let select_random aa k cc thresh =
   let classify = classify aa in
@@ -361,10 +396,40 @@ let select_by_size aarew k cc thresh =
       | y :: ys -> if classify y then y :: (take (m - 1) ys) else take m ys
   in
   (*let aa = split k size_sorted in*)
+  let tt = Unix.gettimeofday () in
   let aa = take k size_sorted in
+  A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
   let aa' = split (k - (List.length aa)) size_sorted in
   let aa_all = aa @ aa' in (* avoid that nothing is selected *)
   aa_all, NS.diff_list cc aa_all
+;;
+
+let rec select_classified_mixed d aarew k cc thresh =
+  let k = if k = 0 then select_count !(A.iterations) else k in
+  let acs = !settings.ac_syms in
+  let classify = classify (fst aarew) in
+  let small = NS.smaller_than thresh cc in
+  adjust_bounds thresh (List.length small);
+  let small', _ = L.partition (keep acs) small in
+  let size_sorted = NS.sort_size_age small' in
+  let aa = 
+    if !heuristic.size_age_ratio = 100 then
+      fst (Listx.split_at_most k size_sorted)
+    else
+      let size_sorted' = split k size_sorted in
+      Random.self_init();
+      select_size_age aarew size_sorted' (NS.smaller_than 16 cc) k
+  in
+  let aa = List.filter classify aa in
+  let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
+  let aa =
+    let kk = if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2 in
+    if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
+  in
+  let add_goal_sim = A.little_progress 10 && size_sorted <> [] in
+  let aa = if add_goal_sim then select_goal_similar size_sorted :: aa else aa in
+  let pp = NS.diff_list cc aa in
+  (aa,pp)
 ;;
 
 (* selection by size/age/classification*)
@@ -374,6 +439,7 @@ let select aarew cc =
     | S.RandomSelect -> select_random (fst aarew) 0 cc
     | S.AgeSelect -> select_by_age false aarew 0 cc
     | S.SizeSelect -> select_by_size aarew 0 cc
+    | S.ClassifiedMixed -> select_classified_mixed 1 aarew 0 cc
   in
   let aa, cc' = A.take_time A.t_select select !heuristic.soft_bound_equations in
   if debug 1 then
@@ -389,6 +455,7 @@ let select_goals aarew k gg =
     | S.RandomSelect -> select_random (fst aarew) k gg
     | S.AgeSelect -> select_by_age true aarew k gg
     | S.SizeSelect -> select_by_size aarew 0 gg
+    | S.ClassifiedMixed -> select_goals' aarew k gg
   in
   let aa, gg' = A.take_time A.t_select select !heuristic.soft_bound_goals in
   if debug 1 then
@@ -408,13 +475,12 @@ let read_file filename =
 ;;
 
 let get_classification json_file =
-  let t = Unix.gettimeofday () in
   let thresh = function
   | `Int i -> float_of_int i
   | `Float f -> f
   | _ -> failwith "Select.get_classification: unexpected threshhold"
   in
-  let attr att n s =
+  let attr att n s (pq1, pq2) =
     match att with
     | `String a ->
       let f = float_of_int in
@@ -433,7 +499,9 @@ let get_classification json_file =
       else if a = "state_equations" then f s.equations
       else if a = "state_goals" then f s.goals
       else if a = "state_iterations" then f s.iterations
-      else failwith ("Select.get_classification: unexpected attribute " ^ a)
+      else (
+        try let i = int_of_string a in if i < 105 then pq1.(i) else pq2.(i - 105)
+        with _ -> failwith ("Select.get_classification: unexpected attribute " ^ a))
     | _ -> failwith "Select.get_classification: unexpected attribute type"
   in
   let assoc l =
@@ -441,35 +509,28 @@ let get_classification json_file =
     try (attr (assoc "attr"), thresh (assoc "thresh"), assoc "leq", assoc "gt")
     with Not_found -> failwith "Select.get_classification: unexpected json"
   in
-  let rec decision_tree (json : Yojson.Basic.json) n s = match json with
-  | `Int c -> c
+  let rec decision_tree (json : Yojson.Basic.json) = match json with
+  | `Float c -> (fun _ _ _ -> c)
   | `Assoc l ->
     let attr_of, th, leq, gt = assoc l in
-    if attr_of n s <= th then decision_tree leq n s else decision_tree gt n s
+    let left = decision_tree leq in
+    let right = decision_tree gt in
+    (fun n s pq -> if attr_of n s pq <= th then left n s pq else right n s pq)
+  | `Int c -> (fun _ _ _ -> float_of_int c)
   | _ -> failwith "Select.get_classification: unexpected tree structure"
   in
-  (*let rec tree_string ind (json : Yojson.Basic.json) = match json with
-  | `Int c -> ind ^ (string_of_int c) ^ "\n"
-  | `Assoc l ->
-    let attr_of, th, leq, gt = assoc l in
-    let ind = " " ^ ind in
-    (*Format.printf "%s if %s <= %.2f then \n%!" ind (match List.assoc "attr" l with `String a -> a | _ -> "?") th; *)
-    let leq = tree_string ind leq in
-    let gt = tree_string ind gt in
-    ind ^ "if " ^ (match List.assoc "attr" l with `String a -> a | _ -> "?") ^
-    " <= " ^ (string_of_float th) ^ " then\n" ^ leq ^ ind ^ "else\n" ^ gt
-  | _ -> failwith "Select.get_classification: unexpected tree structure"
-  in*)
-  let majority_vote fs n s =
+  (*let majority_vote fs n s =
     let sum = List.fold_left (+) 0 [f n s | f <- fs] in
     sum >= List.length fs / 2 (* >=: accept on draw since false neg are worse *)
+  in*)
+  let average fs len ?(bound=0.3) n s pq =
+    let sum = List.fold_left (+.) 0. [f n s pq | f <- fs] in
+    sum /. len >= bound
   in
   let json = Yojson.Basic.from_string (read_file json_file) in
-  let c = 
   match json with
-  | `List tjsons -> majority_vote [decision_tree j | j <- tjsons]
+  | `List tjsons ->
+    let len = float_of_int (List.length tjsons) in
+    average [decision_tree j | j <- tjsons] len
   | _ -> failwith "Select.get_classification: unexpected tree representation"
-  in
-  A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
-  c
 ;;

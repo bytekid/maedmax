@@ -98,6 +98,7 @@ type selection_mode =
   | AgeSelect
   | RandomSelect
   | SizeSelect
+  | ClassifiedMixed
 
 type t = {
   auto : bool; (* automatic mode *)
@@ -114,7 +115,7 @@ type t = {
   extended_signature: bool;
   keep_orientation: bool;
   selection: selection_mode;
-  select_classify: (equation_features -> state_features -> bool) option;
+  select_classify: (?bound:float -> equation_features -> state_features -> (float array * float array) -> bool) option;
 }
 
 type heuristic = {
@@ -205,7 +206,7 @@ let input_file = ref ""
 let generate_benchmarks = ref false
 let track_equations : literal list ref = ref []
 let benchmark = ref false
-let tmp = ref 0
+let tmp = ref 0.0
 let fixed_shape = ref ""
 
 let shape_to_string = function

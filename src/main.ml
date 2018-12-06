@@ -142,7 +142,7 @@ let options =
       if s = "cpf" then Settings.do_proof := Some CPF else
       if s = "tstp" then Settings.do_proof := Some TPTP
       else failwith "unsupported proof type"),
-     "<format> output proof (cpf, tptp)");
+     "<format> output proof (cpf, tstp)");
    ("--reduceAC-CPs", Arg.Unit (fun _ ->
      heuristic := { !heuristic with reduce_AC_equations_for_CPs = true}),
      " do not use ACx equations for CPs");
@@ -156,6 +156,7 @@ let options =
       else if s = "random" then RandomSelect
       else if s = "age" then AgeSelect
       else if s = "size" then SizeSelect
+      else if s = "cmixed" then ClassifiedMixed
       else failwith "unsupported option for selection mode"
     in
     settings := { !settings with selection = sm }),
@@ -186,7 +187,7 @@ let options =
    ("--trace-selection", Arg.Unit (fun _ ->
      Settings.do_proof := Some SelectionTrace),
      " output selection track");
-   ("--tmp", Arg.Int (fun s -> Settings.tmp := s),
+   ("--tmp", Arg.Float (fun s -> Settings.tmp := s),
     "<n> various purposes");
    ("--xsig",  Arg.Unit (fun _ ->
      settings := { !settings with extended_signature = true}),

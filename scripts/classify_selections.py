@@ -2,7 +2,7 @@ import os, sys
 import json
 import re
 import numpy as np
-from sklearn.neural_network import MLPClassifier
+import random
 from sklearn.svm import SVC, LinearSVC
 from sklearn.tree import DecisionTreeClassifier, export_graphviz
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
@@ -21,12 +21,21 @@ from sklearn.gaussian_process.kernels import RBF
 from sklearn.metrics import roc_curve, precision_recall_curve, auc, make_scorer, recall_score, accuracy_score, precision_score, confusion_matrix
 from sklearn.ensemble import ExtraTreesClassifier
 
-from sklearn import tree,metrics
+from sklearn import tree, metrics
 from sklearn.tree import _tree
 from os import system
 import pandas as pd
 
 from random import randint
+
+import tensorflow as tf
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.utils import to_categorical
+from keras.wrappers.scikit_learn import KerasClassifier
+from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 
 
 ########################## getting X ########################################
@@ -41,6 +50,7 @@ labels = [
   "matches", "cps",
   "state_equations", "state_goals", "state_iterations"
 ]
+pq_grams = [str(i) for i in range(0,211)]
 
 def get_X_file(filename):
   file = open(filename, "r")
@@ -55,14 +65,14 @@ def get_X_file(filename):
       continue
     cnt = cnt + 1
     parts = line.strip().split(" ")
-    if len(parts) < 15 or "export" in line:
+    if len(parts) < 225 or "export" in line:
       continue # timeout/printing?
     features = []
     for p in parts[0:-1]:
       features.append(float(p.strip()))
     X.append(features)
 
-    # the target (0-=not used or 1=used)
+    # the target (0=not used or 1=used)
     t = float(parts[-1].strip())
     target.append(t)
   #print(filename + ": " + str(cnt - 1) + " - " + str(len(target)))
@@ -75,6 +85,8 @@ def get_X_dir(dir):
   fs = []
   for subdir, dirs, logs in os.walk(dir):
     for filename in logs:
+      if "json" in filename:
+        continue
       f = os.path.join(subdir,filename)
       d,t = get_X_file(f)
       X = X + d
@@ -84,18 +96,19 @@ def get_X_dir(dir):
         cnt = cnt + 1
   return X, target, cnt
 
-def randBalanceData(X,y):
+def balanceData(X,y):
   X0 = [ xi for (xi,yi) in zip(X, y) if yi == 0 ]
   X1 = [ xi for (xi,yi) in zip(X, y) if yi == 1 ]
-  X0sel = []
-  n = len(X1)
-  for i in range(0,n):
-    i = randint(0,len(X0)-1)
-    X0sel.append(X0[i])
-    del X0[i]
-  y = [0 for i in range(0,n)] + [1 for i in range(0,n)]
-  X = X0sel + X1
-  return (X,y)
+  y01 = [ 0 for x in X0] + [ 1 for x in X0]
+  assert(len(X1) <= len(X0))
+  random.shuffle(X1)
+  len1 = len(X1)
+  len0 = len(X0)
+  for i in range(0,len0):
+    X0.append(X1[i % len1])
+  assert(len(y01) == len(X0))
+  assert(sum(y01) == len0)
+  return (X0,y01)
 
 
 ########################## analysis ############################################
@@ -234,10 +247,11 @@ def showTree(tree):
   recurse(0, 1)
 
 def tree2json(tree):
-  labels = labels + ["f"+str(i) for i in range(0, 240)]
+  global labels, pq_grams
+  names = labels + pq_grams
   def json_of_node(node):
     if tree.feature[node] != _tree.TREE_UNDEFINED:
-      name = labels[tree.feature[node]]
+      name = names[tree.feature[node]]
       threshold = tree.threshold[node]
       leq = json_of_node(tree.children_left[node])
       gt = json_of_node(tree.children_right[node])
@@ -246,37 +260,13 @@ def tree2json(tree):
       v_max = 0
       i_max = 0
       # count which class has more members
-      for i, cnt in enumerate(tree.value[node][0]):
-        (v_max, i_max) = (cnt, i) if cnt > v_max else (v_max, i_max)
-      return i_max
+      neg = tree.value[node][0][0]
+      pos = tree.value[node][0][1]
+      prob = pos / (pos + neg)
+      #print("pos: %d, neg: %d, imax: %d, p: %.2f" % (pos, neg, i_max, prob))
+      return prob
 
   return json_of_node(0) 
-
-def dtrees(X, y):
-  print("decision trees (depth 3)")
-
-  X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
-  clf = DecisionTreeClassifier(max_depth=5).fit(X_train, y_train)
-  y_pred = clf.predict(X_test)
-  tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
-  fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
-  fn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 0 ])
-  tn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 0 ])
-  print("  true positives: %d, false positives: %d, true negatives: %d, false negatives: %d (from %d)" % (tp, fp, tn, fn, len(y_test)))
-  prec = float(tp) / (tp + fp) if tp + fp != 0 else -1
-  recall = float(tp) / (tp + fn) if tp + fn != 0 else -1
-  my_f1 = 2 * prec * recall / (prec + recall) if prec + recall != 0 else -1
-  print("  precision: %0.2f, recall: %0.2f, f1: %0.2f" % (prec, recall, my_f1))
-
-  t = 0.15
-  y_scores = clf.predict_proba(X_test)[:, 1]
-  p, r, thresholds = precision_recall_curve(y_test, y_scores)
-  y_pred_adj = [1 if y >= t else 0 for y in y_scores]
-  print(pd.DataFrame(confusion_matrix(y_test, y_pred_adj),
-                      columns=['pred_neg', 'pred_pos'], index=['neg', 'pos']))
-  #precision_recall_graph(r, p, thresholds, t)
-  #showTree(clf.tree_)
-  print(json.dumps([tree2json(clf.tree_)]))
 
 def xtrees(X, y):
   estimators = 10
@@ -298,28 +288,41 @@ def xtrees(X, y):
   #print("Feature importance:")
   #print(zip(labels,clf.feature_importances_))
 
-  trees = []
-  for i in range(0, estimators):
-    t = clf.estimators_[i].tree_
-    trees.append(tree2json(t))
+  #trees = []
+  #for i in range(0, estimators):
+  #  t = clf.estimators_[i].tree_
+  #  trees.append(tree2json(t))
   #print(json.dumps(trees))
 
-def random_forest(X, y):
-  estimators = 10
+def randomForest(X, y):
+  estimators = 100
   print("random forest (%d est)" % (estimators))
 
   X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
-  clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=25).fit(X_train, y_train)
+  clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=14).fit(X_train, y_train)
   y_pred = clf.predict(X_test)
-  tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
-  fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
-  fn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 0 ])
-  tn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 0 ])
-  print("  true positives: %d, false positives: %d, true negatives: %d, false negatives: %d (from %d)" % (tp, fp, tn, fn, len(y_test)))
-  prec = float(tp) / (tp + fp) if tp + fp != 0 else -1
-  recall = float(tp) / (tp + fn) if tp + fn != 0 else -1
-  my_f1 = 2 * prec * recall / (prec + recall) if prec + recall != 0 else -1
-  print("  precision: %0.2f, recall: %0.2f, f1: %0.2f" % (prec, recall, my_f1))
+  #tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
+  #fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
+  #fn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 0 ])
+  #tn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 0 ])
+  #print("  true positives: %d, false positives: %d, true negatives: %d, false negatives: %d (from %d)" % (tp, fp, tn, fn, len(y_test)))
+  #prec = float(tp) / (tp + fp) if tp + fp != 0 else -1
+  #recall = float(tp) / (tp + fn) if tp + fn != 0 else -1
+  #my_f1 = 2 * prec * recall / (prec + recall) if prec + recall != 0 else -1
+  #print("  precision: %0.2f, recall: %0.2f, f1: %0.2f" % (prec, recall, my_f1))
+
+  from sklearn.preprocessing import LabelBinarizer
+
+  lb = LabelBinarizer()
+  y_train = np.array([number[0] for number in lb.fit_transform(y_train)])
+
+  recall = cross_val_score(clf, X_train, y_train, cv=5, scoring='recall')
+  print('Recall', np.mean(recall), recall)
+  precision = cross_val_score(clf, X_train, y_train, cv=5, scoring='precision')
+  print('Precision', np.mean(precision), precision)
+
+  for l,i in zip(labels, clf.feature_importances_):
+    print("%s: %.3f" % (l,i))
 
   trees = []
   for i in range(0, estimators):
@@ -327,24 +330,81 @@ def random_forest(X, y):
     trees.append(tree2json(t))
   print(json.dumps(trees))
 
+def as_keras_metric(method):
+    import functools
+    from keras import backend as K
+    @functools.wraps(method)
+    def wrapper(self, args, **kwargs):
+        """ Wrapper for turning tensorflow metrics into keras metrics """
+        value, update_op = method(self, args, **kwargs)
+        K.get_session().run(tf.local_variables_initializer())
+        with tf.control_dependencies([update_op]):
+            value = tf.identity(value)
+        return value
+    return wrapper
 
-def graphs(X,y):
-  #usefulness vs size
-  pos = [x for (x,c) in zip(X,y) if c == 1 and x[0] == 0]
-  neg = [x for (x,c) in zip(X,y) if c == 0 and x[0] == 0]
-  avg_pos = float(sum([x[1] for x in pos])) / len(pos)
-  avg_neg = float(sum([x[1] for x in neg])) / len(neg)
-  print("average positive size: %.2f, negative size: %.2f" % (avg_pos, avg_neg))
-  max_pos = max([x[1] for x in pos])
-  max_neg = max([x[1] for x in neg])
-  print("max positive size: %d, negative size: %d" % (max_pos, max_neg))
-  plt.figure(figsize=(8,8))
-  plt.title("usefulness vs size")
-  plt.scatter([x[1] for x in X], y)
-  plt.xlabel('size')
-  plt.ylabel('used')
-  plt.show()
+def neuralNets(X, y):
+  print("neural nets")
+
+  def run(create):
+    estimators = []
+    estimators.append(('standardize', StandardScaler()))
+    estimators.append(('mlp', KerasClassifier(build_fn=create, epochs=10, batch_size=5, verbose=0)))
+    pipeline = Pipeline(estimators)
+    kfold = StratifiedKFold(n_splits=2, shuffle=True, random_state=seed)
+    results = cross_val_score(pipeline, np.array(X), y, cv=kfold)
+    return results
+
+  def create_baseline():
+    model = Sequential()
+    model.add(Dense(units=224, kernel_initializer='normal', activation='relu', input_dim=224))
+    model.add(Dense(units=1, kernel_initializer='normal', activation='sigmoid'))
+    #model.add(Dense(units=10, activation='softmax'))
+    precision = as_keras_metric(tf.metrics.precision)
+    recall = as_keras_metric(tf.metrics.recall)
+    model.compile(loss='binary_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy', precision, recall])
+    return model
+
+  seed = 7
+  #estimator = KerasClassifier(build_fn=create_baseline, epochs=10, batch_size=5, verbose=0)
+  #kfold = StratifiedKFold(n_splits=2, shuffle=True, random_state=seed)
+  #results = cross_val_score(estimator, np.array(X), y, cv=kfold)
+  #print("Results: %.2f%% (%.2f%%)" % (results.mean()*100, results.std()*100))
+  # Results: 81.55% (0.18%) on random
+
+  #estimators = []
+  #estimators.append(('standardize', StandardScaler()))
+  #estimators.append(('mlp', KerasClassifier(build_fn=create_baseline, epochs=10, batch_size=5, verbose=0)))
+  #pipeline = Pipeline(estimators)
+  #kfold = StratifiedKFold(n_splits=2, shuffle=True, random_state=seed)
+  #results = cross_val_score(pipeline, np.array(X), y, cv=kfold)
+  #print("Standardized: %.2f%% (%.2f%%)" % (results.mean()*100, results.std()*100))
+  # Standardized: 85.92% (0.23%)
+
+  def create_smaller():
+	  model = Sequential()
+	  model.add(Dense(112, input_dim=224, kernel_initializer='normal', activation='relu'))
+	  model.add(Dense(1, kernel_initializer='normal', activation='sigmoid'))
+	  # Compile model
+	  model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+	  return model
+
+  results = run(create_smaller)
+  print("Smaller: %.2f%% (%.2f%%)" % (results.mean()*100, results.std()*100)) #Smaller: 83.96% (0.03%)
+
+  def create_larger():
+    model = Sequential()
+    model.add(Dense(units=224, kernel_initializer='normal', activation='relu', input_dim=224))
+    model.add(Dense(112, kernel_initializer='normal', activation='relu'))
+    model.add(Dense(1, kernel_initializer='normal', activation='sigmoid'))
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    return model
   
+  results = run(create_larger)
+  print("Larger: %.2f%% (%.2f%%)" % (results.mean()*100, results.std()*100)) # Larger: 88.03% (0.32%)
+
 
 def classifyWithAll(X,y):
   names = [#"5 Nearest Neighbors",
@@ -352,8 +412,8 @@ def classifyWithAll(X,y):
          #"SVM",
          #"Gaussian",
          "Decision Tree",
-         "Random Forest inf", "Random Forest 12",
-         "Neural Nets",
+         "Random Forest 25", "Random Forest 12",
+         "SciKit Neural Nets",
          "AdaBoost",
          "Naive Bayes",
          "Extra Trees inf", "Extra Trees 12"
@@ -365,13 +425,13 @@ def classifyWithAll(X,y):
         #SVC(kernel="linear", C=0.025), # slow
         #SVC(gamma=2, C=1),
         DecisionTreeClassifier(max_depth=4),
-        RandomForestClassifier(n_estimators=10, max_features=1, max_depth=25),
-        RandomForestClassifier(n_estimators=10, max_features=1, max_depth=12),
+        RandomForestClassifier(n_estimators=10, max_features=1, max_depth=20),
+        RandomForestClassifier(n_estimators=100, max_features=1, max_depth=8),
         MLPClassifier(alpha=1),
         AdaBoostClassifier(),
         GaussianNB(),
         ExtraTreesClassifier(n_estimators=10, max_features=1, max_depth=25),
-        ExtraTreesClassifier(n_estimators=10, max_features=1, max_depth=12)
+        ExtraTreesClassifier(n_estimators=100, max_features=1, max_depth=8)
         #QuadraticDiscriminantAnalysis()
         ]
   
@@ -396,7 +456,7 @@ if __name__ == "__main__":
   #  "state_equations", "state_goals", "state_iterations"
   #]
 
-  #X = np.delete(X, 10, 1) # drop CPs
+  #X = np.delete(X, 11, 1) # drop state
   #X = np.delete(X, 11, 1) 
   #X = np.delete(X, 11, 1) 
 
@@ -409,20 +469,18 @@ if __name__ == "__main__":
   print("true: %d, false: %d  (balance %0.2f)" %
     (pos, neg, pos / len(y)))
 
-  X,y = randBalanceData(X,y)
+  X,y = balanceData(X,y)
   pos = sum(y)
   neg = len(y) - pos
   print("balanced: true: %d, false: %d  (balance %0.2f)" %
     (pos, neg, pos / len(y)))
 
-  classifyWithAll(X,y)
+  #classifyWithAll(X,y)
   
+  #neuralNets(X,y)
 
-  #graphs(X,y)
-
-  #bayes(X,y)
-  #dtrees(X,y)
   #xtrees(X,y)
-  random_forest(X,y)
+  randomForest(X,y)
+
   #pcaClassify("Gaussian",  GaussianProcessClassifier(kernel=1.0 * RBF(1.0), random_state=0), X, y, 3)
   #pcaClassify("SVC linear",  SVC(kernel="linear", C=0.025), X, y, 2)
