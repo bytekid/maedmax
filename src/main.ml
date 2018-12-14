@@ -351,6 +351,7 @@ let show_proof filename input res = function
   | CPF -> Format.printf "%s\n" (cpf_proof_string input res)
   | TPTP -> Format.printf "%s\n" (Tptp.proof_string filename input res)
   | SelectionTrace -> selection_trace input res
+  | _ -> Format.printf "some proof\n%!"
 ;;
 
 let interactive_mode proof =
@@ -482,6 +483,8 @@ let () =
     )
   | NonUnit (cls, gs) ->
     Format.printf "oh no, it's not unit!\n%!";
+    settings := {!settings with instgen = true};
+    Settings.do_proof := Some TraceForInstgen;
     match Instgen.start (!settings, !heuristic) (cls @ gs) with
     | SAT -> Format.printf "SAT\n%!"
     | UNSAT -> Format.printf "UNSAT\n%!"

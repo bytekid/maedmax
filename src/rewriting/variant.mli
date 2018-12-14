@@ -14,8 +14,6 @@ val reduce_encomp : Rules.t -> Rules.t
 
 val remove_rule : Rule.t -> Rules.t -> Rules.t
 
-val rename_rule : string list -> Rule.t -> Rule.t
-
 val rename_rules : Rules.t -> Rules.t
 
 val unique : eq:('a -> 'a -> bool) -> 'a list -> 'a list

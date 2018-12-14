@@ -70,7 +70,7 @@ type input =
   | Unit of literal list * literal list
   | NonUnit of literal list list * literal list list
 
-type proof_format = CPF | TPTP | SelectionTrace
+type proof_format = CPF | TPTP | SelectionTrace | TraceForInstgen
 
 
 type state_features = {
@@ -107,6 +107,7 @@ type t = {
   signature : (Signature.sym * int) list;
   debug : int; (* debug level *)
   axioms : literal list;
+  instgen : bool;
   json : bool; (* output json result and statistics *)
   gs : Rules.t; (* initial goals *)
   unfailing : bool;
@@ -137,7 +138,7 @@ type heuristic = {
   full_CPs_with_axioms : bool
 }
 
-type rewrite_steps = (Rule.t * Term.pos * Term.t) list
+type rewrite_steps = (Rule.t * Term.pos * Subst.t * Term.t) list
 
 type proof =
   | Completion of Rules.t
@@ -165,6 +166,7 @@ let default = {
   signature = [];
   debug = 0;
   axioms = [];
+  instgen = false;
   json = false;
   gs = [];
   unfailing = false;

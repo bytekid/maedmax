@@ -225,7 +225,7 @@ let report ancs =
 ;;
 
 let for_goal_disproof (rr, ee) (rs, rt) =
-  let tfst = (fun (rl,_,_) -> rl) in
+  let tfst = (fun (rl,_,_,_) -> rl) in
   let rrs,rrt = List.map tfst rs, List.map tfst rt in
   let ancs = Trace.ancestors (ee @ rr @ rrs @ rrt) in
   report (List.map fst ancs)

@@ -2,6 +2,7 @@
 module F = Format
 module H = Hashtbl
 module T = Trace
+module Lit = Literal
 
 (*** FUNCTIONS ***************************************************************)
 let name eqindex eq =
@@ -20,7 +21,7 @@ let name eqindex eq =
 let rewrite_inference eqindex parent (lsteps,rsteps) ppf =
   let rec print_steps initial = function
     | [] -> F.fprintf ppf "%s" initial
-    | (rl, _) :: steps ->
+    | (rl, _, _) :: steps ->
       let n = name eqindex rl in
       F.fprintf ppf "@[<2>inference(rw,@ [status(thm)],@ [";
       print_steps initial steps;
@@ -43,7 +44,7 @@ let print_step ppf ?(goal = false) filename eqindex (eqn, o) =
     | T.Initial -> axiom filename, "axiom"
     | T.Rewrite (parent, steps) ->
       rewrite_inference eqindex parent steps, "plain"
-    | T.CP (rl1, _, rl2) -> cp_inference eqindex rl1 rl2, "plain"
+    | T.CP (rl1, _, _, rl2) -> cp_inference eqindex rl1 rl2, "plain"
   in
   let kind' = if goal then "negated_conjecture" else kind in
   let n = name eqindex eqn in
@@ -63,22 +64,22 @@ let print_saturation ppf trs filename =
   F.fprintf ppf "@.%s SZS output end Saturation@." "%"
 ;;
 
-let print_goal_proof ppf filename eqs g_orig ((s, t) as st) (rsx, rtx) sigma =
-  let rs,rt = [r, p | r, p, _ <- rsx], [r, p | r, p, _ <- rtx] in
-  let goal_origin = T.Rewrite (g_orig, (rs, rt)) in
-  let grls, gsteps =
-    if st <> g_orig then (
-      let o = try fst (H.find T.goal_trace_table st) with _ -> T.Initial in
-      H.add T.goal_trace_table g_orig (T.Initial, -1);
-      T.goal_ancestors st o
-    ) else (
-      let s' = T.last (s, T.rewrite_conv s rs) in
-      let t' = T.last (t, T.rewrite_conv t rt) in
-      assert (Subst.unifiable s' t');
-      let u = Term.substitute (Subst.mgu s' t') s' in
-      [], [g_orig, T.Initial; (u, u), goal_origin])
-  in
-  let rls = Listx.unique ([r | r, _ <- rs @ rt] @ grls) in
+let get_goal_steps g_origs ((s, t) as st) (rs, rt) =
+  if not (List.mem st g_origs) then (
+    (*let o = try fst (H.find T.goal_trace_table st) with _ -> T.Initial in*)
+    (*H.add T.goal_trace_table g_orig (T.Initial, -1);*) (* should happen anyway*)
+    T.goal_ancestors st
+  ) else (
+    let s' = T.last (s, T.rewrite_conv s rs) in
+    let t' = T.last (t, T.rewrite_conv t rt) in
+    assert (Subst.unifiable s' t');
+    let u = Term.substitute (Subst.mgu s' t') s' in
+    [], [(s,t), T.Initial; (u, u), T.Rewrite ((s,t), (rs, rt))])
+;;
+
+let print_goal_proof ppf filename eqs gs st (rs, rt) sigma =
+  let grls, gsteps = get_goal_steps gs st (rs, rt) in
+  let rls = Listx.unique ([r | r, _, _ <- rs @ rt] @ grls) in
   let steps = T.ancestors rls in
   F.fprintf ppf
     "%s SZS status Unsatisfiable\n%s SZS output start CNFRefutation@." "%" "%";
@@ -94,10 +95,10 @@ let print_goal_proof ppf filename eqs g_orig ((s, t) as st) (rsx, rtx) sigma =
 let fprint_proof ppf filename (es,gs) = function
   | Settings.Proof ((s,t),(rs, rt), sigma)
     when List.for_all Literal.is_equality es && List.length gs = 1 ->
-    let g_orig = Literal.terms (List.hd gs) in
     let eqs = List.map Literal.terms es in
-    let g = Variant.normalize_rule g_orig in
-    print_goal_proof ppf filename eqs g (s, t) (rs, rt) sigma
+    let gs = [Variant.normalize_rule (Literal.terms g) | g <- gs] in
+    let rl_p_sub = List.map (fun (rl, p, r, _) -> (rl, p, r)) in
+    print_goal_proof ppf filename eqs gs (s, t) (rl_p_sub rs, rl_p_sub rt) sigma
   | Settings.Completion rr ->
     print_saturation ppf rr filename
   | Settings.GroundCompletion (rr,ee,o) -> (* no goal exists *)
@@ -116,4 +117,19 @@ let print_proof = fprint_proof F.std_formatter
 let proof_string filename input prf =
   fprint_proof F.str_formatter filename input prf;
   F.flush_str_formatter ()
+;;
+
+let clause_of_step is_goal (eqn, o) sigma =
+  let pos, neg = Lit.make_axiom, Lit.make_neg_axiom in
+  let pos, neg = if is_goal then neg, pos else pos, neg in
+  let ls =
+    match o with
+    | T.Initial -> failwith "Tptp.clause_of_step: unexpected axiom"
+    | T.Rewrite (parent, (ls,rs)) ->
+      let rls = List.map (fun (rl, _, _) -> rl) (ls @ rs) in
+      pos eqn :: (neg parent) :: [ Lit.make_neg_axiom r | r <- rls ]
+    | T.CP (rl1, _, _, rl2) -> (* rl2 is outer, potentially goal *)
+      pos eqn :: [ Lit.make_neg_axiom rl1; neg rl2 ]
+  in
+  if is_goal then [Lit.substitute sigma l | l <- ls] else ls
 ;;

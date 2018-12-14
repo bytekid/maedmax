@@ -76,6 +76,10 @@ let apply subst x = try List.assoc x subst with Not_found -> V x
 let rec substitute subst = function
   | V x -> apply subst x
   | F (f, ts) -> F (f, [substitute subst ti | ti <- ts])
+  
+let rec substitute_uniform t = function
+  | V x -> t
+  | F (f, ts) -> F (f, [substitute_uniform t ti | ti <- ts])
 
 let rename_canonical t =
   let subst = [x, V i | i, x <- Listx.index (variables t)] in

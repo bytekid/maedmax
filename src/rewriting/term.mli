@@ -38,6 +38,8 @@ val root : t -> Signature.sym
 
 val substitute : subst -> t -> t
 
+val substitute_uniform : t -> t -> t
+
 val substitute_bot : t -> t
 
 val positions : t -> int list list

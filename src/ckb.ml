@@ -177,7 +177,7 @@ let interreduce rr =
    if r <> r' then (
      if !(Settings.do_proof) <> None then
        Trace.add_rewrite (normalize (l,r')) (l, r) ([],rs);
-     add_rewrite_trace (l, r) (L.map fst rs) (l, r'));
+     add_rewrite_trace (l, r) (L.map (fun (rl, _, _) -> rl) rs) (l, r'));
    (l,r')
   in
   let rr' = Listx.unique ((L.map right_reduce) rr) in
@@ -260,8 +260,9 @@ let saturated ctx (rr, ee) rewriter (axs, cps, cps') =
 let rewrite_seq rew (s,t) (rss,rst) =
   let rec seq u = function
      [] -> []
-   | (rl,p) :: rs ->
-     let v = rew#rewrite_at_with u rl p in (rl,p,v) :: (seq v rs)
+   | ((l, r), p, sub) :: rs ->
+     let v = Term.replace u (Term.substitute sub r) p in
+     ((l, r), p, sub, v) :: (seq v rs)
   in
   seq s rss, seq t rst
 ;;
@@ -280,6 +281,7 @@ let solved_goal rewriter gs =
   let r = NS.fold (fun g -> function None -> try_to_solve g | r -> r) gs None in
   r
 ;;
+
 
 let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   let rr = [ Lit.terms r | r <- rr] in
@@ -908,7 +910,9 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   set_settings s;
   set_heuristic h;
   if settings_flags.auto && not is_large then detect_shape axs_eqs;
-  if !(Settings.do_proof) <> None then Trace.add_initials axs_eqs;
+  if !(Settings.do_proof) <> None then (
+    Trace.add_initials axs_eqs;
+    Trace.add_initial_goal gs);
   if !heuristic.reduce_AC_equations_for_CPs then (
     let acx = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
     acx_rules := [ Lit.flip r | r <- acx ] @ acx);
@@ -923,17 +927,13 @@ let remember_state es gs =
  hash_initial := h
 ;;
 
-let ckb_with_context (*ctx*) ((settings_flags, heuristic_flags) as flags) input =
+let ckb ((settings_flags, heuristic_flags) as flags) input =
   set_settings settings_flags;
   set_heuristic heuristic_flags;
-  let rec ckb (*ctx*) (es, gs) =
-    (* TODO check positive/negative goals??? *)
+  let rec ckb (es, gs) =
     let eq_ok e = Lit.is_equality e || Lit.is_ground e in
     if not (L.for_all eq_ok es) then
       raise Fail;
-    (*if gs = [] then heuristic.strategy := St.strategy_ordered_sat;*)
-    (* store initial state to capture*)
-    (* init state *)
     let est =
       if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
     in
@@ -972,16 +972,54 @@ let ckb_with_context (*ctx*) ((settings_flags, heuristic_flags) as flags) input 
       NS.reset_age ();
       A.mem_diffs := [];
       A.time_diffs := [];
-      (*Logic.del_context ctx;
-      let ctx = Logic.mk_context () in*)
-      ckb (*ctx*) ((if gs = [] then es0 else es_new @ es0), gs))
+      ckb ((if gs = [] then es0 else es_new @ es0), gs))
   in
-  ckb (*ctx*) input
+  ckb input
 ;;
 
-let ckb flags input =
-  (*let ctx = Logic.mk_context () in*)
-  let r = ckb_with_context (*ctx*) flags input in
-  (*(try Logic.del_context ctx with _ -> ());*)
-  r
+let ckb_for_instgen ctx flags lits =
+  set_settings (fst flags);
+  set_heuristic (snd flags);
+  let input = L.partition Lit.is_equality lits in
+  let rec ckb (es, gs) =
+    let eq_ok e = Lit.is_equality e || Lit.is_ground e in
+    if not (L.for_all eq_ok es) then
+      raise Fail;
+    let est =
+      if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
+    in
+    let es' = L.map Lit.normalize est in
+    let es0 = L.sort Pervasives.compare es' in
+    let gs0 = L.map Lit.normalize gs in
+    Select.init es0 gs0;
+    init_settings flags es0 [ Lit.terms g | g <- gs0 ];
+    remember_state es gs;
+    try
+      let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
+      let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
+      let ns0 = NS.of_list es0 in
+      new_nodes := es0;
+      if !settings.keep_orientation then (
+        let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
+        let es' = [ if d then e else R.flip e | e,d <- es ] in
+        let oriented = [ !!(C.rule_var ctx (R.flip r)) | r <- es' ] in
+        let keep = Logic.big_and ctx oriented in
+        Logic.require keep;
+        L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
+      );
+      let ans, proof = phi ctx ns0 (NS.of_list gs0) in
+      ans, Trace.proof_eq_instances input proof
+    with Restart es_new -> (
+      pop_strategy ();
+      St.clear ();
+      Cache.clear ();
+      A.restarts := !A.restarts + 1;
+      Hashtbl.reset rewrite_trace;
+      Hashtbl.reset cp_cache;
+      NS.reset_age ();
+      A.mem_diffs := [];
+      A.time_diffs := [];
+      ckb ((if gs = [] then es0 else es_new @ es0), gs))
+  in
+  ckb input
 ;; 

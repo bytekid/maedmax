@@ -22,3 +22,5 @@ val enc : Term.t -> Term.t -> bool
 val after: t -> t -> t
 
 val is_renaming: t -> bool
+
+val compose : t -> t -> t

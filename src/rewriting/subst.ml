@@ -77,3 +77,9 @@ let is_renaming subst =
   (List.for_all is_variable ran) &&
   (List.length (Listx.unique ran) = List.length dom)
 ;;
+
+(* tau after rho *)
+let compose (rho:t) (tau:t) =
+  [x, substitute tau t| x, t <- rho] @
+  [x, t | x, t <- tau; not (List.mem_assoc x rho)]
+;;

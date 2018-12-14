@@ -12,6 +12,8 @@ module Logic = Settings.Logic
 (*** TYPES ********************************************************************)
 type term_cmp = Term.t -> Term.t -> bool
 
+type step = Rule.t * Term.pos * Subst.t
+
 exception Not_orientable
 exception Max_term_size_exceeded
 
@@ -20,10 +22,8 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   (ord : Order.t) =
   object (self)
 
-  val mutable nf_table: (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t
-    = H.create 256
-  val mutable step_table: (Term.t, Term.t * ((Rule.t*Term.pos) list)) H.t
-    = H.create 256
+  val mutable nf_table: (Term.t, Term.t * (step list)) H.t = H.create 256
+  val mutable step_table: (Term.t, Term.t * (step list)) H.t = H.create 256
   val mutable index = FingerprintIndex.empty []
   val mutable order = ord
 
@@ -81,7 +81,7 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
       raise Max_term_size_exceeded;
     try let u, urs = H.find nf_table t in u, rs @ urs with
     Not_found -> (
-      let u,urs = self#nf_compute t in
+      let u, urs = self#nf_compute t in
       H.add nf_table t (u,urs); u, rs @ urs)
 
   (* Returns tuple (s, rs) where s is some normal form of t that was obtained
@@ -101,10 +101,10 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
    assert (Listset.subset rs rs')
   ;;
 
-  method rewrite_at_root_with t ((l, r), b) =
+  method rewrite_at_root_with t ((l, r), only_unordered) =
     let sigma = Subst.pattern_match l t in
     let rsub = Term.substitute sigma r in
-    if b then Some (l,r), rsub
+    if only_unordered then (l,r), sigma, rsub
     else
       let rho = match order#bot with
           None -> []
@@ -113,17 +113,17 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
       in
       let lsub = Term.substitute sigma l in
       let rsub = Term.substitute rho rsub in
-      if order#gt lsub rsub then Some (l,r), rsub
+      if order#gt lsub rsub then (l,r), Subst.compose sigma rho, rsub
       else raise Not_orientable
   ;;
 
   (* FIXME: so far only for equations with same variables on both sides *)
   method rewrite_at_root t = function
     | [] -> None, t
-    | ((l, r), b) :: rules -> (
+    | (st, b) :: rules -> (
       if !(Settings.do_assertions) then
-        assert (Rule.is_rule (l,r));
-      try self#rewrite_at_root_with t ((l, r), b)
+        assert (Rule.is_rule st);
+      try let rl, s, u = self#rewrite_at_root_with t (st, b) in Some (rl,s), u
       with _ -> self#rewrite_at_root t rules)
   ;;
 
@@ -135,7 +135,7 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
     | Term.F (f, ts) ->
       let concat (us,rs) (i,ti) =
         let ui,rsi = self#pstep ti in 
-        let rsi = L.map (fun (rl,p) -> rl,i::p) rsi in
+        let rsi = L.map (fun (rl,p,sub) -> rl,i::p, sub) rsi in
         us @ [ui], rs @ rsi
       in
       let us, urs = L.fold_left concat ([], []) (Listx.index ts) in
@@ -148,7 +148,7 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
         let opt, u = self#rewrite_at_root (Term.F (f, us)) rs in
         match opt with
           | None -> u, []
-          | Some rl -> u, [rl,[]]
+          | Some (rl, sub) -> u, [rl, [], sub]
         end
   ;;
 
@@ -162,10 +162,8 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   (* only to reconstruct rewrite sequences *)
   method rewrite_at_with t rl p =
     let t' = Term.subterm_at p t in
-    let _, ti' =
-      try self#rewrite_at_root_with t' (rl, false)
-      with Subst.Not_matched -> self#rewrite_at_root_with t' (rl, false)
-    in Term.replace t ti' p
+    let _, sub, ti' = self#rewrite_at_root_with t' (rl, false) in
+    Term.replace t ti' p, sub
   ;;
 
   method is_nf t =

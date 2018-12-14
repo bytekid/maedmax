@@ -103,7 +103,7 @@ let rewriter_nf_with ?(max_size=0) l rewriter =
   let t', rt = rewriter#nf (snd ts) in
   if max_size <> 0 && Term.size t' + sz_s > max_size then
     raise Rewriter.Max_term_size_exceeded;
-  let rls = List.map fst (rs @ rt) in
+  let rls = List.map (fun (rl,_,_) -> rl) (rs @ rt) in
   if s' = t' && not l.is_goal && l.is_equality then (
     if !(Settings.do_proof) <> None then (
       let st' = Variant.normalize_rule (s',t') in
@@ -169,5 +169,10 @@ let make_neg_goal ts = make ts false true
 let is_unifiable l = let u,v = l.terms in Subst.unifiable u v
 
 let substitute sigma l = { l with terms = Rule.substitute sigma l.terms }
+
+let substitute_uniform t l =
+  let sub = Term.substitute_uniform t in
+  { l with terms = (sub (fst l.terms), sub (snd l.terms)) }
+;;
 
 let variables l = Rule.variables l.terms

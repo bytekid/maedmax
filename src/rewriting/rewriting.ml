@@ -26,15 +26,9 @@ let rec rewrite_aux rules = function
 
 let step_at_with t p (l,r) =
   let ti = Term.subterm_at p t in
-  Term.replace t (substitute (Subst.pattern_match l ti) r) p 
+  let sigma = Subst.pattern_match l ti in
+  Term.replace t (substitute sigma r) p, sigma
 ;;
-
-let reducts trs t =
-  let step p rl = try [ step_at_with t p rl ] with Subst.Not_matched -> [] in
-  let step_at p = List.concat [ step p rl | rl <- trs ] in
-  List.concat [ step_at p | p <- Term.positions t ]
-;;
-
 
 let rec nf rules t =
  let used, u = rewrite_aux rules t in
@@ -62,14 +56,14 @@ let nf_with_at rules t =
     List.fold_left (fun r x -> match r with None -> f x | _ -> r) None
   in
   let reduct t =
-    let step p rl = try Some (step_at_with t p rl,p,rl) with _ -> None in
+    let step p rl = try Some (step_at_with t p rl, p, rl) with _ -> None in
     let step_at p = opt_fold (step p) rules in
     opt_fold step_at (Term.positions t)
   in
   let rec nf acc t =
     match reduct t with
     | None -> List.rev acc,t
-    | Some (u,p,rl) -> nf ((rl,p) :: acc) u
+    | Some ((u, sigma), p, rl) -> nf ((rl, p, sigma) :: acc) u
   in nf [] t
 ;;
 

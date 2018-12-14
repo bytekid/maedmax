@@ -14,15 +14,12 @@ let eq_set_equal es1 es2 = eq_subset es1 es2 && eq_subset es2 es1
 
 let rec var_name fs i = i * 13
 
-let rename_rule fs (l, r) =
+let rename_rule (l, r) =
   let s = [ x, V i | i, x <- Listx.ix (Rule.variables (l, r)) ] in
   (substitute s l, substitute s r)
 ;;
 
-let rename_rules rs =
-  let fs = Rules.functions rs in
-  [ rename_rule fs rule | rule <- rs ]
-;;
+let rename_rules rs = [ rename_rule rule | rule <- rs ]
 
 let rec unique ~eq = function
   | [] -> []
@@ -70,10 +67,10 @@ let normalize_rule_dir (s,t) =
   let rule, dir =
     if s = t || s' < t' then (s,t), true
     else if t' < s' then (t,s), false
-    else if rename_rule [] (s,t) < rename_rule [] (t,s) then (s,t), true
+    else if rename_rule (s,t) < rename_rule (t,s) then (s,t), true
     else (t,s), false
   in
-  let res = rename_rule [] rule, dir in
+  let res = rename_rule rule, dir in
   t_normalize := !t_normalize +. (Unix.gettimeofday () -. tt);
   res
 ;;

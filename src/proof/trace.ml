@@ -10,12 +10,12 @@ module Sub = Subst
 (*** TYPES *******************************************************************)
 type pos = int list
 
-type step = R.t * pos
+type step = R.t * pos * Subst.t
 
 type origin =
   | Initial
   | Rewrite of R.t * (step list * step list)
-  | CP of R.t * int list * R.t
+  | CP of R.t * int list * Subst.t * R.t
 
 type result =
   | Reduced of R.t * (step list * step list)
@@ -24,7 +24,7 @@ type result =
 type direction =
   | LeftRight | RightLeft
 
-type cpf_step = pos * R.t * direction * T.t
+type cpf_step = pos * R.t * direction * Subst.t * T.t
 
 type cpf_conv = T.t * (cpf_step list)
 
@@ -41,7 +41,7 @@ type inference =
   | Collapse of R.t * T.t
 
 (*** GLOBALS *****************************************************************)
-let parents_table : (R.t, origin * int) H.t = H.create 128
+let trace_table : (R.t, origin * int) H.t = H.create 128
 let children_table : (R.t, result) H.t = H.create 128
 let goal_trace_table : (R.t, origin * int) H.t = H.create 128
 let deleted : R.t list ref = ref []
@@ -50,10 +50,18 @@ let count = ref 0
 (*** FUNCTIONS ***************************************************************)
 let root = []
 
+let rl_sub (rl, _, s) = (rl,s)
+
 let parents = function
   | Initial -> []
-  | Rewrite (p, (lsteps, rsteps)) -> p :: (List.map fst (lsteps @ rsteps))
-  | CP (rl1, _, rl2) -> [rl1; rl2]
+  | Rewrite (p, (lstps, rstps)) -> (p, []) :: (List.map rl_sub (lstps @ rstps))
+  | CP (rl1, _, mu, rl2) -> [rl1, mu; rl2, mu]
+;;
+
+let origin_string = function
+| Initial -> "Initial"
+| Rewrite (p, _) -> "Rewrite(" ^ (Rule.to_string p) ^ ")"
+| CP (rl1, _, _, rl2) -> "CP(" ^ (Rule.to_string rl1) ^ ","^ (Rule.to_string rl2) ^")"
 ;;
 
 let children = function
@@ -69,14 +77,14 @@ let print (s, ss) =
   F.printf "%a\n%!" T.print s;
   let rec print = function
     | [] -> ()
-    | (p,rl,d,t) :: steps -> (
+    | (p, rl, d, _, t) :: steps -> (
       let ds = if d = LeftRight then "->" else "<-" in
       F.printf " %s %a (%a at %s)\n%!" ds T.print t R.print rl (pstr p);
       print steps)
   in print ss
 ;;
 
-let print_all = List.iter print
+let print_all c = List.iter print c
 
 let rec print_steps = function
   | [] -> ()
@@ -86,10 +94,10 @@ let rec print_steps = function
 ;;
 
 (* keep first origin for equation to avoid cycles *)
-let add eq o = if not (H.mem parents_table eq) then
+let add eq o = if not (H.mem trace_table eq) then
   let c = !count in
   count := c + 1;
-  H.add parents_table eq (o, c)
+  H.add trace_table eq (o, c)
 ;;
 
 let gadd g o =
@@ -97,13 +105,13 @@ let gadd g o =
     let c = !count in
     count := c + 1;
     if S.do_proof_debug () then
-      F.printf "ADDING GOAL %i:%a\n" c R.print g;
+      F.printf "ADDING GOAL %i:%a %s\n" c R.print g (origin_string o);
     H.add goal_trace_table g (o, c))
 ;;
 
 let add_initials eqs = List.iter (fun e -> add e Initial) eqs
 
-let add_overlap eq (rl1, p, rl2, _) = add eq (CP (rl1, p, rl2))
+let add_overlap eq (rl1, p, rl2, mu) = add eq (CP (rl1, p, mu, rl2))
 
 let add_rewrite eq eq0 steps =
   add eq (Rewrite (eq0, steps));
@@ -117,9 +125,19 @@ let add_delete eq =
 
 let add_initial_goal eqs = List.iter (fun e -> gadd e Initial) eqs
 
-let add_overlap_goal eq (rl1, p, rl2, _) = gadd eq (CP (rl1, p, rl2))
+let add_overlap_goal eq (rl1, p, rl2, mu) = gadd eq (CP (rl1, p, mu, rl2))
 
 let add_rewrite_goal eq eq0 steps = gadd eq (Rewrite (eq0,steps))
+
+let trace_goal g =
+  try H.find goal_trace_table g
+  with Not_found -> failwith "Trace: goal not found"
+;;
+
+let trace_eq e =
+  try H.find trace_table e
+  with Not_found -> failwith "Trace: equation not found"
+;;
 
 let ancestors eqs = 
   let rec ancestors acc = function
@@ -130,8 +148,8 @@ let ancestors eqs =
         if List.mem eq (List.map fst acc) then
           ancestors acc eqs
         else
-          let o, _ = H.find parents_table eq in
-          let ps = parents o in
+          let o = fst (trace_eq eq) in
+          let ps = List.map fst (parents o) in
           let acc' = ancestors acc (Listset.diff ps [eq | eq, _ <- acc]) in
           let xs = List.map fst acc' in
           assert (List.length xs = List.length (Listx.unique xs));
@@ -177,7 +195,7 @@ let rename_to (l1, r1) (l2, r2) =
 let rec last (t, steps) =
   match steps with
   | [] -> t
-  | (_, _, _, u) :: steps' -> last (u, steps')
+  | (_, _, _, _, u) :: steps' -> last (u, steps')
 ;;
 
 let equation_of (t, conv) = (t, last (t, conv))
@@ -189,9 +207,9 @@ let rev (t, steps) =
   let rec rev (t, steps) =
     match steps with
     | [] -> t,[]
-    | (p, rl, d, u) :: ss ->
+    | (p, rl, d, sub, u) :: ss ->
       let v, ss' = rev (u,ss) in
-      v, ss' @ [p, rl, flip d, t]
+      v, ss' @ [p, rl, flip d, sub, t]
   in
   let u, steps_rev = rev (t,steps) in
   assert (last (t, steps) = u);
@@ -201,7 +219,9 @@ let rev (t, steps) =
 let rev_unless conv b = if b then conv else rev conv
 
 let subst_conversion sub (t,steps) =
-  let subst_step (p, rl ,d, u) = (p, rl, d, T.substitute sub u) in
+  let subst_step (p, rl, d, tau, u) =
+    (p, rl, d, Subst.compose tau sub, T.substitute sub u)
+  in
   T.substitute sub t, List.map subst_step steps
 ;;
 
@@ -219,26 +239,28 @@ let solve (s, steps) (u, v) goals =
   let t = last (s, steps) in
   let rec solve steps_bef s' = function
     | [] -> failwith "Trace.solve: equation not found"
-    | (p, rl, d, t') :: steps_aft ->
+    | (p, rl, d, sub, t') :: steps_aft ->
       if rl <> (u, v) && rl <> (v, u) then
-        solve ((p, rl, flip d, s') :: steps_bef) t' steps_aft
+        solve ((p, rl, flip d, sub, s') :: steps_bef) t' steps_aft
       else (
         let is_instance g = R.is_instance g (s,t) in
         if S.do_proof_debug () && not (List.exists is_instance goals) then
           F.printf "no instance: %a\n %!" R.print (s,t);
-        let st_step = root, (s, t), LeftRight, t in
-        let res = s', steps_bef @ [st_step] @ (snd (rev (t', steps_aft))) in
         let oriented_rl = if d = LeftRight then rl else R.flip rl in
+        let res step = s', steps_bef @ [step] @ (snd (rev (t', steps_aft))) in
         if (s', t') = oriented_rl then
-          rev_unless res ((s', t') = (u, v)), Sub.empty
+          let st_step = root, (s, t), LeftRight, Sub.empty, t in
+          rev_unless (res st_step) ((s', t') = (u, v)), Sub.empty
         else (
           if S.do_proof_debug () then
             F.printf "INSTANTIATE  %a TO %a\n%!" R.print oriented_rl
               R.print (s', t');
           let tau = R.instantiate_to oriented_rl (s', t') in
           assert ((R.substitute tau oriented_rl) = (s', t'));
-          assert (equation_of res = (s', t'));
-          let conv = rev_unless res (R.substitute tau (u, v) = (s', t')) in
+          let st_step = root, (s, t), LeftRight, tau, t in
+          assert (equation_of (res st_step) = (s', t'));
+          let uv_tau = R.substitute tau (u, v) in
+          let conv = rev_unless (res st_step) (uv_tau = (s', t')) in
           if S.do_proof_debug () then (
             F.printf "SUBSTITUTE TO %a\n%!" R.print (equation_of conv);
             subst_print tau;
@@ -258,31 +280,24 @@ let normalize rl d =
 ;;
 
 let rewrite_conv t steps =
-  let step_conv (t, acc) (rl, p) =
+  let step_conv (t, acc) (rl, p, sub) =
     try
-      let u = Rewriting.step_at_with t p rl in
+      let u, _ = Rewriting.step_at_with t p rl in
       let rl', d' = normalize rl LeftRight in
-      u, (p, rl', d', u) :: acc
+      u, (p, rl', d', sub, u) :: acc
     with _ -> failwith "Trace.rewrite_conv: no match"
   in
   List.rev (snd (List.fold_left step_conv (t, []) steps))
 ;;
 
 let rewrite_conv' t steps =
-  let step_conv (t, acc) (rl, p, u) =
+  let step_conv (t, acc) (rl, p, sub, u) =
   try
     let rl', d' = normalize rl LeftRight in
-    u, (p, rl', d', u) :: acc
+    u, (p, rl', d', sub, u) :: acc
   with _ -> failwith "Trace.rewrite_conv: no match"
   in
   List.rev (snd (List.fold_left step_conv (t, []) steps))
-;;
-
-let rec last (s, ss) =
-  match ss with
-  | [] -> s
-  | [_, _, _, t] -> t
-  | (_, _, _, t) :: steps -> last (t, steps)
 ;;
 
 let the_overlap r1 r2 p =
@@ -297,15 +312,15 @@ let conversion_for (s, t) o =
     F.printf "\n CONVERSION FOR %a\n%!" R.print (s, t);
   match o with
   | Initial -> s, []
-  | CP (r1, p, r2) -> (* r1 is inside, r2 outside *)
-    let ((r1, p, r2, mgu) as o) = the_overlap r1 r2 p in
-    let s', t' = O.cp_of_overlap o in
+  | CP (r1, p, mgu, r2) -> (* r1 is inside, r2 outside *)
+    let s', t' = O.cp_of_overlap (r1, p, r2, mgu) in
     let ren, keep_dir = rename_to (s',t') (s,t) in
     let u = T.substitute ren (T.substitute mgu (fst r2)) in
     let r1, d1 = normalize r1 RightLeft in
     let r2, d2 = normalize r2 LeftRight in
     let s', t' = R.substitute ren (s', t') in
-    let conv = s', [(p, r1, d1, u); (root, r2, d2, t')] in
+    (* FIXME: extend mgu for variables on other side? *)
+    let conv = s', [(p, r1, d1, mgu, u); (root, r2, d2, mgu, t')] in
     let v, conv = rev_unless conv keep_dir in
     if S.do_proof_debug () then (
       F.printf "\ndeduce conversion for %a %s:\n%!"
@@ -321,7 +336,7 @@ let conversion_for (s, t) o =
     let s0f, t0f = R.substitute ren (s0, t0) in
     let _, sconv = subst_conversion ren (s0, sconv) in
     let _, tconv = subst_conversion ren (t0, tconv) in
-    let st_step = (root, (s0, t0), LeftRight, t0f) in
+    let st_step = (root, (s0, t0), LeftRight, ren, t0f) in
     let u = last (s0f, sconv) in
     assert ((keep_dir && u = s) || (not keep_dir && u = t));
     let _, rsconv = rev (s0f, sconv) in
@@ -347,39 +362,29 @@ let trace_for eqs =
 (* given a proven goal g with origin o, trace it back to an initial goal;
    the encountered non-initial goals are collected in goals_acc while the used
    rules are collectd in rule_acc*)
-let goal_ancestors g o =
-  let rec goal_ancestors rule_acc goals_acc g o =
-    try
-      assert (snd (Variant.normalize_rule_dir g));
-      if S.do_proof_debug () then
-        F.printf "NEXT TACKLE GOAL %a:\n%!" R.print g;
-      match o with
-      (* recursion stops if we reach an initial goal; need to reverse list
-         of subsequent goals encountered *)
-      | Initial -> Listx.unique rule_acc, goals_acc
-      (* g was obtained from rewriting goal (s,t) using rule (rs,rt) *)
-      | Rewrite ((s, t), (rs, rt)) ->
-        assert (snd (Variant.normalize_rule_dir (s, t)));
-        let rls = Listx.unique (List.map fst (rs @ rt)) in
-        let o, i = H.find goal_trace_table (s, t) in
-        if S.do_proof_debug () then
-          F.printf "R-ADD GOAL %i:%a \n\n%!" i R.print (s, t);
-        goal_ancestors (rls @ rule_acc) (((s, t),o) :: goals_acc) (s, t) o
-      (* g was obtained from deduce with goal g0 using rule rl *)
-      | CP (rl, p, g0) ->
-        let g0 = Variant.normalize_rule g0 in
-        let o, i = H.find goal_trace_table g0 in
-        if S.do_proof_debug () then
-          F.printf "D-ADD GOAL %i:%a \n\n%!" i R.print g0;
-        let rl', _ = normalize rl LeftRight in
-        goal_ancestors (rl' :: rule_acc) ((g0, o) :: goals_acc) g0 o
-    with Not_found -> (
-      F.printf "no origin found for goal %a\n%!" R.print g;
-      failwith "Trace.goal_ancestors: equation unknown"
-    )
+let goal_ancestors g =
+  let rec goal_ancestors rule_acc goals_acc g =
+    let o, i = trace_goal g in
+    assert (snd (Variant.normalize_rule_dir g));
+    if S.do_proof_debug () then
+      F.printf "NEXT TACKLE GOAL %a:\n%!" R.print g;
+    let goals_acc = (g, o) :: goals_acc in
+    match o with
+    (* need to reverse list of subsequent goals encountered *)
+    | Initial -> Listx.unique rule_acc, goals_acc
+    (* g was obtained from rewriting goal (s,t) using rule (rs,rt) *)
+    | Rewrite ((s, t), (rs, rt)) ->
+      assert (snd (Variant.normalize_rule_dir (s, t)));
+      let rls = Listx.unique (List.map (fun (rl, _, _) -> rl) (rs @ rt)) in
+      goal_ancestors (rls @ rule_acc) goals_acc (s, t)
+    (* g was obtained from deduce with goal g0 using rule rl *)
+    | CP (rl, _, _, g0) ->
+      let g0 = Variant.normalize_rule g0 in
+      let rl', _ = normalize rl LeftRight in
+      goal_ancestors (rl' :: rule_acc) goals_acc g0
   in
   let g = Variant.normalize_rule g in
-  goal_ancestors [] [g, o] g o
+  goal_ancestors [] [] g
 ;;
 
 (* Create conversions for a list of goals with associated origins. The goal list
@@ -403,7 +408,7 @@ let rec goal_conversions gconv_acc = function
       );
       goal_conversions (gconv :: gconv_acc) goals
     (* (v,w) was obtained from deduce with goal g0 using rule rl *)
-    | CP (rl, p, g0) ->
+    | CP (rl, _, _, g0) ->
       let g0 = Variant.normalize_rule g0 in
       if S.do_proof_debug () then
         F.printf "DERIVED BY DEDUCE FROM %a:\n%!" R.print g0;
@@ -421,8 +426,8 @@ let rec goal_conversions gconv_acc = function
 
 (* Given a goal g with origin o and a conversion gc for it, find all its
    ancestors and build conversions for them. *)
-let all_goal_conversions gc g o =
-  let rls, goals = goal_ancestors g o in
+let all_goal_conversions gc g =
+  let rls, goals = goal_ancestors g in
   rls, goal_conversions [gc] (List.rev goals)
 ;;
 
@@ -434,7 +439,7 @@ let subst_append (s, sconv) (t, tconv) =
 ;;
 
 let goal_conv (s, t) (rs, rt) =
-  let t', rtconv = rev (t,rewrite_conv' t rt) in
+  let t', rtconv = rev (t, rewrite_conv' t rt) in
   let pg_conv = subst_append (s, rewrite_conv' s rs) (t', rtconv) in
   equation_of pg_conv, pg_conv
 ;;
@@ -454,14 +459,10 @@ let goal_proof g_orig (s, t) (rs, rt) sigma =
      cyclic dependencies: original goal (s,t) initially not in table produces
      (s',t') might produce (s,t), now added into table, ...*)
   let grls, gconvs =
-    if (s, t) <> g_orig then (
-      let o = try fst (H.find goal_trace_table (s, t)) with _ -> Initial in
-      H.add goal_trace_table g_orig (Initial, -1);
-      all_goal_conversions goal_conv (s, t) o
-    ) else
-      [], []
+    if (s, t) <> g_orig then all_goal_conversions goal_conv (s, t)
+    else [], []
   in
-  let rls = Listx.unique ([ r | r, _, _ <- rs @ rt] @ grls) in
+  let rls = Listx.unique ([ r | r, _, _, _ <- rs @ rt] @ grls) in
   let t = trace_for rls @ [goal_conv] @ gconvs in
   if S.do_proof_debug () then (
     F.printf "\nFINAL CONVERSIONS: \n%!";
@@ -488,9 +489,7 @@ let rec to_simplifyl (l,r) rs =
   let steps = rewrite_conv l rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
-    | (p, rl, d, v) :: ss ->
-      let s = SimplifyL ((u, r), v) in
-      collect (s :: acc) v ss
+    | (p, _, _, _, v) :: ss -> collect (SimplifyL ((u, r), v) :: acc) v ss
   in 
   last (l, steps), collect [] l steps
 ;;
@@ -500,9 +499,7 @@ let rec to_simplifyr (l, r) rs =
   let steps = rewrite_conv r rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
-    | (p, rl, d, v) :: ss ->
-      let s = SimplifyR ((l, u), v) in
-      collect (s :: acc) v ss
+    | (p, _, _, _, v) :: ss -> collect (SimplifyR ((l, u), v) :: acc) v ss
   in 
   last (r, steps), collect [] r steps
 ;;
@@ -513,7 +510,7 @@ let rec creation_steps acc = function
   | ((s, t), o) :: es -> (
     match o with
     | Initial -> creation_steps acc es
-    | CP (r1, p, r2) ->
+    | CP (r1, p, _, r2) ->
       (* rename *both* (rules not obeying variable condition make problems) *)
       let r1, r2 = R.rename r1, R.rename r2 in
       let (r1, p, r2, mgu) as o = the_overlap r1 r2 p in
@@ -556,10 +553,8 @@ let rec to_collapse (l, r) rs =
   let steps = rewrite_conv l rs in
   let rec collect acc u = function
     | [] -> acc (* reversal happens in caller *)
-    | (p, rl, d, v) :: ss ->
-      let s =
-        if acc = [] then Collapse ((u, r), v) else SimplifyL ((u, r), v)
-      in
+    | (p, _, _, _, v) :: ss ->
+      let s = if acc=[] then Collapse ((u, r), v) else SimplifyL ((u, r), v) in
       collect (s :: acc) v ss
   in
   last (l, steps), collect [] l steps
@@ -570,7 +565,7 @@ let rec to_compose (l, r) rs =
   let steps = rewrite_conv r rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in caller *)
-    | (p, rl, d, v) :: ss -> collect ((Compose ((l, u), v)) :: acc) v ss
+    | (p, _, _, _, v) :: ss -> collect ((Compose ((l, u), v)) :: acc) v ss
   in
   last (r, steps), collect [] r steps
 ;;
@@ -731,4 +726,46 @@ let reconstruct_run ee0 ee rr =
     F.printf "final equations: \n%a\n%!" (Rules.print) (fst res);
     F.printf "final rules: \n%a\n%!" (Rules.print) (snd res));
   run, res
+;;
+
+
+let ancestors_with_subst eqs = 
+  let rec ancestors (eq, sigma) =
+    let eq = Variant.normalize_rule eq in
+    let o = fst (trace_eq eq) in
+    if o = Initial then [eq, sigma]
+    else
+      let ps = [p, Subst.compose tau sigma | p, tau <- parents o] in
+      List.concat (List.map ancestors ps)
+  in
+  List.concat (List.map ancestors eqs)
+;;
+
+let goal_ancestors_with_subst (g, sigma) =
+  let rec goal_ancestors (g, sigma) =
+    let g = Variant.normalize_rule g in
+    match fst (trace_goal g) with
+    | Initial -> [g, sigma]
+    | Rewrite ((s, t), (rs, rt)) ->
+      assert (snd (Variant.normalize_rule_dir (s, t)));
+      let rls = [ rl, Subst.compose s sigma | rl, _, s <- rs @ rt] in
+      goal_ancestors ((s, t), sigma) @ (ancestors_with_subst rls)
+    | CP (rl, _, mu, g0) ->
+      let mu_sigma = Subst.compose mu sigma in
+      goal_ancestors (g0, mu_sigma) @ (ancestors_with_subst [rl, mu_sigma])
+  in
+  goal_ancestors (g, sigma)
+;;
+
+let proof_eq_instances (es, gs) = function
+  | Settings.Proof ((s,t),(rs, rt), sigma) ->
+    Format.printf "proved goal %a\n" Rule.print (s,t);
+    let s' = last (s, rewrite_conv' s rs) in
+    let t' = last (t, rewrite_conv' t rt) in
+    assert (Subst.unifiable s' t');
+    assert (Term.substitute sigma s' = Term.substitute sigma t');
+    let rl_pos_sub = List.map (fun (rl, p, r, _) -> (rl, p, r)) in
+    add_rewrite_goal (s', t') (s, t) (rl_pos_sub rs, rl_pos_sub rt);
+    goal_ancestors_with_subst ((s', t'), sigma);
+  | _ -> []
 ;;

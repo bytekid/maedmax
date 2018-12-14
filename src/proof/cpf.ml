@@ -30,7 +30,7 @@ let input_to_xml es g_opt =
   X.Element("input", [], [input])
 ;;
 
-let step_to_xml (p, rl, dir, t) =
+let step_to_xml (p, rl, dir, _, t) =
   let dirstr = function Trace.LeftRight -> "leftRight" | _ -> "rightLeft" in
   let dirxml = X.Element(dirstr dir, [], []) in
   let components = [pos_to_xml p; Rule.to_xml rl; dirxml; T.to_xml t] in

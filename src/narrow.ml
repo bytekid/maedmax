@@ -32,7 +32,7 @@ let propagate_basic_pos p ps r =
 let rec nf rr (s,ps) =
   let nf_at_with p (t,pt) (l,r) =
     try
-      let u = Rewriting.step_at_with t p (l,r) in
+      let u, _ = Rewriting.step_at_with t p (l, r) in
       (u, propagate_basic_pos p pt r)
     with _ -> (t,pt)
   in
