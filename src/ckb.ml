@@ -458,15 +458,16 @@ let c_max_red_pre ctx cc =
 let c_max_red_pre ctx = A.take_time A.t_cred (c_max_red_pre ctx)
 
 let c_max_red ctx cc =
-  Hashtbl.iter (fun st c ->
-  let r = (C.get_rdcbl_var ctx st) <=>> c in
-  Logic.require r;
-  if !(A.shape) = Boro || !(A.shape) = Ossigeno then (
-    Logic.assert_weighted (C.get_rdcbl_var ctx st) 30;
-    Logic.assert_weighted (C.find_rule st) 6)
-  else 
-    Logic.assert_weighted (C.get_rdcbl_var ctx st) 6;
-  ) C.ht_rdcbl_constr;
+  let reducible st c =
+    let r = (C.get_rdcbl_var ctx st) <=>> c in
+    Logic.require r;
+    if !(A.shape) = Boro || !(A.shape) = Ossigeno then (
+      Logic.assert_weighted (C.get_rdcbl_var ctx st) 30;
+      Logic.assert_weighted (C.find_rule st) 6)
+    else
+      Logic.assert_weighted (C.get_rdcbl_var ctx st) 6;
+  in
+  Hashtbl.iter reducible C.ht_rdcbl_constr;
 ;;
 
 let c_max_red ctx = A.take_time A.t_cred (c_max_red ctx)

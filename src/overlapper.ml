@@ -72,7 +72,7 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
     else (
       let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
       let bd =
-        if not is_equality then h.hard_bound_goals else h.hard_bound_equations
+        if Lit.is_inequality rlo then h.hard_bound_goals else h.hard_bound_equations
       in
       let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
       match o with
