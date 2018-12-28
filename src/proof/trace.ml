@@ -104,8 +104,8 @@ let gadd g o =
   if not (H.mem goal_trace_table g) then (
     let c = !count in
     count := c + 1;
-    if S.do_proof_debug () then
-      F.printf "ADDING GOAL %i:%a %s\n" c R.print g (origin_string o);
+    (*if S.do_proof_debug () then
+      F.printf "ADDING GOAL %i:%a %s\n" c R.print g (origin_string o);*)
     H.add goal_trace_table g (o, c))
 ;;
 
@@ -748,15 +748,14 @@ let goal_ancestors_with_subst (g, sigma) =
   let mk eq = { S.terms = eq; S.is_equality = false } in
   let restr subst rl = [x,t | x,t <- subst; List.mem x (Rule.variables rl)] in
   let rec goal_ancestors (g', sigma) =
-    Format.printf "looking for ancestors of %a (substituted: %a)\n%!"
-      Rule.print g' Rule.print (Rule.substitute sigma g');
+    (*Format.printf "looking for ancestors of %a (substituted: %a)\n%!"
+      Rule.print g' Rule.print (Rule.substitute sigma g');*)
     let g = Variant.normalize_rule g' in
     let sigma = Subst.compose (fst (rename_to g g')) sigma in
     match fst (trace_goal g) with
-    | Initial -> 
-    Format.printf " initial %a\n%!" Rule.print (Rule.substitute sigma g); [mk g, sigma]
+    | Initial -> [mk g, sigma]
     | Rewrite ((s, t), (rs, rt)) ->
-    Format.printf " rewritew %a\n%!" Rule.print (s,t);
+      (*Format.printf " rewritew %a\n%!" Rule.print (s,t);*)
       assert (snd (Variant.normalize_rule_dir (s, t)));
       let rls = [ rl, restr (Subst.compose s sigma) rl | rl, _, s <- rs @ rt] in
       goal_ancestors ((s, t), restr sigma (s, t)) @ (ancestors_with_subst rls)
@@ -764,12 +763,12 @@ let goal_ancestors_with_subst (g, sigma) =
       let s, t = O.cp_of_overlap (rl, p, g0, mu) in
       let ren, keep_dir = rename_to (s,t) g in
       let subst st = restr (Subst.compose mu (Subst.compose ren sigma)) st in
-      Format.printf " CP %a %a\n%!" Rule.print g0
+      (*Format.printf " CP %a %a\n%!" Rule.print g0
       Rule.print rl;
       Format.printf " CP %a %a\n%!" Rule.print (Rule.substitute mu g0)
       Rule.print (Rule.substitute mu rl);
       Format.printf " CP %a %a\n%!" Rule.print (Rule.substitute (subst g0) g0)
-      Rule.print (Rule.substitute (subst rl) rl);
+      Rule.print (Rule.substitute (subst rl) rl);*)
       goal_ancestors (g0, subst g0) @ (ancestors_with_subst [rl, subst rl])
   in
   Listx.unique (goal_ancestors (g, sigma))
@@ -777,7 +776,7 @@ let goal_ancestors_with_subst (g, sigma) =
 
 let proof_literal_instances (es, gs) = function
   | Settings.Proof ((s,t),(rs, rt), sigma) ->
-    Format.printf "proved goal %a\n" Rule.print (s,t);
+    (*Format.printf "proved goal %a\n" Rule.print (s,t);*)
     let s' = last (s, rewrite_conv' s rs) in
     let t' = last (t, rewrite_conv' t rt) in
     assert (Subst.unifiable s' t');

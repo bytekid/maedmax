@@ -106,15 +106,13 @@ let print_assignment eval cls_vars =
       (* expressions not occurring in formula can evaluate to false in Yices
          even if according to the model they should become true (not in Z3) *)
       Format.printf "  %a %s %a \n%!" Term.print l eq Term.print r
-      (*Logic.show x;
-      Format.printf "%! is %B\n%!" e*)
     in
     List.iter print lxs
   )
 ;;
 
 let print_constraints ctx cls_vars =
-  if debug () then (
+  if debug () && false then (
     Format.printf "Constraints:%!";
     let negate_if_ineq x l = if is_negative l then !! x else x in
     let lits (ls, _, xs) = [negate_if_ineq x l | l, x <- Listx.zip ls xs] in
