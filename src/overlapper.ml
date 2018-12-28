@@ -71,21 +71,22 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
     else (
       let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
-      let is_goal = Lit.is_goal rlo in
-      let bd = if is_goal then h.hard_bound_goals else h.hard_bound_equations in
+      let bd =
+        if not is_equality then h.hard_bound_goals else h.hard_bound_equations
+      in
       let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
       match o with
         | None -> None
         | Some o -> (
           let s,t = O.cp_of_overlap o in
           if Rule.size (s, t) > bd then None
-          else if s = t && is_equality && not is_goal then None
+          else if s = t && is_equality then None
           else (
             let st' = V.normalize_rule (s,t) in
             if !(Settings.do_proof) <> None then
-              (if is_goal || not is_equality then
+              (if not is_equality then
                 Trc.add_overlap_goal else Trc.add_overlap) st' o;
-            Some (Lit.make st' is_equality is_goal))))
+            Some (Lit.make st' is_equality))))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)
@@ -93,8 +94,8 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
     let l,r = Lit.terms rl in
     let l' = Term.subterm_at p l in
     let rs = self#unifiables l' in
-    let is_goal = Lit.is_goal rl in
-    let bd = if is_goal then h.hard_bound_goals else h.hard_bound_equations in
+    let is_ineq = Lit.is_inequality rl in
+    let bd = if is_ineq then h.hard_bound_goals else h.hard_bound_equations in
     let max_size = bd - (Lit.size rl - (Term.size l')) in
     let add os = function None -> os | Some o -> o :: os in
     let rl_cands = [rl' | rl', s <- rs; s <= max_size] in

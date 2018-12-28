@@ -284,7 +284,7 @@ let node_features n inst_count unif_count =
   let age = (max_age -. float_of_int a) /. max_age in 
   let m, c = inst_count n, unif_count n in
   {
-    is_goal_selection = Literal.is_goal n;
+    is_goal_selection = Literal.is_inequality n;
     size = Rule.size (s, t);
     size_diff = abs (Term.size s - Term.size t);
     linear = Rule.linear (s, t);

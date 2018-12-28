@@ -15,7 +15,6 @@ let print_sizes _ =
 
 let print ppf l =
   let eq = if l.is_equality then "=" else "!=" in
-  let eq = eq ^ (if l.is_goal then "G" else "") in
   Format.fprintf ppf "%a %s %a" Term.print (fst l.terms) eq Term.print (snd l.terms)
 ;;
 
@@ -23,21 +22,17 @@ let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
 
 let killed = ref 0
 
-let make ts e g = {terms = ts; is_goal = g; is_equality = e }
+let make ts e = {terms = ts; is_equality = e }
 
 let terms l = l.terms
 
 let size l = Rule.size (l.terms)
-
-let is_goal l = l.is_goal
 
 let is_equality l = l.is_equality
 
 let is_inequality l = not l.is_equality
 
 let is_equal l l' = compare l l' = 0
-
-let to_goal l = { l with is_goal = true }
 
 let negate l = { l with is_equality = not l.is_equality }
 
@@ -58,43 +53,38 @@ let not_increasing l = not (Term.is_subterm (fst l.terms) (snd l.terms))
 
 (* Iff none of the literals is a goal, filter out trivial CPs *)
 let cps h l l' =
-  assert (not (l.is_goal && l'.is_goal));
-  if not l.is_equality && not l'.is_equality then []
+  if is_inequality l && is_inequality l' then []
   else
     let r1, r2 = l.terms, l'.terms in
     let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2 ] in
-    let is_goal = l.is_goal || l'.is_goal in
     let is_eq = l.is_equality && l'.is_equality in
-    let no_trivials = is_eq && not is_goal in
-    let os = if no_trivials then [ (s,t),o | (s,t),o <- os; s <> t ] else os in
+    let os = if is_eq then [ (s,t),o | (s,t),o <- os; s <> t ] else os in
     if !(Settings.do_proof) <> None then (
-      let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
+      let trace = if not is_eq then T.add_overlap_goal else T.add_overlap in
       let add ((s, t), o) =
         if s <> t then trace (Variant.normalize_rule (s, t)) o
       in List.iter add os);
     let os' = [o | o, _ <- os; Rule.size o <= h.hard_bound_goals] in
-    [make (Variant.normalize_rule o) is_eq is_goal | o <- os']
+    [make (Variant.normalize_rule o) is_eq | o <- os']
 ;;
 
 (* FIXME if used, hard bound should be incorporated *)
 let pcps rew l l' =
   let prime ((l,_),_,_,tau) = rew#is_nf_below_root (Term.substitute tau l) in
-  assert (not (l.is_goal && l'.is_goal));
   if not l.is_equality && not l'.is_equality then []
   else
     let r1, r2 = l.terms, l'.terms in
     let os = [ O.cp_of_overlap o,o | o <- O.overlaps_between r1 r2; prime o ] in
     let is_eq = l.is_equality && l'.is_equality in
-    let is_goal = l.is_goal || l'.is_goal in
     if !(Settings.do_proof) <> None then (
-      let trace = if is_goal then T.add_overlap_goal else T.add_overlap in
+      let trace = if not is_eq then T.add_overlap_goal else T.add_overlap in
       let add ((s,t),o) =
         if s <> t then trace (Variant.normalize_rule (s, t)) o
       in List.iter add os);
-    [ make (Variant.normalize_rule (fst o)) is_eq is_goal | o <- os ]
+    [ make (Variant.normalize_rule (fst o)) is_eq | o <- os ]
 ;;
 
-let rewriter_nf_with ?(max_size=0) l rewriter =
+let rewriter_nf_with ?(max_size = 0) l rewriter =
   let ts = l.terms in
   let s', rs = rewriter#nf (fst ts) in
   let sz_s = Term.size s' in
@@ -104,20 +94,20 @@ let rewriter_nf_with ?(max_size=0) l rewriter =
   if max_size <> 0 && Term.size t' + sz_s > max_size then
     raise Rewriter.Max_term_size_exceeded;
   let rls = List.map (fun (rl,_,_) -> rl) (rs @ rt) in
-  if s' = t' && not l.is_goal && l.is_equality then (
+  if s' = t' && l.is_equality then (
     if !(Settings.do_proof) <> None then (
-      let st' = Variant.normalize_rule (s',t') in
-      T.add_rewrite st' ts (rs,rt);
+      let st' = Variant.normalize_rule (s', t') in
+      T.add_rewrite st' ts (rs, rt);
       T.add_delete st');
     Some([], rls))
-  else if Rule.equal ts (s',t') then None
+  else if Rule.equal ts (s', t') then None
   else (
-    let st' = Variant.normalize_rule (s',t') in
-    let g = make st' l.is_equality l.is_goal in
-    if !(Settings.do_proof) <> None then
-      (if l.is_goal then T.add_rewrite_goal else T.add_rewrite) st' ts (rs,rt);
-    (* preserve goal/equality status *)
-    Some ([ g ], rls))
+    let st' = Variant.normalize_rule (s', t') in
+    let g = make st' l.is_equality in
+    (if !(Settings.do_proof) <> None then
+      let trc = if is_inequality l then T.add_rewrite_goal else T.add_rewrite in
+      trc st' ts (rs, rt));
+    Some ([g], rls))
 ;;
   
 let joins l trs =
@@ -158,13 +148,9 @@ let are_c_equivalent cs l l' =
 
 let is_ground l = Rule.is_ground l.terms
 
-let make_axiom ts = make ts true false
+let make_axiom ts = make ts true
 
-let make_neg_axiom ts = make ts false false
-
-let make_goal ts = make ts true true
-
-let make_neg_goal ts = make ts false true
+let make_neg_axiom ts = make ts false
 
 let is_unifiable l = let u,v = l.terms in Subst.unifiable u v
 

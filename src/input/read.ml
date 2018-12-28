@@ -45,8 +45,7 @@ let transform_input cls gs =
   else
     let eqs, gs = to_unit cls, to_unit gs in
     let gs_pos, gs_neg = List.partition Literal.is_equality gs in
-    let gs_neg' = List.map Literal.to_goal gs_neg in
-    Settings.Unit(eqs @ gs_pos, gs_neg')
+    Settings.Unit(eqs @ gs_pos, gs_neg)
 ;;
 
 let read_tptp orig_filename =

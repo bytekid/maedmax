@@ -62,7 +62,7 @@ type shape =
   | Zolfo
   | NoShape
 
-type literal = { terms: Rule.t; is_goal: bool; is_equality: bool }
+type literal = { terms: Rule.t; is_equality: bool }
 
 type clause = literal list
 

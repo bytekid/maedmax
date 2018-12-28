@@ -178,7 +178,7 @@ let node_features n cc =
   let max_age = float_of_int (Nodes.max_age ()) in
   let age = (max_age -. float_of_int a) /. max_age in
   {
-    is_goal_selection = Literal.is_goal n;
+    is_goal_selection = Literal.is_inequality n;
     size = Rule.size (s, t);
     size_diff = abs (T.size s - T.size t);
     linear = Rule.linear (s, t);
