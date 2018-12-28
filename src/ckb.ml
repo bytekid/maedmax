@@ -403,7 +403,8 @@ let reducibility_checker = ref (new Rewriter.reducibility_checker []);;
 
 let c_cpred ctx cc_vs =
   (* create indices, cc_vs is already symmetric *)
-  let rls = [ Lit.terms n | n <- !new_nodes; Lit.is_equality n ] in
+  assert(List.for_all Lit.is_equality !new_nodes);
+  let rls = [ Lit.terms n | n <- !new_nodes ] in
   let nn_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
   let rdc = new Rewriter.reducibility_checker nn_vs in
   rdc#init (Some !reducibility_checker);
@@ -448,7 +449,7 @@ let c_max_red_pre ctx cc =
     Hashtbl.replace C.ht_rdcbl_constr st constr;
     ignore (C.get_rdcbl_var ctx st)
   in
-  let cc_newl = [ Lit.terms n |  n <- !new_nodes; Lit.is_equality n ] in
+  let cc_newl = [ Lit.terms n |  n <- !new_nodes ] in
   let cc_old = [ n |  n <- cc; not (List.mem n cc_newl) ] in
   L.iter (fun st -> update_rdcbl_constr st cc) cc_newl;
   L.iter (fun st -> update_rdcbl_constr st cc_newl) cc_old
@@ -521,8 +522,9 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
 (* find k maximal TRSs *)
 let max_k ctx cc gs =
   let k = !heuristic.k !(A.iterations) in
-  let cc_eq = [ Lit.terms n | n <- NS.to_list cc; Lit.is_equality n ] in
-  let cc_symm = [n | n <- NS.to_list (NS.symmetric cc); Lit.is_equality n] in 
+  (*assert(List.for_all Lit.is_equality (NS.to_list cc));*)
+  let cc_eq = [ Lit.terms n | n <- NS.to_list cc ] in
+  let cc_symm = [n | n <- NS.to_list (NS.symmetric cc)] in 
   let cc_symml = [Lit.terms c | c <- cc_symm] in
   L.iter (fun n -> ignore (C.store_rule_var ctx n)) cc_symml;
   (* lookup is not for free: get these variables only once *)
