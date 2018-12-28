@@ -135,11 +135,10 @@ let store_remaining_goals ctx ns =
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
-  if has_comp () then
-    begin
+  if has_comp () then (
     let rdcts = try Hashtbl.find rewrite_trace st with Not_found -> [] in
     Hashtbl.replace rewrite_trace st ((rls, st') :: rdcts)
-    end
+  )
 ;;
 
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
@@ -156,7 +155,7 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
   let rewrite n (irrdcbl, news) =
     match nf n with
       | None -> (NS.add n irrdcbl, news) (* no progress here *)
-      | Some (nnews, rs) -> ((* if terms got equal, nnew is empty *)
+      | Some (nnews, rs) -> ((* if terms got equal, nnews is empty *)
           if !(Settings.do_proof) <> None && nnews <> [] then
             add_rewrite_trace (Lit.terms n) rs (Lit.terms (L.hd nnews));
           irrdcbl, NS.add_list nnews news)
@@ -1008,7 +1007,7 @@ let ckb_for_instgen ctx flags lits =
         L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
       );
       let ans, proof = phi ctx ns0 (NS.of_list gs0) in
-      ans, Trace.proof_eq_instances input proof
+      ans, Trace.proof_literal_instances input proof
     with Restart es_new -> (
       pop_strategy ();
       St.clear ();

@@ -131,7 +131,9 @@ let add_rewrite_goal eq eq0 steps = gadd eq (Rewrite (eq0,steps))
 
 let trace_goal g =
   try H.find goal_trace_table g
-  with Not_found -> failwith "Trace: goal not found"
+  with Not_found ->
+    Format.printf "trace goal %a\n%!" Rule.print g;
+    failwith "Trace.trace_goal: not found"
 ;;
 
 let trace_eq e =
@@ -730,10 +732,11 @@ let reconstruct_run ee0 ee rr =
 
 
 let ancestors_with_subst eqs = 
+  let mk eq = { S.terms = eq; S.is_goal = false; S.is_equality = true } in
   let rec ancestors (eq, sigma) =
     let eq = Variant.normalize_rule eq in
     let o = fst (trace_eq eq) in
-    if o = Initial then [eq, sigma]
+    if o = Initial then [mk eq, sigma]
     else
       let ps = [p, Subst.compose tau sigma | p, tau <- parents o] in
       List.concat (List.map ancestors ps)
@@ -742,22 +745,37 @@ let ancestors_with_subst eqs =
 ;;
 
 let goal_ancestors_with_subst (g, sigma) =
-  let rec goal_ancestors (g, sigma) =
-    let g = Variant.normalize_rule g in
+  let mk eq = { S.terms = eq; S.is_goal = false; S.is_equality = false } in
+  let restr subst rl = [x,t | x,t <- subst; List.mem x (Rule.variables rl)] in
+  let rec goal_ancestors (g', sigma) =
+    Format.printf "looking for ancestors of %a (substituted: %a)\n%!"
+      Rule.print g' Rule.print (Rule.substitute sigma g');
+    let g = Variant.normalize_rule g' in
+    let sigma = Subst.compose (fst (rename_to g g')) sigma in
     match fst (trace_goal g) with
-    | Initial -> [g, sigma]
+    | Initial -> 
+    Format.printf " initial %a\n%!" Rule.print (Rule.substitute sigma g); [mk g, sigma]
     | Rewrite ((s, t), (rs, rt)) ->
+    Format.printf " rewritew %a\n%!" Rule.print (s,t);
       assert (snd (Variant.normalize_rule_dir (s, t)));
-      let rls = [ rl, Subst.compose s sigma | rl, _, s <- rs @ rt] in
-      goal_ancestors ((s, t), sigma) @ (ancestors_with_subst rls)
-    | CP (rl, _, mu, g0) ->
-      let mu_sigma = Subst.compose mu sigma in
-      goal_ancestors (g0, mu_sigma) @ (ancestors_with_subst [rl, mu_sigma])
+      let rls = [ rl, restr (Subst.compose s sigma) rl | rl, _, s <- rs @ rt] in
+      goal_ancestors ((s, t), restr sigma (s, t)) @ (ancestors_with_subst rls)
+    | CP (rl, p, mu, g0) ->
+      let s, t = O.cp_of_overlap (rl, p, g0, mu) in
+      let ren, keep_dir = rename_to (s,t) g in
+      let subst st = restr (Subst.compose mu (Subst.compose ren sigma)) st in
+      Format.printf " CP %a %a\n%!" Rule.print g0
+      Rule.print rl;
+      Format.printf " CP %a %a\n%!" Rule.print (Rule.substitute mu g0)
+      Rule.print (Rule.substitute mu rl);
+      Format.printf " CP %a %a\n%!" Rule.print (Rule.substitute (subst g0) g0)
+      Rule.print (Rule.substitute (subst rl) rl);
+      goal_ancestors (g0, subst g0) @ (ancestors_with_subst [rl, subst rl])
   in
-  goal_ancestors (g, sigma)
+  Listx.unique (goal_ancestors (g, sigma))
 ;;
 
-let proof_eq_instances (es, gs) = function
+let proof_literal_instances (es, gs) = function
   | Settings.Proof ((s,t),(rs, rt), sigma) ->
     Format.printf "proved goal %a\n" Rule.print (s,t);
     let s' = last (s, rewrite_conv' s rs) in
@@ -765,7 +783,8 @@ let proof_eq_instances (es, gs) = function
     assert (Subst.unifiable s' t');
     assert (Term.substitute sigma s' = Term.substitute sigma t');
     let rl_pos_sub = List.map (fun (rl, p, r, _) -> (rl, p, r)) in
-    add_rewrite_goal (s', t') (s, t) (rl_pos_sub rs, rl_pos_sub rt);
+    if (s',t') <> (s,t) then
+      add_rewrite_goal (s', t') (s, t) (rl_pos_sub rs, rl_pos_sub rt);
     goal_ancestors_with_subst ((s', t'), sigma);
   | _ -> []
 ;;

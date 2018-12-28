@@ -50,6 +50,8 @@ let reset _ = mk_context ()
 
 let show x = Format.printf "%s\n%!" (Expr.to_string x.expr)
 
+let dump _ = ()
+
 let mk_true ctx = mk ctx (B.mk_true ctx.ctx)
 
 let mk_false ctx = mk ctx (B.mk_false ctx.ctx)
@@ -116,6 +118,13 @@ let (<+>) x y =
 ;;
 
 let sum = big_binop (fun _ -> false) mk_zero is_zero mk_zero Arith.mk_add
+
+let apply (ctx : context) f args =
+  let any = Sort.mk_uninterpreted_s ctx.ctx "any" in
+  let argsorts = List.map (fun _ -> any) args in
+  let decl = FuncDecl.mk_func_decl_s ctx.ctx f argsorts any in
+  mk ctx (FuncDecl.apply decl [a.expr | a <- args])
+;;
 
 let sum1 = big_binop1 sum
 

@@ -83,7 +83,8 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
           else (
             let st' = V.normalize_rule (s,t) in
             if !(Settings.do_proof) <> None then
-              (if is_goal then Trc.add_overlap_goal else Trc.add_overlap) st' o;
+              (if is_goal || not is_equality then
+                Trc.add_overlap_goal else Trc.add_overlap) st' o;
             Some (Lit.make st' is_equality is_goal))))
 ;;
 

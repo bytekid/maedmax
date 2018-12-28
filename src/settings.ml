@@ -225,4 +225,4 @@ let shape_to_string = function
   | NoShape -> "none"
 ;;
 
-let do_proof_debug () = !do_debug && (!do_proof <> None)
+let do_proof_debug () = true (*!do_debug && (!do_proof <> None)*)

@@ -9,12 +9,14 @@ sig
   val del_context : context -> unit
   val reset : context -> context
   val show : t -> unit
+  val dump : context -> unit
   val mk_true : context -> t
   val mk_false : context -> t
   val mk_zero : context -> t
   val mk_one : context -> t
   val mk_num : context -> int -> t
   val mk_fresh_bool_var : context -> t
+  val mk_int_var : context -> string -> t
   val mk_int_var : context -> string -> t
   val is_true : t -> bool
   val is_false : t -> bool
@@ -30,6 +32,7 @@ sig
   val (<+>) : t -> t -> t
   val sum : context -> t list -> t
   val sum1 : t list -> t
+  val apply : context -> string -> t list -> t
   val (<>>) : t -> t -> t
   val (<>=>) : t -> t -> t
   val (<=>) : t -> t -> t

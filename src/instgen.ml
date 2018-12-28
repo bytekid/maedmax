@@ -56,81 +56,131 @@ let print_literals ppf ls =
   Format.fprintf ppf "@[%a@]" (Formatx.print_list Literal.print "\n ") ls
 ;;
 
+(* various shorthands *)
+let is_negative l = not (Lit.is_equality l);;
+let is_positive l = Lit.is_equality l;;
+let (<=>) = Logic.(<=>);;
+let (<&>) = Logic.(<&>);;
+let (!!) = Logic.(!!);;
+
+let ground cls = [c, Clause.ground c | c <- cls]
+
 let replace_with f h k v =
   (try H.replace h k (f v (H.find h k)) with Not_found -> H.add h k v);
   h
 ;;
 
-let ground cls = [c, Clause.ground c | c <- cls]
+(* map non-ground term pair (s,t) to logical expression encoding [s = t] *)
+let eq_exprs : (Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 256
 
-(* map non-ground literal to variable *)
-let lit_vars : (Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 256
-
-let lit_var rl = try H.find lit_vars rl with _ -> failwith "Instgen: lit_var"
-
-let rule_var ctx l lg = 
-  let x_eq = Cache.rule_var ctx lg.terms in
-  if not (Hashtbl.mem lit_vars l.terms) then
-    Hashtbl.add lit_vars l.terms x_eq;
-  x_eq
+(* compute encoding [e] of literal l if e = l.terms; encodings get cached *)
+let eq_expr ctx l lg =
+  let equality_expr (s,t) =
+    let rec term_expr = function
+      | Term.F (f, ts) ->
+        Logic.apply ctx (Sig.get_fun_name f) (List.map term_expr ts)
+      | _ -> failwith "Instgen.lit_expr: ground term expected" 
+    in
+    (term_expr s) <=> (term_expr t)
+  in
+  try Hashtbl.find eq_exprs l.terms
+  with Not_found -> (
+    let expr = equality_expr lg.terms in
+    Hashtbl.add eq_exprs l.terms expr;
+    expr)
 ;;
 
 let to_logical ctx cls =
-  let negate_unless b v = if b then v else Logic.(!!) v in
-  let lit_var (l, lg) = negate_unless (Lit.is_equality l) (rule_var ctx l lg) in
-  let disj c cg = Logic.big_or ctx [ lit_var l | l <- Listx.zip c cg ] in 
-  [ disj c cg | c, cg <- cls ]
+  let disj c cg = [ eq_expr ctx l lg | l,lg <- Listx.zip c cg ] in 
+  [ c, cg, disj c cg | c, cg <- cls ]
 ;;
 
-let print_assignment eval =
+let print_assignment eval cls_vars =
   if debug () then (
-    Format.printf "Assignment:\n%!";
-    H.iter (fun (l, r) x -> 
-      let eq = if eval x then "=" else "!=" in
-      Format.printf " %a %s %a\n" Term.print l eq Term.print r)
-    lit_vars
+    let lxs = [ lg,x | _, cg, xs <- cls_vars; lg, x <- Listx.zip cg xs] in
+    Format.printf "\nAssignment:\n%!";
+    let print (lg, x) =
+      let e = eval x in
+      let eq = if e then "=" else "!=" in
+      let l, r = Lit.terms lg in
+      (* expressions not occurring in formula can evaluate to false in Yices
+         even if according to the model they should become true (not in Z3) *)
+      Format.printf "  %a %s %a \n%!" Term.print l eq Term.print r
+      (*Logic.show x;
+      Format.printf "%! is %B\n%!" e*)
+    in
+    List.iter print lxs
   )
 ;;
 
-let check_sat ctx cls_vars cls =
+let print_constraints ctx cls_vars =
+  if debug () then (
+    Format.printf "Constraints:%!";
+    let negate_if_ineq x l = if is_negative l then !! x else x in
+    let lits (ls, _, xs) = [negate_if_ineq x l | l, x <- Listx.zip ls xs] in
+    let disj c = Logic.big_or ctx (lits c) in
+    List.iter (fun c -> Logic.show (disj c); Format.printf "\n%!") cls_vars)
+;;
+
+(* cls_vars are triples (c, cg, disj_cg) of a clause c, its grounded version cg,
+   and a logical expression disj_cg representing the latter.
+*)
+let check_sat ctx cls_vars =
   Logic.push ctx;
-  L.iter Logic.require cls_vars;
+  let negate_if_ineq x l = if is_negative l then !! x else x in
+  let disj (ls, _, xs) = [negate_if_ineq x l | l,x <- Listx.zip ls xs] in
+  print_constraints ctx cls_vars;
+  L.iter (fun c -> Logic.require (Logic.big_or ctx (disj c))) cls_vars;
   let res = 
-  if not (Logic.check ctx) then (
-    None
-  ) else (
-    let eval = Logic.eval (Logic.get_model ctx) in
-    let eval_lit l = not (Lit.is_equality l) || eval (lit_var l.terms) in
-    print_assignment eval;
-    let lit b = if b then Lit.make_axiom else Lit.make_neg_axiom in
-    let sel = H.fold (fun r x ss -> lit (eval x) r :: ss) lit_vars [] in
-    let sat c =
-      try Lit.terms (L.find eval_lit c)
-      with _ -> Format.printf "%a\n%!" Clause.print c; failwith "Instgen: no literal selected in clause"
-    in
-    let add h c = replace_with (@) h (sat c) [c] in
-    let smap = L.fold_left add (H.create 128) cls in
-    Some (sel, smap)
-  )
+    if not (Logic.check ctx) then None
+    else (
+      (*Logic.dump ctx;*)
+      let eval = Logic.eval (Logic.get_model ctx) in
+      print_assignment eval cls_vars;
+      let rec true_lit = function
+        | [] -> failwith "Instgen.check_sat: no true literal found in clause"
+        | (l, lx) :: c ->
+          if (is_positive l && eval lx) ||
+             (is_negative l && not (eval lx)) then l
+          else true_lit c
+      in
+      let add h (c,_,cx) = replace_with (@) h (true_lit (Listx.zip c cx)) [c] in
+      (* smap maps selected literals (first true literal in clause for now) to
+         list of clauses in which they were selected *)
+      let smap = L.fold_left add (H.create 128) cls_vars in
+      let sel = H.fold (fun l _ sel -> l :: sel) smap [] in
+      Some (sel, smap)
+    )
   in
   Logic.pop ctx;
   res
 ;;
 
 let rec run i ctx cls =
-  if i > 10 then failwith "too long";
+  if i > 3 then failwith "too long";
   Format.printf "A. Instgen iteration %d:\n  %a\n%!" i print_clauses cls;
   let gcls = ground cls in
   Format.printf "B. grounded:\n  %a\n%!" print_clauses (L.map snd gcls);
-  match check_sat ctx (to_logical ctx gcls) cls with
+  match check_sat ctx (to_logical ctx gcls) with
   | None -> UNSAT
   | Some (sel, smap) -> (
+    Format.printf "smap:\n";
+    H.iter (fun l cs -> Format.printf "  %a -> %a\n%!" Literal.print l print_clauses cs) smap;
     Format.printf "C. check_sat:\n%a\n%!" print_literals sel;
     let flags = !settings, !heuristic in
     match Ckb.ckb_for_instgen ctx flags sel with
     | SAT, _ -> SAT
     | UNSAT, ls ->
-      let cs = [ Clause.norm_subst sub c | l, sub <- ls; c <- H.find smap l] in
+      Format.printf "new literals:\n%!";
+      List.iter (fun (r , sigma) -> Format.printf " %a %a\n%!"
+        Lit.print r Lit.print (Lit.substitute sigma r)) ls;
+      let find l =
+        try H.find smap l
+        with _ -> Format.printf "%a not found\n%!" Literal.print l;
+        failwith "smap fail"
+      in
+      let cs = [ Clause.norm_subst sub c | l, sub <- ls; c <- find l] in
+      let cs = Listx.unique cs in
       Format.printf "new clauses:\n  %a\n%!" print_clauses cs;
       run (i + 1) ctx (cs @ cls)
   )

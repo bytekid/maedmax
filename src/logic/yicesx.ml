@@ -34,6 +34,8 @@ let reset ctx = reset ctx; ctx
 
 let show x = pp_expr x.expr
 
+let dump ctx = display_model (get_model ctx); dump_context ctx
+
 let mk_true ctx = mk ctx (mk_true ctx)
 
 let mk_false ctx = mk ctx (mk_false ctx)
@@ -104,6 +106,19 @@ let sum = big_binop (fun _ -> false) mk_zero is_zero mk_zero mk_sum
 
 let sum1 = big_binop1 sum
 
+let apply ctx name args =
+  let a = mk_type ctx "any" in
+  let k = List.length args in
+  let ty = if args = [] then a else mk_function_type ctx (Array.make k a) a in
+  let d =
+    try get_var_decl_from_name ctx name
+    with _ -> mk_var_decl ctx name ty
+  in
+  let f = mk_var_from_decl ctx d in
+  if args = [] then mk_with_decl ctx f d
+  else mk ctx (mk_app ctx f (Array.of_list [a.expr | a <- args]))
+;;
+
 let (<>>) x y = mk x.ctx (mk_gt x.ctx x.expr y.expr)
 
 let (<>=>) x y = mk x.ctx (mk_ge x.ctx x.expr y.expr)
@@ -132,7 +147,9 @@ let max_sat ctx = max_sat ctx = True
 let get_model = get_model
 
 let eval m x =
- try evaluate_in_model m x.expr = True
+ try
+   let value = evaluate_in_model m x.expr in
+   value = True
  with _ -> failwith "Yicesx.evaluate_in_model: variable unknown"
 ;;
 
