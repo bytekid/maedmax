@@ -148,20 +148,23 @@ let options =
      " do not use ACx equations for CPs");
    ("--restart-frequency", Arg.String (fun s -> set_restart_frequency s),
         "<r1,..,rn> number of iterations in between forced restarts");
+   ("--reuse-trss", Arg.Int (fun n ->
+          heuristic := { !heuristic with reuse_trss = n }),
+         "<n> every <n> iterations, orient as many equations as possible");
    ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
       "<s> fixed problem shape");
-  ("--selection-mode", Arg.String (fun s ->
-    let sm = 
-      if s = "mixed" then MixedSelect
-      else if s = "random" then RandomSelect
-      else if s = "age" then AgeSelect
-      else if s = "size" then SizeSelect
-      else if s = "cmixed" then ClassifiedMixed
-      else failwith "unsupported option for selection mode"
-    in
-    settings := { !settings with selection = sm }),
-    "<mode> random, age, classified, or mixed (default)");
-    ("--selection-classify", Arg.String (fun s -> classify_file := Some s),
+   ("--selection-mode", Arg.String (fun s ->
+     let sm = 
+       if s = "mixed" then MixedSelect
+       else if s = "random" then RandomSelect
+       else if s = "age" then AgeSelect
+       else if s = "size" then SizeSelect
+       else if s = "cmixed" then ClassifiedMixed
+       else failwith "unsupported option for selection mode"
+     in
+     settings := { !settings with selection = sm }),
+     "<mode> random, age, classified, or mixed (default)");
+   ("--selection-classify", Arg.String (fun s -> classify_file := Some s),
       "<json> json file with decision tree(s) for classification");
    ("--sizeage", Arg.Int (fun n ->
      heuristic := { !heuristic with size_age_ratio = n}), 

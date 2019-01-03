@@ -135,7 +135,8 @@ type heuristic = {
   soft_bound_equations: int;
   soft_bound_goals: int;
   reduce_AC_equations_for_CPs: bool;
-  full_CPs_with_axioms : bool
+  full_CPs_with_axioms : bool;
+  reuse_trss : int (* how often (good) TRSs are reused *)
 }
 
 type rewrite_steps = (Rule.t * Term.pos * Subst.t * Term.t) list
@@ -195,7 +196,8 @@ let default_heuristic = {
   soft_bound_equations = 200;
   soft_bound_goals = 30;
   reduce_AC_equations_for_CPs = false;
-  full_CPs_with_axioms = false
+  full_CPs_with_axioms = false;
+  reuse_trss = 0;
 }
 
 let do_assertions = ref false

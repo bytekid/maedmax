@@ -520,8 +520,14 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
  in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())
 ;;
 
+let last_trss = ref []
+
+let reuse _ =
+  !heuristic.reuse_trss > 0 && !(A.iterations) mod !heuristic.reuse_trss <> 0
+;;
+
 (* find k maximal TRSs *)
-let max_k ctx cc gs =
+let max_k' ctx cc gs =
   let k = !heuristic.k !(A.iterations) in
   (*assert(List.for_all Lit.is_equality (NS.to_list cc));*)
   let cc_eq = [ Lit.terms n | n <- NS.to_list cc ] in
@@ -529,8 +535,9 @@ let max_k ctx cc gs =
   let cc_symml = [Lit.terms c | c <- cc_symm] in
   L.iter (fun n -> ignore (C.store_rule_var ctx n)) cc_symml;
   (* lookup is not for free: get these variables only once *)
-  let cc_symm_vars = [ n, C.find_rule (Lit.terms n) | n <- cc_symm; Rule.is_rule (Lit.terms n)  ] in
-  let cc_symml_vars = [ Lit.terms n,v | n,v <- cc_symm_vars] in
+  let is_rule n = Rule.is_rule (Lit.terms n) in
+  let cc_symm_vars = [n, C.find_rule (Lit.terms n) | n <- cc_symm; is_rule n] in
+  let cc_symml_vars = [Lit.terms n,v | n,v <- cc_symm_vars] in
   if debug 2 then F.printf "K = %i\n%!" k;
   let s = termination_strategy () in
   let no_dps = not (dps_used ()) in
@@ -581,8 +588,14 @@ let max_k ctx cc gs =
      Smtlib.benchmark (string_of_int rs ^ "_" ^ (string_of_int is)));
    let trss = max_k [] ctx k in
    Logic.pop ctx; (* backtrack: get rid of all assertions added since push *)
+   last_trss := trss;
    trss
 ;;
+
+let max_k ctx cc gs =
+  if reuse () then !last_trss
+  else max_k' ctx cc gs
+;; 
 
 let max_k ctx cc = A.take_time A.t_maxk (max_k ctx cc)
 
@@ -801,6 +814,23 @@ let check_order_generation success order =
     exit 0)
 ;;
 
+let last_rewriters = ref []
+
+let get_rewriter ctx j (rr, c, order) =
+  if reuse () then (
+    assert (L.length !last_rewriters > j);
+    L.nth !last_rewriters j
+  ) else (
+    let n = store_trs ctx j rr c in
+    let rr_red = C.redtrs_of_index n in (* interreduce *)
+    let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in
+    check_order_generation false order;
+    rew#init ();
+    last_rewriters := (if j = 0 then [rew] else !last_rewriters @ [rew]);
+    rew
+  )
+;;
+
 let rec phi ctx aa gs =
   if do_restart aa gs then raise (Restart (Select.select_for_restart aa));
   let redcount, cp_count = ref 0, ref 0 in
@@ -810,13 +840,11 @@ let rec phi ctx aa gs =
     if check_subsumption 2 && nth_iteration 3 then NS.subsumption_free aa
     else aa
   in
-  let process (j, aa, gs, aa_new) (rr, c, order) =
-    let n = store_trs ctx j rr c in
+  let process (j, aa, gs, aa_new) ((rr, c, order) as sys) =
+    (*let n = store_trs ctx j rr c in
     let rr_red = C.redtrs_of_index n in (* interreduce *)
-    let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in
-    check_order_generation false order;
-    rew#init ();
-    (* TODO: red is often very small, is this rewriting necessary? *)
+    let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in*)
+    let rew = get_rewriter ctx j sys in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     redcount := !redcount + (NS.size red);
 
