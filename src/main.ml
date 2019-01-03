@@ -150,7 +150,7 @@ let options =
         "<r1,..,rn> number of iterations in between forced restarts");
    ("--reuse-trss", Arg.Int (fun n ->
           heuristic := { !heuristic with reuse_trss = n }),
-         "<n> every <n> iterations, orient as many equations as possible");
+         "<n> every <n> iterations, create new TRSs, otherwise reuse");
    ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
       "<s> fixed problem shape");
    ("--selection-mode", Arg.String (fun s ->

@@ -97,6 +97,8 @@ let rec print_steps = function
 let add eq o = if not (H.mem trace_table eq) then
   let c = !count in
   count := c + 1;
+  if S.do_proof_debug () then
+    F.printf "ADDING %i:%a %s\n" c R.print eq (origin_string o);
   H.add trace_table eq (o, c)
 ;;
 
@@ -284,6 +286,8 @@ let normalize rl d =
 let rewrite_conv t steps =
   let step_conv (t, acc) (rl, p, sub) =
     try
+      Format.printf "rewrite %a with %a (%a)\n%!"
+        Term.print t Rule.print rl Rule.print (Rule.substitute sub rl);
       let u, _ = Rewriting.step_at_with t p rl in
       let rl', d' = normalize rl LeftRight in
       u, (p, rl', d', sub, u) :: acc

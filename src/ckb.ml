@@ -44,6 +44,10 @@ let acx_rules = ref []
 
 let incomplete = ref false
 
+let new_nodes = ref []
+
+let new_goals = ref []
+
 (*** FUNCTIONS ***************************************************************)
 let set_settings s =
   settings := s;
@@ -133,6 +137,11 @@ let store_remaining_goals ctx ns =
   Select.all_goals := L.rev_append (L.rev !Select.all_goals) ns_sized
 ;;
 
+let reuse _ =
+  let reuse = !heuristic.reuse_trss in
+  !(A.iterations) > 1 && reuse > 0 && !(A.iterations) mod (reuse + 1) <> 0
+;;
+
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
   if has_comp () then (
@@ -185,9 +194,33 @@ let interreduce rr =
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
+
 let eqs_for_overlaps ee =
   let ee' = NS.filter Lit.not_increasing (NS.symmetric ee) in
   NS.variant_free ee'
+;;
+
+let subsumption_ratios : float list ref = ref []
+
+let equations_for_overlaps irred all =
+  let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
+  if !A.iterations < 3 && !heuristic.full_CPs_with_axioms then
+    NS.to_list (eqs_for_overlaps all)
+  else
+    let last3 =
+      match !subsumption_ratios with
+      | a :: b :: c :: d :: _ -> a +. b +. c +. d <= 3.6
+      | _ -> false
+    in
+    let check = check_subsumption 1 && (!A.iterations < 9 || last3) in
+    let irr' = if check then NS.subsumption_free irr else irr in
+    let r = float_of_int (NS.size irr') /. (float_of_int (NS.size irr)) in
+    if debug 1 then
+      Format.printf "subsumption check (ratio %.2f)\n%!" r;
+    subsumption_ratios := r :: !subsumption_ratios;
+    (*if r <= 0.3 then (* might be useful for GRP505 - GRP508 *)
+      heuristic := {!heuristic with check_subsumption = 2};*)
+    NS.to_list (eqs_for_overlaps irr')
 ;;
 
 let cp_cache : (Lit.t * Lit.t, Lit.t list) Hashtbl.t = Hashtbl.create 256
@@ -222,6 +255,7 @@ let overlaps rr aa =
  (* only proper overlaps with rules*)
  let ovl = new Overlapper.overlapper !heuristic ns in
  ovl#init ();
+ let ns = if reuse () then NS.to_list (eqs_for_overlaps (NS.of_list !new_nodes)) else ns in
  let cpl = [cp | n <- ns; cp <- ovl#cps n] in
  let cps = NS.of_list cpl in
  cps, ovl
@@ -233,7 +267,8 @@ let overlaps rr = A.take_time A.t_overlap (overlaps rr)
    Use rr only if the goals are not ground (otherwise, goals with rr are
    covered by rewriting). *)
 let overlaps_on rr aa _ gs =
-  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
+  let new_gs = NS.to_list (eqs_for_overlaps (NS.of_list !new_goals)) in
+  let gs_for_ols = if reuse () then new_gs else NS.to_list (eqs_for_overlaps gs) in
   let goals_ground = List.for_all Rule.is_ground !settings.gs in
   let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let ns = if goals_ground then aa else rr @ aa in
@@ -247,13 +282,15 @@ let overlaps_on rr aa _ gs =
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let saturated ctx (rr, ee) rewriter (axs, cps, cps') =
-  let ee' = Rules.subsumption_free ee in
-  let str = termination_strategy () in
-  let sys = rr, ee', rewriter#order in
-  let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
-  let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
-  let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
-  Ground.all_joinable !settings ctx str sys eqs'
+  if reuse () then None (* too few CPs were passed here *)
+  else 
+    let ee' = Rules.subsumption_free ee in
+    let str = termination_strategy () in
+    let sys = rr, ee', rewriter#order in
+    let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
+    let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
+    let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
+    Ground.all_joinable !settings ctx str sys eqs'
 ;;
 
 let rewrite_seq rew (s,t) (rss,rst) =
@@ -295,7 +332,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       in
       if L.exists joinable ieqs then (* joinable inequality axiom *)
         Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
-      else if List.length ee > 40 then
+      else if List.length ee > 40 || reuse () then
         None (* saturation too expensive, or goals have been discarded *)
       else match saturated ctx (rr,ee) rewriter cc with
         | None when rr @ ee = [] && not !incomplete -> Some (SAT, Completion [])
@@ -398,7 +435,6 @@ let c_red_size ctx ccr cc_vs =
 let c_red_size ctx ccr = A.take_time A.t_cred (c_red_size ctx ccr)
 
 (* globals to create CPred constraints faster *)
-let new_nodes = ref [];;
 let reducibility_checker = ref (new Rewriter.reducibility_checker []);;
 
 let c_cpred ctx cc_vs =
@@ -522,10 +558,6 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
 
 let last_trss = ref []
 
-let reuse _ =
-  !heuristic.reuse_trss > 0 && !(A.iterations) mod !heuristic.reuse_trss <> 0
-;;
-
 (* find k maximal TRSs *)
 let max_k' ctx cc gs =
   let k = !heuristic.k !(A.iterations) in
@@ -601,14 +633,15 @@ let max_k ctx cc = A.take_time A.t_maxk (max_k ctx cc)
 
 (* some logging functions *)
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@." !A.iterations j c
+ F.printf "TRS %i - %i (cost %i, reuse %B):\n %a\nreduced:%!\n %a\n@."
+   !A.iterations j c (reuse ())
    Rules.print (Variant.rename_rules rr)
    Rules.print (Variant.rename_rules rr')
 ;;
 
 let limit_reached t =
   match strategy_limit () with
-    | IterationLimit i when !(A.iterations) > i(* && not (A.some_progress ()) *)-> true
+    | IterationLimit i when !(A.iterations) > i -> true
     | TimeLimit l when t > l -> true
     | _ -> false
 ;;
@@ -785,28 +818,6 @@ let store_trs ctx j rr cost =
   rr_index
 ;;
 
-let subsumption_ratios : float list ref = ref []
-
-let equations_for_overlaps irr all =
-  if !A.iterations < 3 && !heuristic.full_CPs_with_axioms then
-    NS.to_list (eqs_for_overlaps all)
-  else
-    let last3 =
-      match !subsumption_ratios with
-      | a :: b :: c :: d :: _ -> a +. b +. c +. d <= 3.6
-      | _ -> false
-    in
-    let check = check_subsumption 1 && (!A.iterations < 9 || last3) in
-    let irr' = if check then NS.subsumption_free irr else irr in
-    let r = float_of_int (NS.size irr') /. (float_of_int (NS.size irr)) in
-    if debug 1 then
-      Format.printf "subsumption check (ratio %.2f)\n%!" r;
-    subsumption_ratios := r :: !subsumption_ratios;
-    (*if r <= 0.3 then (* might be useful for GRP505 - GRP508 *)
-      heuristic := {!heuristic with check_subsumption = 2};*)
-    NS.to_list (eqs_for_overlaps irr')
-;;
-
 let check_order_generation success order =
   if !S.generate_order &&
       (success || limit_reached (A.runtime ()) || A.runtime () > 30.) then (
@@ -841,25 +852,20 @@ let rec phi ctx aa gs =
     else aa
   in
   let process (j, aa, gs, aa_new) ((rr, c, order) as sys) =
-    (*let n = store_trs ctx j rr c in
-    let rr_red = C.redtrs_of_index n in (* interreduce *)
-    let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in*)
     let rew = get_rewriter ctx j sys in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     redcount := !redcount + (NS.size red);
 
-    let thresh = NS.avg_size gs + 8 in
     let t = Unix.gettimeofday () in
     let gs_red = reduced ~max_size:!heuristic.hard_bound_goals rew gs in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
     let gs_red', gs_big =
       if NS.size gs_red < 10 then gs_red, NS.empty ()
-      else NS.filter_out (fun n -> Lit.size n > thresh) gs_red
+      else NS.filter_out (fun n -> Lit.size n > (NS.avg_size gs + 8)) gs_red
     in
     let gs = NS.add_all gs_red' gs in
 
-    let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    let aa_for_ols = equations_for_overlaps irr aa in
+    let aa_for_ols = equations_for_overlaps irred aa in
     let cps', ovl = overlaps rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps');
     let eq_bound = !heuristic.hard_bound_equations in
@@ -886,6 +892,7 @@ let rec phi ctx aa gs =
     store_remaining_goals ctx grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
     let cc = (axs (), cps, cps_large) in
+    let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
     match succeeds ctx (rr, irr) rew cc ieqs gs with
        Some r ->
        if !(Settings.generate_benchmarks) then

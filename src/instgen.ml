@@ -7,35 +7,57 @@ module H = Hashtbl
 
 module Clause = struct
 
-type t = Lit.t list
+  type t = Lit.t list
 
-let bot = Term.F (Signature.fun_called "bot", [])
+  let bot = Term.F (Signature.fun_called "bot", [])
 
-let variables c = L.concat [ Lit.variables l | l <- c ]
+  let variables c = L.concat [ Lit.variables l | l <- c ]
 
-let substitute sigma = L.map (Lit.substitute sigma)
+  let substitute sigma = L.map (Lit.substitute sigma)
 
-let substitute_uniform t = L.map (Lit.substitute_uniform t)
+  let substitute_uniform t = L.map (Lit.substitute_uniform t)
 
-let ground = substitute_uniform bot
+  let ground = substitute_uniform bot
 
-let print ppf c =
-  Format.fprintf ppf "@[%a@]" (Formatx.print_list Literal.print " | ") c
-;;
+  let print ppf c =
+    Format.fprintf ppf "@[%a@]" (Formatx.print_list Literal.print " | ") c
+  ;;
 
-let normalize c =
-  let c' = [l, Lit.substitute_uniform bot l | l <- c] in
-  let c' = L.sort (fun (_, g) (_, g') -> compare g g') c' in
-  let oriented l = fst (Lit.terms l) < snd (Lit.terms l) in
-  let c = [ if oriented lg then l else Lit.flip l | l, lg <- c'] in
-  let ren = [ x, Term.V i | i, x <- Listx.ix (variables c) ] in
-  substitute ren c
-;;
+  let normalize c =
+    let c' = [l, Lit.substitute_uniform bot l | l <- c] in
+    let c' = L.sort (fun (_, g) (_, g') -> compare g g') c' in
+    let oriented l = fst (Lit.terms l) < snd (Lit.terms l) in
+    let c = [ if oriented lg then l else Lit.flip l | l, lg <- c'] in
+    let ren = [ x, Term.V i | i, x <- Listx.ix (variables c) ] in
+    substitute ren c
+  ;;
 
-let norm_subst sigma c = normalize (substitute sigma c)
+  let norm_subst sigma c = normalize (substitute sigma c)
 
-let simplify c = [l | l <- c; not (Lit.is_inequality l && Lit.is_trivial l)]
+  let simplify c = [l | l <- c; not (Lit.is_inequality l && Lit.is_trivial l)]
 
+end
+
+module Clauses = struct
+  type t = (Clause.t, bool) Hashtbl.t
+
+  let empty () : t = H.create 128
+  
+  let is_empty ns = H.length ns = 0
+  
+  let size = H.length
+  
+  let mem = H.mem
+  
+  let rec add n ns = if not (H.mem ns n) then H.add ns n true; ns
+  
+  let rec remove n ns = H.remove ns n; ns
+  
+  let add_all ns ns' = H.fold (fun n _ h -> add n h) ns ns'
+  
+  let add_list l ns = L.fold_left (fun h n -> add n h) ns l
+  
+  let of_list l = add_list l (H.create (L.length l * 2))
 end
 
 (*** OPENS *******************************************************************)
@@ -46,7 +68,7 @@ let settings = ref Settings.default
 let heuristic = ref Settings.default_heuristic
 
 (*** FUNCTIONS ***************************************************************)
-let debug _ = true
+let debug d = !settings.debug >= d
 
 let print_clauses ppf cs =
   Format.fprintf ppf "@[(%a)@]\n" (Formatx.print_list Clause.print ", ") cs
@@ -96,7 +118,7 @@ let to_logical ctx cls =
 ;;
 
 let print_assignment eval cls_vars =
-  if debug () then (
+  if debug 2 then (
     let lxs = [ lg,x | _, cg, xs <- cls_vars; lg, x <- Listx.zip cg xs] in
     Format.printf "\nAssignment:\n%!";
     let print (lg, x) =
@@ -112,7 +134,7 @@ let print_assignment eval cls_vars =
 ;;
 
 let print_constraints ctx cls_vars =
-  if debug () && false then (
+  if debug 2 then (
     Format.printf "Constraints:%!";
     let negate_if_ineq x l = if is_negative l then !! x else x in
     let lits (ls, _, xs) = [negate_if_ineq x l | l, x <- Listx.zip ls xs] in
@@ -155,23 +177,29 @@ let check_sat ctx cls_vars =
 ;;
 
 let rec run i ctx cls =
-  if i > 3 then failwith "too long";
-  Format.printf "A. Instgen iteration %d:\n  %a\n%!" i print_clauses cls;
+  (*if i > 10 then failwith "too long";*)
+  if debug 1 then
+    Format.printf "A. Instgen iteration %d:\n  %a\n%!" i print_clauses cls;
   let gcls = ground cls in
-  Format.printf "B. grounded:\n  %a\n%!" print_clauses (L.map snd gcls);
+  if debug 1 then
+    Format.printf "B. grounded:\n  %a\n%!" print_clauses (L.map snd gcls);
   match check_sat ctx (to_logical ctx gcls) with
   | None -> UNSAT
   | Some (sel, smap) -> (
+    if debug 1 then (
     Format.printf "smap:\n";
-    H.iter (fun l cs -> Format.printf "  %a -> %a\n%!" Literal.print l print_clauses cs) smap;
-    Format.printf "C. check_sat:\n%a\n%!" print_literals sel;
+    H.iter (fun l cs ->
+      Format.printf "  %a -> %a\n%!" Literal.print l print_clauses cs) smap);
+    if debug 1 then
+      Format.printf "C. check_sat:\n%a\n%!" print_literals sel;
     let flags = !settings, !heuristic in
     match Ckb.ckb_for_instgen ctx flags sel with
     | SAT, _ -> SAT
     | UNSAT, ls ->
-      Format.printf "new literals:\n%!";
-      List.iter (fun (r , sigma) -> Format.printf " %a %a\n%!"
-        Lit.print r Lit.print (Lit.substitute sigma r)) ls;
+      if debug 1 then (
+        Format.printf "new literals:\n%!";
+        List.iter (fun (r , sigma) -> Format.printf " %a (substituted %a)\n%!"
+          Lit.print r Lit.print (Lit.substitute sigma r)) ls);
       let find l =
         try H.find smap l
         with _ -> Format.printf "%a not found\n%!" Literal.print l;

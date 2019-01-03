@@ -392,6 +392,8 @@ let prefix_equal n xs =
   try all_equal (Listx.take n xs) with _ -> false
 ;;
 
+let some_progress _ = try List.hd !progress with _ -> false
+
 let little_progress i =
   try
     let progress = Listx.take i !progress in
