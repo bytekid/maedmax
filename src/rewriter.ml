@@ -102,10 +102,12 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   ;;
 
   method rewrite_at_root_with t ((l, r), only_unordered) =
+    let (l, r) = if only_unordered then (l,r) else Rule.rename (l, r) in
     let sigma = Subst.pattern_match l t in
     let rsub = Term.substitute sigma r in
     if only_unordered then (l,r), sigma, rsub
     else
+      (* renamed rule: avoid capture of Var(r) - Var(l) *)
       let rho = match order#bot with
           None -> []
         | Some c -> let vs = Listset.diff (T.variables r) (T.variables l) in
