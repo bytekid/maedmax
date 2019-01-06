@@ -42,8 +42,6 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
 
 let acx_rules = ref []
 
-let incomplete = ref false
-
 let new_nodes = ref []
 
 let new_goals = ref []
@@ -67,6 +65,10 @@ let termination_strategy _ =
 ;;
 
 let dps_used _ = St.has_dps (termination_strategy ())
+
+let sat_allowed _ = !heuristic.mode <> OnlyUNSAT
+
+let unsat_allowed _ = !heuristic.mode <> OnlySAT
 
 let constraints _ =
   match !heuristic.strategy with
@@ -158,7 +160,7 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
   let nf n =
     try Lit.rewriter_nf_with ~max_size:max_size n rewriter
     with Rewriter.Max_term_size_exceeded ->
-      incomplete := true;
+      heuristic := { !heuristic with mode = OnlyUNSAT };
       None
   in
   let rewrite n (irrdcbl, news) =
@@ -335,7 +337,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       else if List.length ee > 40 || reuse () then
         None (* saturation too expensive, or goals have been discarded *)
       else match saturated ctx (rr,ee) rewriter cc with
-        | None when rr @ ee = [] && not !incomplete -> Some (SAT, Completion [])
+        | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
         | Some order ->
           let gs_ground = L.for_all Lit.is_ground (NS.to_list gs) in
           let ee_nonground = L.for_all (fun e -> not (Rule.is_ground e)) ee in
@@ -344,15 +346,15 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
           let ee_sym = ee @ [s, t| t, s <- ee ] in
           if not gs_ground && L.for_all (fun e -> not (orientable e)) ee &&
             !(Settings.do_proof) = None then (* no narrowing proof output yet *)
-            Narrow.decide_goals !settings rr ee_sym order !incomplete
+            Narrow.decide_goals !settings rr ee_sym order !heuristic
           else if not (rr @ ee = [] || gs_ground) then None
           else (
-            if ee = [] && not !incomplete then Some (SAT, Completion rr)
-            else if ieqs = [] && ee_nonground && not !incomplete then
+            if ee = [] && sat_allowed () then Some (SAT, Completion rr)
+            else if ieqs = [] && ee_nonground && sat_allowed () then
               Some (SAT, GroundCompletion (rr, ee, order))
             else if L.length ieqs = 1 && NS.is_empty gs &&
               !(Settings.do_proof) = None then
-              Narrow.decide !settings rr ee_sym order ieqs !incomplete
+              Narrow.decide !settings rr ee_sym order ieqs !heuristic
             else None
           )
         | _ -> None
@@ -880,7 +882,7 @@ let rec phi ctx aa gs =
     let g_bound = !heuristic.hard_bound_goals in
     let gcps = NS.filter (fun g -> Lit.size g < g_bound) gos in
     if NS.exists (fun g -> Lit.size g < g_bound) gos then
-      incomplete := true;
+      heuristic := { !heuristic with mode = OnlyUNSAT };
     let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);

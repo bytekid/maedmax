@@ -12,10 +12,12 @@ exception Too_large
 (*** GLOBALS *****************************************************************)
 let settings = S.default
 
-let complete = ref true
+let heuristic = ref S.default_heuristic
 
 (*** FUNCTIONS ***************************************************************)
 let debug settings = settings.debug >= 1
+
+let sat_allowed _ = !heuristic.mode <> OnlyUNSAT
 
 let pstr = function
     [] -> "e"
@@ -56,8 +58,9 @@ let narrow_forward_at_with settings rr ((s,t),(ps,pt)) p (l,r) =
     let s' = T.replace (subst s) (subst r) p in
     let ps' = propagate_basic_pos p ps r in
     let st', keep_dir = Variant.normalize_rule_dir (s',subst t) in
-    if Rule.size st' > (*!(settings.size_bound_goals)*) 200 then
-      (complete := false; raise Too_large);
+    if Rule.size st' > (*!(settings.size_bound_goals)*) 200 then (
+      heuristic := { !heuristic with mode = OnlyUNSAT };
+      raise Too_large);
     let pst = if keep_dir then (ps',pt) else (pt,ps') in
     if debug settings then
       Format.printf "forward narrow (%a,%a) with %a at %s to (%a,%a) %d\n%!"
@@ -110,8 +113,8 @@ let narrow settings rr ((s,t),(ps,pt)) =
   L.concat ((narrow ((s,t),(ps,pt)) ps) @ (narrow ((t,s),(pt,ps)) pt))
 ;;
 
-let decide settings rr ee ord gs incomplete =
-  complete := not incomplete;
+let decide settings rr ee ord gs h =
+  heuristic := h;
   let bot = match ord#bot with Some b -> b | _ -> 100 in
   let patch (l, r) = 
     let vs = Listset.diff (T.variables r) (T.variables l) in
@@ -132,7 +135,7 @@ let decide settings rr ee ord gs incomplete =
       if debug settings then
         Format.printf "UNSAT, found unifiable equation\n%!";
       Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[])))
-    else if L.for_all (fun (_,pps) -> both_empty pps) gs && !complete then (
+    else if L.for_all (fun (_,ps) -> both_empty ps) gs && sat_allowed () then (
       Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
     else
       let all' = unique_add gs all in
