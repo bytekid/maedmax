@@ -119,6 +119,8 @@ type t = {
   select_classify: (?bound:float -> equation_features -> state_features -> (float array * float array) -> bool) option;
 }
 
+type mode = OnlySAT | OnlyUNSAT | SATorUNSAT
+
 type heuristic = {
   hard_bound_equations: int;
   hard_bound_goals: int;
@@ -136,7 +138,8 @@ type heuristic = {
   soft_bound_goals: int;
   reduce_AC_equations_for_CPs: bool;
   full_CPs_with_axioms : bool;
-  reuse_trss : int (* how often (good) TRSs are reused *)
+  reuse_trss : int (* how often (good) TRSs are reused *);
+  mode : mode
 }
 
 type rewrite_steps = (Rule.t * Term.pos * Subst.t * Term.t) list
@@ -198,6 +201,7 @@ let default_heuristic = {
   reduce_AC_equations_for_CPs = false;
   full_CPs_with_axioms = false;
   reuse_trss = 0;
+  mode = SATorUNSAT
 }
 
 let do_assertions = ref false
@@ -227,4 +231,4 @@ let shape_to_string = function
   | NoShape -> "none"
 ;;
 
-let do_proof_debug () = !do_debug && !do_proof <> None
+let do_proof_debug () = true (*!do_debug && !do_proof <> None*)

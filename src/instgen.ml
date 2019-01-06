@@ -58,6 +58,12 @@ module Clauses = struct
   let add_list l ns = L.fold_left (fun h n -> add n h) ns l
   
   let of_list l = add_list l (H.create (L.length l * 2))
+
+  let to_list ns = (H.fold (fun n _ l -> n :: l) ns [])
+
+  let print ppf ns =
+    Format.fprintf ppf "@[(%a)@]\n" (Formatx.print_list Clause.print ", ")
+      (to_list ns)
 end
 
 (*** OPENS *******************************************************************)
@@ -70,7 +76,7 @@ let heuristic = ref Settings.default_heuristic
 (*** FUNCTIONS ***************************************************************)
 let debug d = !settings.debug >= d
 
-let print_clauses ppf cs =
+let print_clause_list ppf cs =
   Format.fprintf ppf "@[(%a)@]\n" (Formatx.print_list Clause.print ", ") cs
 ;;
 
@@ -85,7 +91,7 @@ let (<=>) = Logic.(<=>);;
 let (<&>) = Logic.(<&>);;
 let (!!) = Logic.(!!);;
 
-let ground cls = [c, Clause.ground c | c <- cls]
+let ground cls = [c, Clause.ground c | c <- Clauses.to_list cls]
 
 let replace_with f h k v =
   (try H.replace h k (f v (H.find h k)) with Not_found -> H.add h k v);
@@ -179,17 +185,17 @@ let check_sat ctx cls_vars =
 let rec run i ctx cls =
   (*if i > 10 then failwith "too long";*)
   if debug 1 then
-    Format.printf "A. Instgen iteration %d:\n  %a\n%!" i print_clauses cls;
+    Format.printf "A. Instgen iteration %d:\n  %a\n%!" i Clauses.print cls;
   let gcls = ground cls in
   if debug 1 then
-    Format.printf "B. grounded:\n  %a\n%!" print_clauses (L.map snd gcls);
+    Format.printf "B. grounded:\n  %a\n%!" print_clause_list (L.map snd gcls);
   match check_sat ctx (to_logical ctx gcls) with
   | None -> UNSAT
   | Some (sel, smap) -> (
     if debug 1 then (
     Format.printf "smap:\n";
     H.iter (fun l cs ->
-      Format.printf "  %a -> %a\n%!" Literal.print l print_clauses cs) smap);
+      Format.printf "  %a -> %a\n" Literal.print l print_clause_list cs) smap);
     if debug 1 then
       Format.printf "C. check_sat:\n%a\n%!" print_literals sel;
     let flags = !settings, !heuristic in
@@ -207,8 +213,8 @@ let rec run i ctx cls =
       in
       let cs = [ Clause.norm_subst sub c | l, sub <- ls; c <- find l] in
       let cs = Listx.unique cs in
-      Format.printf "new clauses:\n  %a\n%!" print_clauses cs;
-      run (i + 1) ctx (cs @ cls)
+      Format.printf "new clauses:\n  %a\n%!" print_clause_list cs;
+      run (i + 1) ctx (Clauses.add_list cs cls)
   )
 ;;
 
@@ -218,10 +224,10 @@ let start (s, h) cls =
   let ctx = Logic.mk_context () in
   let ss = Listx.unique (L.map (fun (ts,_,_,_,_) -> ts) h.strategy) in
   L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms l | c <- cls; l <- c ]) ss;
-  Format.printf "Start Instgen:\n %a\n%!" print_clauses cls;
+  Format.printf "Start Instgen:\n %a\n%!" print_clause_list cls;
   let cls = L.map Clause.normalize cls in
-  Format.printf "Normalized:\n %a\n%!" print_clauses cls;
-  let res = run 0 ctx cls in
+  Format.printf "Normalized:\n %a\n%!" print_clause_list cls;
+  let res = run 0 ctx (Clauses.of_list cls) in
   Logic.del_context ctx;
   res
 ;;

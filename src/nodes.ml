@@ -35,8 +35,9 @@ let symmetric ns =
   H.fold (fun n _ res -> add (Lit.flip n) res) ns nsc
 ;;
 
-let to_list ns = L.sort (fun n n' -> Pervasives.compare (Lit.terms n) (Lit.terms n'))
-(H.fold (fun n _ l -> n::l) ns [] )
+let to_list ns =
+  L.sort (fun n n' -> Pervasives.compare (Lit.terms n) (Lit.terms n'))
+  (H.fold (fun n _ l -> n::l) ns [] )
 
 let to_rules ns = L.map Lit.terms (to_list ns)
 

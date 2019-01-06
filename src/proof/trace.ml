@@ -111,6 +111,14 @@ let gadd g o =
     H.add goal_trace_table g (o, c))
 ;;
 
+let clear _ =
+  H.clear trace_table;
+  H.clear goal_trace_table;
+  H.clear children_table;
+  count := 0;
+  deleted := []
+;;
+
 let add_initials eqs = List.iter (fun e -> add e Initial) eqs
 
 let add_overlap eq (rl1, p, rl2, mu) = add eq (CP (rl1, p, mu, rl2))

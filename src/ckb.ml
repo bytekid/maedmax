@@ -1017,6 +1017,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
 let ckb_for_instgen ctx flags lits =
   set_settings (fst flags);
   set_heuristic (snd flags);
+  Trace.clear ();
   let input = L.partition Lit.is_equality lits in
   let rec ckb (es, gs) =
     let eq_ok e = Lit.is_equality e || Lit.is_ground e in

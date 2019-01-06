@@ -138,9 +138,14 @@ let options =
       Settings.generate_order := true;
       heuristic := { !heuristic with strategy = S.strategy_order_generation }),
       " order generation mode");
+  ("--mode", Arg.String (fun s ->
+      if s = "sat" then heuristic := { !heuristic with mode = OnlySAT }
+      else if s = "unsat" then heuristic := { !heuristic with mode = OnlyUNSAT }
+      else failwith "unsupported mode type"),
+    "<m> exclusive proof mode (sat, unsat)");
    ("-P", Arg.String (fun s ->
-      if s = "cpf" then Settings.do_proof := Some CPF else
-      if s = "tstp" then Settings.do_proof := Some TPTP
+      if s = "cpf" then Settings.do_proof := Some CPF
+      else if s = "tstp" then Settings.do_proof := Some TPTP
       else failwith "unsupported proof type"),
      "<format> output proof (cpf, tstp)");
    ("--reduceAC-CPs", Arg.Unit (fun _ ->
