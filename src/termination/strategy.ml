@@ -39,7 +39,7 @@ let strategy_dgk = [ts_dgk, [Red; Comp], [CPsRed], max, Size]
 let strategy_not_oriented = [ ts_dpn, [Red; Comp], [NotOriented], max, Size]
 let strategy_all = [(ts_dpn, [Red; Comp], [CPsRed], max, Size);
                     (ts_dp, [Comp], [MaxRed], max, Size)]
-let strategy_ordered = [ (ts_kbo, [], [MaxRed], IterationLimit 8, SizeAge 10);
+let strategy_ordered = [(ts_kbo, [], [MaxRed], IterationLimit 8, SizeAge 10);
                         (ts_lpo, [], [MaxRed], IterationLimit 12, Size);
                         (ts_kbo, [], [MaxRed], IterationLimit 41, Size);
                         (ts_kbo, [], [Oriented], IterationLimit 10, Size);

@@ -33,6 +33,7 @@ type state = {
   context : Logic.context;
   equations : NS.t;
   goals : NS.t;
+  new_nodes : Lit.t list;
   extension : theory_extension_state option
 }
 
@@ -55,8 +56,6 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
   Hashtbl.create 512
 
 let acx_rules = ref []
-
-let new_nodes = ref []
 
 let new_goals = ref []
 
@@ -140,24 +139,32 @@ let set_extension s =
   let us = [u | u, a <- sign; a = 1] in
   let extensions f a =
     let xs = [Term.V i | i <- Listx.range 0 (a - 1)] in
-    let uxs = [Term.F(f, [c]) | f <- us; c <- cs] in
+    let uxs = [Term.F(f, [c]) | f <- us; c <- cs @ xs; a > 0] in
     let f_xs = Term.F(f, xs) in
     [[Lit.make_axiom (f_xs, x)] | x <- cs @ xs @ uxs] @ [[]]
   in
   let sext = {
-    theory_extensions = [extensions f a | f, a <- sign; a > 0];
+    theory_extensions = [extensions f a | f, a <- sign];
     iterations = 0
   }
   in
-  Format.printf "set extension\n%!";
   {s with extension = Some sext}
 ;;
 
 let make_state c es gs = {
   context = c;
-  equations = es;
+  equations = NS.of_list es;
   goals = gs;
+  new_nodes = es;
   extension = None
+}
+
+let copy_state s = {
+  context = s.context;
+  equations = NS.copy s.equations;
+  goals = NS.copy s.goals;
+  new_nodes = s.new_nodes;
+  extension = s.extension
 }
 
 let update_state s es gs = { s with
@@ -290,7 +297,7 @@ let cps rew n1 n2 =
 ;;
 
 (* get overlaps for rules rr and equations aa *)
-let overlaps rr aa =
+let overlaps s rr aa =
  let ns =
    if not !settings.unfailing then rr
    else
@@ -306,13 +313,13 @@ let overlaps rr aa =
  (* only proper overlaps with rules*)
  let ovl = new Overlapper.overlapper !heuristic ns in
  ovl#init ();
- let ns = if reuse () then NS.to_list (eqs_for_overlaps (NS.of_list !new_nodes)) else ns in
+ let ns = if reuse () then NS.to_list (eqs_for_overlaps (NS.of_list s.new_nodes)) else ns in
  let cpl = [cp | n <- ns; cp <- ovl#cps n] in
  let cps = NS.of_list cpl in
  cps, ovl
 ;;
 
-let overlaps rr = A.take_time A.t_overlap (overlaps rr)
+let overlaps s rr = A.take_time A.t_overlap (overlaps s rr)
 
 (* Goal only as outer rule, compute CPs with equations.
    Use rr only if the goals are not ground (otherwise, goals with rr are
@@ -463,22 +470,7 @@ let idx r =
     let i = Hashtbl.length rl_index in Hashtbl.add rl_index r i; i
 ;;
 
-(* cc is already symmetric *)
-let is_reducible ctx cc (s,t) =
-  let j = idx (s,t) in
-  try Hashtbl.find reducible j with Not_found -> (
-    let reduces_st rl = (
-      let red = Rewriting.reducible_with [rl] in
-      Rule.is_rule rl && (red t || red s))
-    in
-    let rs = [ C.find_rule (Lit.terms n) | n <- cc; reduces_st (Lit.terms n) ] in
-    let b = Logic.big_or ctx rs in
-    Hashtbl.add reducible j b;
-    b
-  )
-;;
-
-let rlred ctx cc (s,t) =
+let rlred state cc (s,t) =
   let ccs = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
   let j = idx (s,t) in
   let redcbl rl =
@@ -490,19 +482,20 @@ let rlred ctx cc (s,t) =
       let b = is_rule rl && (red t || red s) in
       Hashtbl.add redc (j, i) b; b)
   in
+  let ctx = state.context in
   Logic.big_or ctx [ C.rule_var ctx rl | rl <- ccs; redcbl rl ]
 ;;
 
-let c_red ctx cc = L.iter (fun rl -> Logic.require (rlred ctx cc rl)) cc
-let c_red ctx = A.take_time A.t_cred (c_red ctx)
+let c_red s cc = L.iter (fun rl -> Logic.require (rlred s cc rl)) cc
+let c_red s = A.take_time A.t_cred (c_red s)
 
 (* this heuristic uses rules only in a non-increasing way *)
-let c_red_size ctx ccr cc_vs =
+let c_red_size s ccr cc_vs =
   let ccsym' = [ (l,r),v | (l,r),v <- cc_vs; Term.size l >= Term.size r ] in
   let rdc = new Rewriter.reducibility_checker ccsym' in
   rdc#init None;
   let require_red st =
-    let r = Logic.big_or ctx [ rl | rl <- rdc#reducible_rule st ] in
+    let r = Logic.big_or s.context [ rl | rl <- rdc#reducible_rule st ] in
     Logic.require r
   in
   L.iter require_red ccr
@@ -513,10 +506,10 @@ let c_red_size ctx ccr = A.take_time A.t_cred (c_red_size ctx ccr)
 (* globals to create CPred constraints faster *)
 let reducibility_checker = ref (new Rewriter.reducibility_checker []);;
 
-let c_cpred ctx cc_vs =
+let c_cpred s cc_vs =
   (* create indices, cc_vs is already symmetric *)
-  assert(List.for_all Lit.is_equality !new_nodes);
-  let rls = [ Lit.terms n | n <- !new_nodes ] in
+  assert(List.for_all Lit.is_equality s.new_nodes);
+  let rls = [ Lit.terms n | n <- s.new_nodes ] in
   let nn_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
   let rdc = new Rewriter.reducibility_checker nn_vs in
   rdc#init (Some !reducibility_checker);
@@ -524,7 +517,7 @@ let c_cpred ctx cc_vs =
   let ovl = new Overlapper.overlapper_with cc_vs in
   ovl#init ();
   (* create constraints *)
-  let red st = Logic.big_or ctx (rdc#reducible_rule st) in
+  let red st = Logic.big_or s.context (rdc#reducible_rule st) in
   let c2 (rl,rl_var) =
     let red_cp (st,rl_var') = rl_var <&> rl_var' <=>> (red st) in
     L.rev_map red_cp (ovl#cps rl)
@@ -534,9 +527,9 @@ let c_cpred ctx cc_vs =
   reducibility_checker := rdc;
 ;;
 
-let c_cpred ctx = A.take_time A.t_ccpred (c_cpred ctx)
+let c_cpred s = A.take_time A.t_ccpred (c_cpred s)
 
-let c_min_cps ctx cc =
+let c_min_cps _ cc =
   let ccsymm = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
   let rs = [ rl | rl <- ccsymm; Rule.is_rule rl ] in
   let rule = C.find_rule in
@@ -552,43 +545,45 @@ let check_equiv ctx a b =
   Logic.pop ctx
 ;;
 
-let c_max_red_pre ctx cc =
+let c_max_red_pre s cc =
+  let ctx = s.context in
   let update_rdcbl_constr st cc' =
     let constr =
-      try let c = Hashtbl.find C.ht_rdcbl_constr st in c <|> rlred ctx cc' st
-      with Not_found -> rlred ctx cc' st
+      try let c = Hashtbl.find C.ht_rdcbl_constr st in c <|> rlred s cc' st
+      with Not_found -> rlred s cc' st
     in
     Hashtbl.replace C.ht_rdcbl_constr st constr;
     ignore (C.get_rdcbl_var ctx st)
   in
-  let cc_newl = [ Lit.terms n |  n <- !new_nodes ] in
+  let cc_newl = [ Lit.terms n |  n <- s.new_nodes ] in
   let cc_old = [ n |  n <- cc; not (List.mem n cc_newl) ] in
   L.iter (fun st -> update_rdcbl_constr st cc) cc_newl;
   L.iter (fun st -> update_rdcbl_constr st cc_newl) cc_old
 ;;
 
-let c_max_red_pre ctx = A.take_time A.t_cred (c_max_red_pre ctx)
+let c_max_red_pre s = A.take_time A.t_cred (c_max_red_pre s)
 
-let c_max_red ctx cc =
+let c_max_red s cc =
   let reducible st c =
-    let r = (C.get_rdcbl_var ctx st) <=>> c in
+    let r = (C.get_rdcbl_var s.context st) <=>> c in
     Logic.require r;
     if !(A.shape) = Boro || !(A.shape) = Ossigeno then (
-      Logic.assert_weighted (C.get_rdcbl_var ctx st) 30;
+      Logic.assert_weighted (C.get_rdcbl_var s.context st) 30;
       Logic.assert_weighted (C.find_rule st) 6)
     else
-      Logic.assert_weighted (C.get_rdcbl_var ctx st) 6;
+      Logic.assert_weighted (C.get_rdcbl_var s.context st) 6;
   in
   Hashtbl.iter reducible C.ht_rdcbl_constr;
 ;;
 
-let c_max_red ctx = A.take_time A.t_cred (c_max_red ctx)
+let c_max_red s = A.take_time A.t_cred (c_max_red s)
 
-let c_max_goal_red ctx cc gs =
-  NS.iter (fun g -> Logic.assert_weighted (rlred ctx cc (Lit.terms g)) 1) gs
+let c_max_goal_red s cc gs =
+  NS.iter (fun g -> Logic.assert_weighted (rlred s cc (Lit.terms g)) 1) gs
 ;;
 
-let c_comp ctx ns =
+let c_comp s ns =
+  let ctx = s.context in
  let rule_var, weight_var = C.find_rule, C.find_eq_weight in
  let all_eqs ee = Logic.big_and ctx (L.map C.find_eq ee) in
  (* induce order: decrease from e to equations in ee *)
@@ -608,26 +603,26 @@ let c_comp ctx ns =
  L.iter considered [ l,r | l,r <- ns; not (l=r) ];
 ;;
 
-let c_comp ctx = A.take_time A.t_ccomp (c_comp ctx)
+let c_comp s = A.take_time A.t_ccomp (c_comp s)
 
 (* constraints to guide search; those get all retracted *)
-let search_constraints ctx (ccl, ccsymlvs) gs =
+let search_constraints s (ccl, ccsymlvs) gs =
  (* orientable equations are used for CPs in CeTA ... *)
  let take_max = nth_iteration !heuristic.max_oriented (*|| !(S.do_proof)*) in
  (* A.little_progress 5 && !A.equalities < 500 *)
  let assert_c = function
-   | S.Red -> c_red ctx ccl
+   | S.Red -> c_red s ccl
    | S.Empty -> ()
-   | S.Comp -> c_comp ctx ccl
-   | S.RedSize -> c_red_size ctx ccl ccsymlvs
+   | S.Comp -> c_comp s ccl
+   | S.RedSize -> c_red_size s ccl ccsymlvs
  in L.iter assert_c (constraints ());
  let assert_mc = function
-   | S.Oriented -> c_maxcomp ctx ccsymlvs
-   | S.NotOriented -> c_not_oriented ctx ccl
-   | S.MaxRed -> c_max_red ctx ccl
-   | S.MinCPs -> c_min_cps ctx ccl
-   | S.GoalRed -> c_max_goal_red ctx ccl gs
-   | S.CPsRed -> c_cpred ctx ccsymlvs
+   | S.Oriented -> c_maxcomp s ccsymlvs
+   | S.NotOriented -> c_not_oriented s ccl
+   | S.MaxRed -> c_max_red s ccl
+   | S.MinCPs -> c_min_cps s ccl
+   | S.GoalRed -> c_max_goal_red s ccl gs
+   | S.CPsRed -> c_cpred s ccsymlvs
    | S.MaxEmpty -> ()
  in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())
 ;;
@@ -648,7 +643,7 @@ let max_k' s =
   let cc_symm_vars = [n, C.find_rule (Lit.terms n) | n <- cc_symm; is_rule n] in
   let cc_symml_vars = [Lit.terms n,v | n,v <- cc_symm_vars] in
   if debug 2 then F.printf "K = %i\n%!" k;
-  let s = termination_strategy () in
+  let strat = termination_strategy () in
   let no_dps = not (dps_used ()) in
   let rec max_k acc ctx n =
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
@@ -666,7 +661,7 @@ let max_k' s =
         in
         let rr = L.fold_right add_rule cc_symm_vars []  in
         let order =
-          if !settings.unfailing then St.decode 0 m s
+          if !settings.unfailing then St.decode 0 m strat
           else Order.default
         in
         if !S.generate_order then order#print_params ();
@@ -687,11 +682,11 @@ let max_k' s =
    if has_comp () then
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
-   A.take_time A.t_orient_constr (St.assert_constraints s 0 ctx) cc_symml;
-   c_max_red_pre ctx cc_eq;
+   A.take_time A.t_orient_constr (St.assert_constraints strat 0 ctx) cc_symml;
+   c_max_red_pre s cc_eq;
    Logic.push ctx; (* backtrack point for Yices *)
    Logic.require (St.bootstrap_constraints 0 ctx cc_symml_vars);
-   search_constraints ctx (cc_eq, cc_symml_vars) gs;
+   search_constraints s (cc_eq, cc_symml_vars) gs;
    if !(Settings.generate_benchmarks) && A.runtime () > 100. then (
      let rs,is = !(A.restarts), !(A.iterations) in
      Smtlib.benchmark (string_of_int rs ^ "_" ^ (string_of_int is)));
@@ -923,15 +918,19 @@ let extend_theory s phi =
   | None -> failwith "Ckb.extend_theory"
   | Some sext -> 
     let ext_list = sext.theory_extensions in 
-    Format.printf "extend %d\n%!" (List.length ext_list);
+    if debug 2 then Format.printf "extend level %d\n%!" (List.length ext_list);
     let exs, ex_rest = List.hd ext_list, List.tl ext_list in
     let sext' = {theory_extensions = ex_rest; iterations = 0} in
     let s = {s with extension = Some sext'} in
     let rec extend = function
     | [] -> raise Backtrack
     | r :: rs ->
-      if L.length r = 1 then Format.printf " extend %a\n%!" Lit.print (List.hd r);
-      try phi {s with equations = NS.add_list r s.equations}
+      let s' = copy_state s in
+      let s' = {s' with equations = NS.add_list r s'.equations} in
+      if debug 2 && L.length r = 1 then
+        Format.printf " extend %a\nbase is%a \n%!%!"
+          Lit.print (List.hd r) NS.print s'.equations;
+      try phi s'
       with Backtrack -> extend rs
     in
     try extend exs with Backtrack -> raise (Restart [])
@@ -974,7 +973,7 @@ let rec phi s =
     | None -> None
     | Some sx -> Some {sx with iterations = sx.iterations + 1})} in 
   if is_extension_iteration 3 s then
-    (if may_extend s then extend_theory s phi else raise Backtrack)
+    (if may_extend s then extend_theory s phi else (Format.printf "backtrack as unextensible\n%!"; raise Backtrack))
   else
   (**)
   let process (j, s, aa_new) ((rr, c, order) as sys) =
@@ -994,7 +993,7 @@ let rec phi s =
     let gs = NS.add_all gs_red' gs in
 
     let aa_for_ols = equations_for_overlaps irred aa in
-    let cps', ovl = overlaps rr aa_for_ols in
+    let cps', ovl = overlaps s rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps');
     let eq_bound = !heuristic.hard_bound_equations in
     let cps = NS.filter (fun cp -> Lit.size cp < eq_bound) cps' in
@@ -1044,8 +1043,7 @@ let rec phi s =
     let sz = match rrs with (trs,c,_) :: _ -> List.length trs,c | _ -> 0,0 in
     let cp_count = if rrs = [] then 0 else !cp_count / (List.length rrs) in
     A.add_state !redcount (fst sz) (snd sz) cp_count;
-    new_nodes := aa_new;
-    phi s'
+    phi {s' with new_nodes = aa_new}
   with Success r -> r
 ;;
 
@@ -1119,8 +1117,6 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
       let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
       let ctx = Logic.mk_context () in
-      let ns0 = NS.of_list es0 in
-      new_nodes := es0;
       let ss = Listx.unique (t_strategies ()) in
       L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- gs0 @ es0 ]) ss;
       if !settings.keep_orientation then (
@@ -1132,7 +1128,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
         L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
       );
       let start = Unix.gettimeofday () in
-      let res = phi (make_state ctx ns0 (NS.of_list gs0)) in
+      let res = phi (make_state ctx es0 (NS.of_list gs0)) in
       A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. start);
       Logic.del_context ctx;
       res
@@ -1172,8 +1168,6 @@ let ckb_for_instgen ctx flags lits =
     try
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
       let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
-      let ns0 = NS.of_list es0 in
-      new_nodes := es0;
       if !settings.keep_orientation then (
         let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
         let es' = [ if d then e else R.flip e | e,d <- es ] in
@@ -1182,7 +1176,7 @@ let ckb_for_instgen ctx flags lits =
         Logic.require keep;
         L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
       );
-      let ans, proof = phi (make_state ctx ns0 (NS.of_list gs0)) in
+      let ans, proof = phi (make_state ctx es0 (NS.of_list gs0)) in
       ans, Trace.proof_literal_instances input proof
     with Restart es_new -> (
       pop_strategy ();

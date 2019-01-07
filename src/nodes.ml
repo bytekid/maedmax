@@ -15,6 +15,8 @@ let size = H.length
 
 let mem = H.mem
 
+let copy = H.copy
+
 let rec add n ns = if not (H.mem ns n) then H.add ns n true; ns
 
 let rec remove n ns = H.remove ns n; ns
@@ -30,10 +32,7 @@ let of_termss ctx rs =
   List.fold_left (fun h n -> add n h) h rs
 ;;
 
-let symmetric ns =
-  let nsc = H.copy ns in
-  H.fold (fun n _ res -> add (Lit.flip n) res) ns nsc
-;;
+let symmetric ns = H.fold (fun n _ res -> add (Lit.flip n) res) ns (copy ns)
 
 let to_list ns =
   L.sort (fun n n' -> Pervasives.compare (Lit.terms n) (Lit.terms n'))
@@ -102,7 +101,7 @@ let sort_size_diff ns =
 let exists p ns = H.fold (fun n _ b -> b || p n) ns false
 
 let filter p ns =
-  H.fold (fun n _ ns' -> if not (p n) then H.remove ns' n; ns') ns (H.copy ns)
+  H.fold (fun n _ ns' -> if not (p n) then H.remove ns' n; ns') ns (copy ns)
 ;;
 
 let partition p ns =
