@@ -72,3 +72,5 @@ val cons : 'a -> 'a list -> 'a list
 val is_prefix : 'a list -> 'a list -> bool
 
 val zip : 'a list -> 'b list -> ('a * 'b) list
+
+val range : int -> int -> int list

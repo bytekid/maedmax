@@ -3,6 +3,7 @@ module S = Strategy
 module F = Format
 module Lit = Literal
 module Var = Variant
+module L = List
 
 (*** OPENS *******************************************************************)
 open Format
@@ -273,7 +274,7 @@ let print_res answer res =
   printf "%s SZS status " "%";
   let answer_str = success_code answer in
   match res with
-   | Completion trs -> printf "SAT\n\n%a@." print_trs trs;
+   | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
    | GroundCompletion (rr,ee,order)
    | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
     (printf "%s\n\n%a@." answer_str print_trs rr;
@@ -289,17 +290,17 @@ let print_analysis es gs =
 
 let clean es0 =
   let reduce rr =
-    if List.length rr < 200 then Listx.unique (Var.reduce rr) else rr
+    if L.length rr < 200 then Listx.unique (Var.reduce rr) else rr
   in
   let es0n = [Lit.terms (Lit.normalize e) | e <- es0 ] in
   let clean rr ee =
     let nf = Rewriting.nf rr in
     let ee' = [ nf s, nf t | s,t <- ee; nf s <> nf t ] in
     let ee'' = Rules.subsumption_free ee' in
-    let rr' = if List.length rr < 200 then Var.reduce_encomp rr else rr in
+    let rr' = if L.length rr < 200 then Var.reduce_encomp rr else rr in
     let rr_pre =
       if not !settings.keep_orientation then []
-      else Listset.diff [ r | r <- rr;List.mem (Var.normalize_rule r) es0n ] rr'
+      else Listset.diff [ r | r <- rr;L.mem (Var.normalize_rule r) es0n ] rr'
     in
     (rr' @ rr_pre, ee'')
   in function
@@ -320,35 +321,35 @@ let cpf_proof_string ?(readable = false) (es, gs) =
       ((if readable then Xml.to_string_fmt else Xml.to_string) p)
   in
   function
-    Proof ((s,t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
-      let goal = Literal.terms (List.hd gs) in
-      let es = List.map Literal.terms es in
+    Proof ((s,t),(rs, rt), sigma) when L.for_all Lit.is_equality es ->
+      let goal = Literal.terms (L.hd gs) in
+      let es = L.map Literal.terms es in
       let p = Cpf.goal_proof es goal ((s,t),(rs, rt), sigma) in
       result_string p
   | Completion _ ->
     failwith "Main.show_proof: not yet supported for Completion"
   | GroundCompletion (rr,ee,o) -> (* no goal exists *)
-      let es = List.map Literal.terms es in
+      let es = L.map Literal.terms es in
       let p = Cpf.ground_completion es (rr,ee,o) in
       result_string p
   | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
-      let g = Literal.terms (List.hd gs) in
-      let es = List.map Literal.terms es in
+      let g = Literal.terms (L.hd gs) in
+      let es = L.map Literal.terms es in
       let p = Cpf.goal_disproof es g (rr,ee,o) rst in
       result_string p
   | _ -> failwith "Main.show_proof: not yet supported for inequality axioms"
 ;;
 
 let selection_trace (es, gs) = function
-    Proof ((s, t),(rs, rt), sigma) when List.for_all Lit.is_equality es ->
-      let goal = Literal.terms (List.hd gs) in
-      let es = List.map Literal.terms es in
+    Proof ((s, t),(rs, rt), sigma) when L.for_all Lit.is_equality es ->
+      let goal = Literal.terms (L.hd gs) in
+      let es = L.map Literal.terms es in
       SelectionTrace.for_goal_proof es goal ((s, t), (rs, rt), sigma)
   | Completion rr ->
-      let es = List.map Literal.terms es in
+      let es = L.map Literal.terms es in
       SelectionTrace.for_ground_completion es (rr, [])
   | GroundCompletion (rr, ee, o) ->
-      let es = List.map Literal.terms es in
+      let es = L.map Literal.terms es in
       SelectionTrace.for_ground_completion es (rr, ee)
   | Disproof (rr, ee, _, rst) ->
       SelectionTrace.for_goal_disproof (rr, ee) rst
@@ -406,29 +407,34 @@ let print_waldmeister es =
   let fs = Rules.signature es in
   let str (f,a) =
     let n = Signature.get_fun_name f in
-    n ^ ": " ^ (List.fold_left (^) "" (Listx.copy a "ANY ")) ^ "-> ANY\n"
+    n ^ ": " ^ (L.fold_left (^) "" (Listx.copy a "ANY ")) ^ "-> ANY\n"
   in
-  F.printf "SIGNATURE   %s" (List.fold_left (fun s f -> s ^ (str f)) "" fs);
+  F.printf "SIGNATURE   %s" (L.fold_left (fun s f -> s ^ (str f)) "" fs);
   F.printf "ORDERING    LPO %s\n%!"
-    (List.fold_left (fun s (f,_) -> s ^ " > " ^(Signature.get_fun_name f))
-     (Signature.get_fun_name (fst (List.hd fs))) (List.tl fs));
+    (L.fold_left (fun s (f,_) -> s ^ " > " ^(Signature.get_fun_name f))
+     (Signature.get_fun_name (fst (L.hd fs))) (L.tl fs));
   let vs = Rules.variables es in
   let vs = match vs with
      [] -> ""
    | v0 :: vs' ->
-     let v0s = Signature.get_var_name (List.hd vs) in
-     List.fold_left (fun s v -> s ^ "," ^ Signature.get_var_name v) v0s (List.tl vs)
+     let v0s = Signature.get_var_name (L.hd vs) in
+     L.fold_left (fun s v -> s ^ "," ^ Signature.get_var_name v) v0s (L.tl vs)
   in
   F.printf "VARIABLES   %s : ANY\n%!" vs;
   F.printf "EQUATIONS   %!";
   let print (l,r) = F.printf "            %a = %a\n" Term.print l Term.print r in
-  List.iter print es;
+  L.iter print es;
   F.printf "CONCLUSION   %!\n"
 ;;
 
 let run file ((es, gs) as input) =
   let timer = Timer.start () in
-  let ans, proof = Ckb.ckb (!settings, !heuristic) input in
+  let ans, proof =
+    if gs = [] then
+      (SAT, GroundCompletion ([], [Term.V 0, Term.V 1], Order.default))
+    else
+      Ckb.ckb (!settings, !heuristic) input
+  in
   Timer.stop timer;
   let secs = Timer.length ~res:Timer.Seconds timer in
   if !(Settings.interactive) then
@@ -454,9 +460,9 @@ let () =
   Arg.parse options 
    (fun x -> filenames := !filenames @ [x]) short_usage;
   strategy := !heuristic.strategy;
-  if List.length !filenames <> 1 then
+  if L.length !filenames <> 1 then
      (eprintf "%s%!" short_usage; exit 1)
-  let f = List.hd !filenames in
+  let f = L.hd !filenames in
   match Read.file f with
   | Unit (es,gs) -> (
     Settings.input_file := Filename.remove_extension (Filename.basename f);
@@ -494,6 +500,6 @@ let () =
     settings := {!settings with instgen = true};
     Settings.do_proof := Some TraceForInstgen;
     match Instgen.start (!settings, !heuristic) (cls @ gs) with
-    | SAT -> Format.printf "SAT\n%!"
-    | UNSAT -> Format.printf "UNSAT\n%!"
+    | SAT -> Format.printf "Satisfiable\n%!"
+    | UNSAT -> Format.printf "Unsatisfiable\n%!"
 ;;

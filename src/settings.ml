@@ -2,6 +2,7 @@
 module Logic = Order.Logic
 
 (*** TYPES *******************************************************************)
+exception Backtrack 
 (* Type for reduction order *)
 type order =
   | LPO

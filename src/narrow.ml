@@ -19,6 +19,8 @@ let debug settings = settings.debug >= 1
 
 let sat_allowed _ = !heuristic.mode <> OnlyUNSAT
 
+let unsat_allowed _ = !heuristic.mode <> OnlySAT
+
 let pstr = function
     [] -> "e"
   | p -> L.fold_left (fun s i -> s ^ (string_of_int i)) "" p
@@ -114,6 +116,7 @@ let narrow settings rr ((s,t),(ps,pt)) =
 ;;
 
 let decide settings rr ee ord gs h =
+  Format.printf " narrow\n%!";
   heuristic := h;
   let bot = match ord#bot with Some b -> b | _ -> 100 in
   let patch (l, r) = 
@@ -134,7 +137,10 @@ let decide settings rr ee ord gs h =
     if L.exists unifiable gs then (
       if debug settings then
         Format.printf "UNSAT, found unifiable equation\n%!";
-      Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[])))
+      if  unsat_allowed () then
+        Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[]))
+      else raise Backtrack
+      )
     else if L.for_all (fun (_,ps) -> both_empty ps) gs && sat_allowed () then (
       Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
     else

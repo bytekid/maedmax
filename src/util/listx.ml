@@ -21,6 +21,9 @@ let product f xs ys =
 
 let cons x xs = x :: xs
 
+let rec range first last =
+  if first > last then [] else first :: (range (first + 1) last)
+
 let pi list = List.fold_right (product cons) list [[]]
 
 let rec nth_power l = function

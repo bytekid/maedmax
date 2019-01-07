@@ -12,6 +12,7 @@ module Commutativity = Theory.Commutativity
 module Lit = Literal
 module NS = Nodes
 module Logic = Settings.Logic
+module T = Term
 
 (*** OPENS *******************************************************************)
 open Prelude
@@ -21,6 +22,19 @@ open Settings
 exception Success of result
 exception Restart of Lit.t list
 exception Fail
+
+(*** TYPES *******************************************************************)
+type theory_extension_state = {
+  theory_extensions : Lit.t list list list;
+  iterations : int
+}
+
+type state = {
+  context : Logic.context;
+  equations : NS.t;
+  goals : NS.t;
+  extension : theory_extension_state option
+}
 
 (*** GLOBALS *****************************************************************)
 let settings = ref Settings.default
@@ -45,6 +59,8 @@ let acx_rules = ref []
 let new_nodes = ref []
 
 let new_goals = ref []
+
+let irreducible = ref []
 
 (*** FUNCTIONS ***************************************************************)
 let set_settings s =
@@ -118,6 +134,38 @@ let normalize = Variant.normalize_rule
 
 let ac_eqs () = [ normalize e | e <- Ac.eqs !settings.ac_syms ]
 
+let set_extension s =
+  let sign = !settings.signature (*Rules.signature [Lit.terms r | r <- !irreducible]*) in
+  let cs = [Term.F (c, []) | c, a <- sign; a = 0] in
+  let us = [u | u, a <- sign; a = 1] in
+  let extensions f a =
+    let xs = [Term.V i | i <- Listx.range 0 (a - 1)] in
+    let uxs = [Term.F(f, [c]) | f <- us; c <- cs] in
+    let f_xs = Term.F(f, xs) in
+    [[Lit.make_axiom (f_xs, x)] | x <- cs @ xs @ uxs] @ [[]]
+  in
+  let sext = {
+    theory_extensions = [extensions f a | f, a <- sign; a > 0];
+    iterations = 0
+  }
+  in
+  Format.printf "set extension\n%!";
+  {s with extension = Some sext}
+;;
+
+let make_state c es gs = {
+  context = c;
+  equations = es;
+  goals = gs;
+  extension = None
+}
+
+let update_state s es gs = { s with
+  equations = es;
+  goals = gs
+}
+
+
 (* TODO: there might be inequalities *)
 let axs _ = !settings.axioms
 
@@ -160,7 +208,8 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
   let nf n =
     try Lit.rewriter_nf_with ~max_size:max_size n rewriter
     with Rewriter.Max_term_size_exceeded ->
-      heuristic := { !heuristic with mode = OnlyUNSAT };
+      if unsat_allowed () then heuristic := { !heuristic with mode = OnlyUNSAT }
+      else raise (Restart []);
       None
   in
   let rewrite n (irrdcbl, news) =
@@ -285,14 +334,16 @@ let overlaps_on rr aa _ gs =
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let saturated ctx (rr, ee) rewriter (axs, cps, cps') =
   if reuse () then None (* too few CPs were passed here *)
-  else 
+  else (
     let ee' = Rules.subsumption_free ee in
     let str = termination_strategy () in
     let sys = rr, ee', rewriter#order in
     let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
     let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
     let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
-    Ground.all_joinable !settings ctx str sys eqs'
+    let j = Ground.all_joinable !settings ctx str sys eqs' in
+    if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
+    j)
 ;;
 
 let rewrite_seq rew (s,t) (rss,rst) =
@@ -316,29 +367,53 @@ let solved_goal rewriter gs =
       else None
     with Rewriter.Max_term_size_exceeded -> None
   in
-  let r = NS.fold (fun g -> function None -> try_to_solve g | r -> r) gs None in
-  r
+  NS.fold (fun g -> function None -> try_to_solve g | r -> r) gs None
 ;;
 
+let antiunifiable_goal rewriter gs =
+  let cs = [Term.F(c, []) | c,a <- !settings.signature; a = 0] in
+  let rec substs = function
+    | [] -> [[]]
+    | x :: xs -> [(x, c) :: s | s <- substs xs; c <- cs]
+  in
+  let antiunifiable n =
+    let antiunify tau = function
+      | None ->
+        let s', t' = Rule.substitute tau (Lit.terms n) in
+        let s',rss = rewriter#nf s' in
+        let t',rst = rewriter#nf t' in
+        if s' <> t' then Some (tau, (rss, rst)) else None
+      | o -> o
+    in
+    L.fold_right antiunify (substs (Lit.variables n)) None
+  in
+  NS.fold (fun g -> function None -> antiunifiable g | r -> r) gs None
+;;
 
 let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
+  if debug 2 then 
+    Format.printf "success check R:%a\nE:\n%a\n" Rules.print rr Rules.print ee;
   rewriter#add_more ee;
   match solved_goal rewriter gs with
-    | Some (st, rseq,sigma) -> Some (UNSAT, Proof (st, rseq, sigma))
-    | None -> (
+    | Some (st, rseq, sigma) when unsat_allowed () ->
+      Some (UNSAT, Proof (st, rseq, sigma))
+    | _ -> (
       let joinable (s,t) =
         try fst (rewriter#nf s) = fst (rewriter#nf t)
         with Rewriter.Max_term_size_exceeded -> false  
       in
-      if L.exists joinable ieqs then (* joinable inequality axiom *)
-        Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
+      if unsat_allowed () && L.exists joinable ieqs then (* joinable inequality axiom *)
+      Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
       else if List.length ee > 40 || reuse () then
         None (* saturation too expensive, or goals have been discarded *)
       else match saturated ctx (rr,ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
-        | Some order ->
+        | Some order -> (
+          if sat_allowed () && antiunifiable_goal rewriter gs <> None then
+            Some (SAT, Disproof(rr, ee, rewriter#order, ([],[]))) (* FIXME proof *)
+          else (
           let gs_ground = L.for_all Lit.is_ground (NS.to_list gs) in
           let ee_nonground = L.for_all (fun e -> not (Rule.is_ground e)) ee in
           let orientable (s,t) = order#gt s t || order#gt t s in
@@ -356,9 +431,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
               !(Settings.do_proof) = None then
               Narrow.decide !settings rr ee_sym order ieqs !heuristic
             else None
-          )
-        | _ -> None
-    )
+          )))
+        | _ -> None)
 ;;
 
 let succeeds ctx re rew cc ie =
@@ -561,7 +635,8 @@ let search_constraints ctx (ccl, ccsymlvs) gs =
 let last_trss = ref []
 
 (* find k maximal TRSs *)
-let max_k' ctx cc gs =
+let max_k' s =
+  let ctx, cc, gs = s.context, s.equations, s.goals in
   let k = !heuristic.k !(A.iterations) in
   (*assert(List.for_all Lit.is_equality (NS.to_list cc));*)
   let cc_eq = [ Lit.terms n | n <- NS.to_list cc ] in
@@ -626,12 +701,9 @@ let max_k' ctx cc gs =
    trss
 ;;
 
-let max_k ctx cc gs =
-  if reuse () then !last_trss
-  else max_k' ctx cc gs
-;; 
+let max_k s =  if reuse () then !last_trss else max_k' s
 
-let max_k ctx cc = A.take_time A.t_maxk (max_k ctx cc)
+let max_k = A.take_time A.t_maxk max_k
 
 (* some logging functions *)
 let log_max_trs j rr rr' c =
@@ -651,12 +723,13 @@ let limit_reached t =
 (* towards main control loop *)
 (* Heuristic to determine whether the state is stuck in that no progress was
    made in the last n iterations. *)
-let do_restart es gs =
+let do_restart s =
 if A.memory () > 6000 then (
   if debug 1 then F.printf "restart (memory limit of 6GB reached)\n%!";
   true)
 else
   (* no progress measure *)
+  let es, gs = s.equations, s.goals in
   let h = Hashtbl.hash (NS.size es, es, gs) in
   let rep = L.for_all ((=) h) !hash_iteration in
   hash_iteration := h :: !hash_iteration;
@@ -772,7 +845,8 @@ let detect_shape es =
 ;;
 
 
-let set_iteration_stats aa gs =
+let set_iteration_stats s =
+  let aa, gs = s.equations, s.goals in
   let i = !A.iterations in
   A.iterations := i + 1;
   A.equalities := NS.size aa;
@@ -844,18 +918,70 @@ let get_rewriter ctx j (rr, c, order) =
   )
 ;;
 
-let rec phi ctx aa gs =
-  if do_restart aa gs then raise (Restart (Select.select_for_restart aa));
+let extend_theory s phi =
+  match s.extension with
+  | None -> failwith "Ckb.extend_theory"
+  | Some sext -> 
+    let ext_list = sext.theory_extensions in 
+    Format.printf "extend %d\n%!" (List.length ext_list);
+    let exs, ex_rest = List.hd ext_list, List.tl ext_list in
+    let sext' = {theory_extensions = ex_rest; iterations = 0} in
+    let s = {s with extension = Some sext'} in
+    let rec extend = function
+    | [] -> raise Backtrack
+    | r :: rs ->
+      if L.length r = 1 then Format.printf " extend %a\n%!" Lit.print (List.hd r);
+      try phi {s with equations = NS.add_list r s.equations}
+      with Backtrack -> extend rs
+    in
+    try extend exs with Backtrack -> raise (Restart [])
+;;
+
+let is_extension_iteration i s =
+  match s.extension with
+  | None -> false
+  | Some sx -> sx.iterations = i
+;;
+
+let may_extend s =
+  match s.extension with
+  | None -> false
+  | Some sx -> sx.theory_extensions <> []
+;;
+
+let inconsistent ee=
+  let ee = [Lit.terms e | e <- NS.to_list ee] in
+  L.exists (function (T.V x,T.V y) -> x<>y | _ -> false) ee
+;;
+
+let rec phi s =
+  if do_restart s then raise (Restart (Select.select_for_restart s.equations));
   let redcount, cp_count = ref 0, ref 0 in
-  set_iteration_stats aa gs;
+  set_iteration_stats s;
   Select.reset ();
+  let aa, gs = s.equations, s.goals in
   let aa =
     if check_subsumption 2 && nth_iteration 3 then NS.subsumption_free aa
     else aa
   in
-  let process (j, aa, gs, aa_new) ((rr, c, order) as sys) =
-    let rew = get_rewriter ctx j sys in
+  (**)
+  if debug 2 then (Format.printf "iteration %d %!" !A.iterations;
+  Format.printf "(%s)\n%!" (match !heuristic.mode with
+  | OnlySAT -> "only sat" | OnlyUNSAT -> "only unsat" | _ -> "both"));
+  let s = if not (unsat_allowed ()) && s.extension = None && !A.restarts = 0 && !A.iterations <= 1 then
+    set_extension s else s in 
+  let s = {s with extension = (match s.extension with
+    | None -> None
+    | Some sx -> Some {sx with iterations = sx.iterations + 1})} in 
+  if is_extension_iteration 3 s then
+    (if may_extend s then extend_theory s phi else raise Backtrack)
+  else
+  (**)
+  let process (j, s, aa_new) ((rr, c, order) as sys) =
+    let aa, gs = s.equations, s.goals in
+    let rew = get_rewriter s.context j sys in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
+    irreducible := NS.to_list irred;
     redcount := !redcount + (NS.size red);
 
     let t = Unix.gettimeofday () in
@@ -881,8 +1007,9 @@ let rec phi ctx aa gs =
     let gos = overlaps_on rr aa_for_ols ovl gs in
     let g_bound = !heuristic.hard_bound_goals in
     let gcps = NS.filter (fun g -> Lit.size g < g_bound) gos in
-    if NS.exists (fun g -> Lit.size g < g_bound) gos then
-      heuristic := { !heuristic with mode = OnlyUNSAT };
+    (*if NS.exists (fun g -> Lit.size g < g_bound) gos then
+      if unsat_allowed () then heuristic := { !heuristic with mode = OnlyUNSAT }
+      else raise (if s.extension <> None then Backtrack else Restart []);*)
     let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
@@ -890,30 +1017,35 @@ let rec phi ctx aa gs =
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
-    store_remaining_nodes ctx rest;
-    store_remaining_goals ctx grest;
+    store_remaining_nodes s.context rest;
+    store_remaining_goals s.context grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
     let cc = (axs (), cps, cps_large) in
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
-    match succeeds ctx (rr, irr) rew cc ieqs gs with
+
+    if not (unsat_allowed ()) && inconsistent irr && not (NS.is_empty gs) then
+      (if debug 2 then Format.printf "inconsistent branch\n%!";
+        raise (if s.extension <> None then Backtrack else Fail));
+    match succeeds s.context (rr, irr) rew cc ieqs gs with
        Some r ->
        if !(Settings.generate_benchmarks) then
          Smtlib.benchmark "final";
        if !S.generate_order then
          (check_order_generation true order; failwith "order generated")
        else raise (Success r)
-     | None -> (j+1, NS.add_list sel aa, NS.add_list gg gs, sel @ aa_new)
+     | None ->
+       let s' = update_state s (NS.add_list sel aa) (NS.add_list gg gs) in
+       (j+1, s', sel @ aa_new)
   in
   try
-    let rrs = max_k ctx aa gs in
-    let s = Unix.gettimeofday () in
-    let _, aa', gs', aa_new = L.fold_left process (0, aa, gs,[]) rrs in
+    let s = update_state s aa gs in
+    let rrs = max_k s in
+    let _, s', aa_new = L.fold_left process (0, s, []) rrs in
     let sz = match rrs with (trs,c,_) :: _ -> List.length trs,c | _ -> 0,0 in
     let cp_count = if rrs = [] then 0 else !cp_count / (List.length rrs) in
     A.add_state !redcount (fst sz) (snd sz) cp_count;
     new_nodes := aa_new;
-    A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. s);
-    phi ctx aa' gs'
+    phi s'
   with Success r -> r
 ;;
 
@@ -969,6 +1101,7 @@ let remember_state es gs =
 let ckb ((settings_flags, heuristic_flags) as flags) input =
   set_settings settings_flags;
   set_heuristic heuristic_flags;
+  if debug 2 then Format.printf "%d goal count\n" (List.length (snd input));
   let rec ckb (es, gs) =
     let eq_ok e = Lit.is_equality e || Lit.is_ground e in
     if not (L.for_all eq_ok es) then
@@ -998,7 +1131,9 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
         Logic.require keep;
         L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
       );
-      let res = phi ctx ns0 (NS.of_list gs0) in
+      let start = Unix.gettimeofday () in
+      let res = phi (make_state ctx ns0 (NS.of_list gs0)) in
+      A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. start);
       Logic.del_context ctx;
       res
     with Restart es_new -> (
@@ -1047,7 +1182,7 @@ let ckb_for_instgen ctx flags lits =
         Logic.require keep;
         L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
       );
-      let ans, proof = phi ctx ns0 (NS.of_list gs0) in
+      let ans, proof = phi (make_state ctx ns0 (NS.of_list gs0)) in
       ans, Trace.proof_literal_instances input proof
     with Restart es_new -> (
       pop_strategy ();
