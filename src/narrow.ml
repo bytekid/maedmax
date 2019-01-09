@@ -116,7 +116,6 @@ let narrow settings rr ((s,t),(ps,pt)) =
 ;;
 
 let decide settings rr ee ord gs h =
-  Format.printf " narrow\n%!";
   heuristic := h;
   let bot = match ord#bot with Some b -> b | _ -> 100 in
   let patch (l, r) = 

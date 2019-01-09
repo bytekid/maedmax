@@ -139,12 +139,12 @@ let set_extension s =
   let us = [u | u, a <- sign; a = 1] in
   let extensions f a =
     let xs = [Term.V i | i <- Listx.range 0 (a - 1)] in
-    let uxs = [Term.F(f, [c]) | f <- us; c <- cs @ xs; a > 0] in
+    let uxs = [Term.F(f, [c]) | f <- us; c <- cs @ xs] in
     let f_xs = Term.F(f, xs) in
     [[Lit.make_axiom (f_xs, x)] | x <- cs @ xs @ uxs] @ [[]]
   in
   let sext = {
-    theory_extensions = [extensions f a | f, a <- sign];
+    theory_extensions = [extensions f a | f, a <- sign; a > 0];
     iterations = 0
   }
   in
@@ -377,26 +377,6 @@ let solved_goal rewriter gs =
   NS.fold (fun g -> function None -> try_to_solve g | r -> r) gs None
 ;;
 
-let antiunifiable_goal rewriter gs =
-  let cs = [Term.F(c, []) | c,a <- !settings.signature; a = 0] in
-  let rec substs = function
-    | [] -> [[]]
-    | x :: xs -> [(x, c) :: s | s <- substs xs; c <- cs]
-  in
-  let antiunifiable n =
-    let antiunify tau = function
-      | None ->
-        let s', t' = Rule.substitute tau (Lit.terms n) in
-        let s',rss = rewriter#nf s' in
-        let t',rst = rewriter#nf t' in
-        if s' <> t' then Some (tau, (rss, rst)) else None
-      | o -> o
-    in
-    L.fold_right antiunify (substs (Lit.variables n)) None
-  in
-  NS.fold (fun g -> function None -> antiunifiable g | r -> r) gs None
-;;
-
 let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
@@ -404,9 +384,9 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
     Format.printf "success check R:%a\nE:\n%a\n" Rules.print rr Rules.print ee;
   rewriter#add_more ee;
   match solved_goal rewriter gs with
-    | Some (st, rseq, sigma) when unsat_allowed () ->
-      Some (UNSAT, Proof (st, rseq, sigma))
-    | _ -> (
+    | Some (st, rseq, sigma) ->
+      if unsat_allowed () then Some (UNSAT, Proof (st, rseq, sigma)) else None
+    | None ->
       let joinable (s,t) =
         try fst (rewriter#nf s) = fst (rewriter#nf t)
         with Rewriter.Max_term_size_exceeded -> false  
@@ -418,9 +398,6 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       else match saturated ctx (rr,ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
         | Some order -> (
-          if sat_allowed () && antiunifiable_goal rewriter gs <> None then
-            Some (SAT, Disproof(rr, ee, rewriter#order, ([],[]))) (* FIXME proof *)
-          else (
           let gs_ground = L.for_all Lit.is_ground (NS.to_list gs) in
           let ee_nonground = L.for_all (fun e -> not (Rule.is_ground e)) ee in
           let orientable (s,t) = order#gt s t || order#gt t s in
@@ -438,8 +415,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
               !(Settings.do_proof) = None then
               Narrow.decide !settings rr ee_sym order ieqs !heuristic
             else None
-          )))
-        | _ -> None)
+          ))
+        | _ -> None
 ;;
 
 let succeeds ctx re rew cc ie =
@@ -973,7 +950,8 @@ let rec phi s =
     | None -> None
     | Some sx -> Some {sx with iterations = sx.iterations + 1})} in 
   if is_extension_iteration 3 s then
-    (if may_extend s then extend_theory s phi else (Format.printf "backtrack as unextensible\n%!"; raise Backtrack))
+    (if may_extend s then extend_theory s phi else (
+      if debug 2 then Format.printf "backtrack as unextensible\n%!"; raise Backtrack))
   else
   (**)
   let process (j, s, aa_new) ((rr, c, order) as sys) =
@@ -1045,6 +1023,7 @@ let rec phi s =
     A.add_state !redcount (fst sz) (snd sz) cp_count;
     phi {s' with new_nodes = aa_new}
   with Success r -> r
+  | Backtrack -> raise (Restart [])
 ;;
 
 let init_settings (settings_flags, heuristic_flags) axs gs =
@@ -1142,7 +1121,9 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       NS.reset_age ();
       A.mem_diffs := [];
       A.time_diffs := [];
-      ckb ((if gs = [] then es0 else es_new @ es0), gs))
+      let es' = if gs = [] || not (unsat_allowed ()) then [] else es_new in
+      heuristic := {!heuristic with mode = SATorUNSAT};
+      ckb (es' @ es, gs))
   in
   ckb input
 ;;
