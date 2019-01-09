@@ -57,8 +57,6 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
 
 let acx_rules = ref []
 
-let new_goals = ref []
-
 let irreducible = ref []
 
 (*** FUNCTIONS ***************************************************************)
@@ -194,11 +192,6 @@ let store_remaining_goals ctx ns =
   Select.all_goals := L.rev_append (L.rev !Select.all_goals) ns_sized
 ;;
 
-let reuse _ =
-  let reuse = !heuristic.reuse_trss in
-  !(A.iterations) > 1 && reuse > 0 && !(A.iterations) mod (reuse + 1) <> 0
-;;
-
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let add_rewrite_trace st rls st' =
   if has_comp () then (
@@ -313,7 +306,6 @@ let overlaps s rr aa =
  (* only proper overlaps with rules*)
  let ovl = new Overlapper.overlapper !heuristic ns in
  ovl#init ();
- let ns = if reuse () then NS.to_list (eqs_for_overlaps (NS.of_list s.new_nodes)) else ns in
  let cpl = [cp | n <- ns; cp <- ovl#cps n] in
  let cps = NS.of_list cpl in
  cps, ovl
@@ -325,8 +317,7 @@ let overlaps s rr = A.take_time A.t_overlap (overlaps s rr)
    Use rr only if the goals are not ground (otherwise, goals with rr are
    covered by rewriting). *)
 let overlaps_on rr aa _ gs =
-  let new_gs = NS.to_list (eqs_for_overlaps (NS.of_list !new_goals)) in
-  let gs_for_ols = if reuse () then new_gs else NS.to_list (eqs_for_overlaps gs) in
+  let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   let goals_ground = List.for_all Rule.is_ground !settings.gs in
   let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let ns = if goals_ground then aa else rr @ aa in
@@ -340,17 +331,15 @@ let overlaps_on rr aa _ gs =
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let saturated ctx (rr, ee) rewriter (axs, cps, cps') =
-  if reuse () then None (* too few CPs were passed here *)
-  else (
-    let ee' = Rules.subsumption_free ee in
-    let str = termination_strategy () in
-    let sys = rr, ee', rewriter#order in
-    let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
-    let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
-    let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
-    let j = Ground.all_joinable !settings ctx str sys eqs' in
-    if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
-    j)
+  let ee' = Rules.subsumption_free ee in
+  let str = termination_strategy () in
+  let sys = rr, ee', rewriter#order in
+  let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
+  let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
+  let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
+  let j = Ground.all_joinable !settings ctx str sys eqs' in
+  if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
+  j
 ;;
 
 let rewrite_seq rew (s,t) (rss,rst) =
@@ -393,7 +382,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       in
       if unsat_allowed () && L.exists joinable ieqs then (* joinable inequality axiom *)
       Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
-      else if List.length ee > 40 || reuse () then
+      else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
       else match saturated ctx (rr,ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
@@ -607,7 +596,7 @@ let search_constraints s (ccl, ccsymlvs) gs =
 let last_trss = ref []
 
 (* find k maximal TRSs *)
-let max_k' s =
+let max_k s =
   let ctx, cc, gs = s.context, s.equations, s.goals in
   let k = !heuristic.k !(A.iterations) in
   (*assert(List.for_all Lit.is_equality (NS.to_list cc));*)
@@ -673,14 +662,12 @@ let max_k' s =
    trss
 ;;
 
-let max_k s =  if reuse () then !last_trss else max_k' s
-
 let max_k = A.take_time A.t_maxk max_k
 
 (* some logging functions *)
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i (cost %i, reuse %B):\n %a\nreduced:%!\n %a\n@."
-   !A.iterations j c (reuse ())
+ F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@."
+   !A.iterations j c
    Rules.print (Variant.rename_rules rr)
    Rules.print (Variant.rename_rules rr')
 ;;
@@ -876,18 +863,13 @@ let check_order_generation success order =
 let last_rewriters = ref []
 
 let get_rewriter ctx j (rr, c, order) =
-  if reuse () then (
-    assert (L.length !last_rewriters > j);
-    L.nth !last_rewriters j
-  ) else (
-    let n = store_trs ctx j rr c in
-    let rr_red = C.redtrs_of_index n in (* interreduce *)
-    let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in
-    check_order_generation false order;
-    rew#init ();
-    last_rewriters := (if j = 0 then [rew] else !last_rewriters @ [rew]);
-    rew
-  )
+  let n = store_trs ctx j rr c in
+  let rr_red = C.redtrs_of_index n in (* interreduce *)
+  let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in
+  check_order_generation false order;
+  rew#init ();
+  last_rewriters := (if j = 0 then [rew] else !last_rewriters @ [rew]);
+  rew
 ;;
 
 let extend_theory s phi =

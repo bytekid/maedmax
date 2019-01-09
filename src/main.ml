@@ -79,9 +79,12 @@ let options =
     " use AC-completion");*)
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
      " print problem characteristics");
-   ("--aql", Arg.Unit (fun _ -> (*settings.strategy := S.strategy_aql;
-                                settings.reduce_trss := false;
-                                settings.k := (fun _ -> 4)*) ()),
+   ("--aql", Arg.Unit (fun _ ->
+     heuristic := {!heuristic with
+       strategy = S.strategy_aql;
+       reduce_trss = false;
+       k = (fun _ -> 4)};
+     settings := { !settings with complete_if_no_goal = true}),
      " use heuristics for AQL examples");
    ("--benchmark", Arg.Set Settings.benchmark,
      " produce benchmarks");
@@ -117,6 +120,9 @@ let options =
    ("--checksub", Arg.Int (fun n ->
      heuristic := {!heuristic with check_subsumption = n}),
      " perform subsumption checks (1,2)");
+   ("--complete-if-no-goal", Arg.Unit (fun _ ->
+     settings := {!settings with complete_if_no_goal = true}),
+     " complete system if no goal is given");
    ("--pcp", Arg.Int (fun n -> heuristic := {!heuristic with pcp = n}),
      " only consider prime critical pairs if set to 1 (but then no caching)");
    ("--no-auto", Arg.Unit (fun _ ->
@@ -155,9 +161,6 @@ let options =
      " do not use ACx equations for CPs");
    ("--restart-frequency", Arg.String (fun s -> set_restart_frequency s),
         "<r1,..,rn> number of iterations in between forced restarts");
-   ("--reuse-trss", Arg.Int (fun n ->
-          heuristic := { !heuristic with reuse_trss = n }),
-         "<n> every <n> iterations, create new TRSs, otherwise reuse");
    ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
       "<s> fixed problem shape");
    ("--selection-mode", Arg.String (fun s ->
@@ -431,7 +434,7 @@ let print_waldmeister es =
 let run file ((es, gs) as input) =
   let timer = Timer.start () in
   let ans, proof =
-    if gs = [] then
+    if gs = [] && !settings.unfailing && not !settings.complete_if_no_goal then
       (SAT, GroundCompletion ([], [Term.V 0, Term.V 1], Order.default))
     else
       Ckb.ckb (!settings, !heuristic) input

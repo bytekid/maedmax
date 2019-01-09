@@ -101,6 +101,10 @@ type selection_mode =
   | SizeSelect
   | ClassifiedMixed
 
+type classifier =
+  ?bound:float -> equation_features -> state_features ->
+  (float array * float array) -> bool
+
 type t = {
   auto : bool; (* automatic mode *)
   ac_syms : Signature.sym list; (* only relevant for ordered completion *)
@@ -117,7 +121,8 @@ type t = {
   extended_signature: bool;
   keep_orientation: bool;
   selection: selection_mode;
-  select_classify: (?bound:float -> equation_features -> state_features -> (float array * float array) -> bool) option;
+  select_classify: classifier option;
+  complete_if_no_goal : bool
 }
 
 type mode = OnlySAT | OnlyUNSAT | SATorUNSAT
@@ -139,7 +144,6 @@ type heuristic = {
   soft_bound_goals: int;
   reduce_AC_equations_for_CPs: bool;
   full_CPs_with_axioms : bool;
-  reuse_trss : int (* how often (good) TRSs are reused *);
   mode : mode
 }
 
@@ -180,7 +184,8 @@ let default = {
   extended_signature = false;
   keep_orientation = false;
   selection = MixedSelect;
-  select_classify = None
+  select_classify = None;
+  complete_if_no_goal = false;
 }
 
 (* default settings *)
@@ -201,7 +206,6 @@ let default_heuristic = {
   soft_bound_goals = 30;
   reduce_AC_equations_for_CPs = false;
   full_CPs_with_axioms = false;
-  reuse_trss = 0;
   mode = SATorUNSAT
 }
 
