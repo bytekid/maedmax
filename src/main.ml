@@ -30,8 +30,7 @@ let strategy = ref []
 let do_ordered _ =
   let h = !heuristic in
   settings := { !settings with unfailing = true };
-  heuristic := { h with k = (fun _ -> 2); strategy = S.strategy_ordered;
-    mode = OnlySAT }
+  heuristic := { h with k = (fun _ -> 2); strategy = S.strategy_ordered }
 ;;
 
 let do_concon _ =
