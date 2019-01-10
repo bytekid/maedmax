@@ -43,6 +43,7 @@ let heuristic = ref Settings.default_heuristic
 
 (* caching for search strategies*)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
+let redc_term : (Term.t * int, bool) Hashtbl.t = Hashtbl.create 512;;
 let reducible : (int, Logic.t) Hashtbl.t = Hashtbl.create 512;;
 let rl_index : (Rule.t, int) Hashtbl.t = Hashtbl.create 128;;
 
@@ -453,6 +454,7 @@ let rlred state cc (s,t) =
 ;;
 
 let c_red s cc = L.iter (fun rl -> Logic.require (rlred s cc rl)) cc
+
 let c_red s = A.take_time A.t_cred (c_red s)
 
 (* this heuristic uses rules only in a non-increasing way *)
@@ -471,29 +473,6 @@ let c_red_size ctx ccr = A.take_time A.t_cred (c_red_size ctx ccr)
 
 (* globals to create CPred constraints faster *)
 let reducibility_checker = ref (new Rewriter.reducibility_checker []);;
-
-let c_cpred s cc_vs =
-  (* create indices, cc_vs is already symmetric *)
-  assert(List.for_all Lit.is_equality s.new_nodes);
-  let rls = [ Lit.terms n | n <- s.new_nodes ] in
-  let nn_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
-  let rdc = new Rewriter.reducibility_checker nn_vs in
-  rdc#init (Some !reducibility_checker);
-
-  let ovl = new Overlapper.overlapper_with cc_vs in
-  ovl#init ();
-  (* create constraints *)
-  let red st = Logic.big_or s.context (rdc#reducible_rule st) in
-  let c2 (rl,rl_var) =
-    let red_cp (st,rl_var') = rl_var <&> rl_var' <=>> (red st) in
-    L.rev_map red_cp (ovl#cps rl)
-  in
-  let cs = L.fold_left (fun cs rlv -> L.rev_append (c2 rlv) cs) [] cc_vs in
-  L.iter (fun c -> Logic.assert_weighted c 1) cs;
-  reducibility_checker := rdc;
-;;
-
-let c_cpred s = A.take_time A.t_ccpred (c_cpred s)
 
 let c_min_cps _ cc =
   let ccsymm = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
@@ -529,20 +508,73 @@ let c_max_red_pre s cc =
 
 let c_max_red_pre s = A.take_time A.t_cred (c_max_red_pre s)
 
-let c_max_red s cc =
-  let reducible st c =
-    let r = (C.get_rdcbl_var s.context st) <=>> c in
-    Logic.require r;
+let c_max_red s ccl =
+  let reducible st =
+    let c =
+      try Hashtbl.find C.ht_rdcbl_constr st
+      with _ -> failwith "Ckb.c_max_red: no constraint found"
+    in
+    let x_st = C.get_rdcbl_var s.context st in
+    Logic.require (x_st <=>> c);
     if !(A.shape) = Boro || !(A.shape) = Ossigeno then (
-      Logic.assert_weighted (C.get_rdcbl_var s.context st) 30;
+      Logic.assert_weighted x_st 30;
       Logic.assert_weighted (C.find_rule st) 6)
     else
-      Logic.assert_weighted (C.get_rdcbl_var s.context st) 6;
+      Logic.assert_weighted x_st 6;
   in
-  Hashtbl.iter reducible C.ht_rdcbl_constr;
+  (* FIXME if C.ht_rdcbl_constr not used otherwise, iterate over it instead *)
+  L.iter reducible ccl
 ;;
 
 let c_max_red s = A.take_time A.t_cred (c_max_red s)
+
+let c_cpred_pre s ccl cc_vs =
+  let rls = [ Lit.terms n | n <- s.new_nodes ] in
+  let cc_new_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
+  let rdc = !reducibility_checker in
+  let is_reducible uv = (*FIXME use rdc? *)
+    try Hashtbl.find C.ht_rdcbl_constr uv
+    with Not_found ->
+      let c = rlred s ccl uv in
+      Hashtbl.add C.ht_rdcbl_constr uv c;
+      c
+  in
+  let overlaps_with cc1 cc2 =
+    let ovl = new Overlapper.overlapper_with cc1 in
+    ovl#init ();
+    let update_cp_reducible_constr (rl, rl_var) =
+      let cp_red (uv, rl_var') = rl_var <&> rl_var' <=>> (is_reducible uv) in
+      List.iter (fun ovl -> Logic.assert_weighted (cp_red ovl) 1) (ovl#cps rl)
+    in
+    List.iter update_cp_reducible_constr cc2
+  in
+  overlaps_with cc_vs cc_new_vs;
+  overlaps_with cc_new_vs cc_vs (*FIXME latter be better cc_old*)
+;;
+
+let c_cpred s cc_vs =
+  (* create indices, cc_vs is already symmetric *)
+  let rls = [ Lit.terms n | n <- s.new_nodes ] in
+  let nn_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
+  let rdc = new Rewriter.reducibility_checker nn_vs in
+  rdc#init (Some !reducibility_checker);
+
+  let ovl = new Overlapper.overlapper_with cc_vs in
+  ovl#init ();
+  (* create constraints *)
+  let red st = Logic.big_or s.context (rdc#reducible_rule st) in
+  let c2 (rl,rl_var) =
+    let red_cp (st,rl_var') = rl_var <&> rl_var' <=>> (red st) in
+    L.rev_map red_cp (ovl#cps rl)
+  in
+  (*Format.printf "before big fold\n%!";*)
+  let cs = L.fold_left (fun cs rlv -> L.rev_append (c2 rlv) cs) [] cc_vs in
+  (*Format.printf "before assert\n%!";*)
+  L.iter (fun c -> Logic.assert_weighted c 1) cs;
+  reducibility_checker := rdc;
+;;
+
+let c_cpred s = A.take_time A.t_ccpred (c_cpred s)
 
 let c_max_goal_red s cc gs =
   NS.iter (fun g -> Logic.assert_weighted (rlred s cc (Lit.terms g)) 1) gs
@@ -571,7 +603,10 @@ let c_comp s ns =
 
 let c_comp s = A.take_time A.t_ccomp (c_comp s)
 
-(* constraints to guide search; those get all retracted *)
+(* constraints to guide search; those get all retracted.
+   ccl is list of all current literals in CC (nonsymmetric)
+   ccsymlvs is list of (st, x_st) such that st is in symmetric closure of CC
+*)
 let search_constraints s (ccl, ccsymlvs) gs =
  (* orientable equations are used for CPs in CeTA ... *)
  let take_max = nth_iteration !heuristic.max_oriented (*|| !(S.do_proof)*) in

@@ -79,10 +79,6 @@ let options =
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
      " print problem characteristics");
    ("--aql", Arg.Unit (fun _ ->
-     heuristic := {!heuristic with
-       strategy = S.strategy_aql;
-       reduce_trss = false;
-       k = (fun _ -> 4)};
      settings := { !settings with complete_if_no_goal = true}),
      " use heuristics for AQL examples");
    ("--benchmark", Arg.Set Settings.benchmark,
