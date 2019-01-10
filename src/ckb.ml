@@ -43,9 +43,9 @@ let heuristic = ref Settings.default_heuristic
 
 (* caching for search strategies*)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
-let redc_term : (Term.t * int, bool) Hashtbl.t = Hashtbl.create 512;;
 let reducible : (int, Logic.t) Hashtbl.t = Hashtbl.create 512;;
 let rl_index : (Rule.t, int) Hashtbl.t = Hashtbl.create 128;;
+let term_index : (Term.t, int) Hashtbl.t = Hashtbl.create 128;;
 
 (* hash values of states *)
 let hash_initial = ref 0;;
@@ -431,7 +431,13 @@ let c_not_oriented ctx cc =
  L.iter (fun rl -> Logic.assert_weighted (exp rl) 1) cc
 ;;
 
-let idx r = 
+let term_idx r = 
+  try Hashtbl.find term_index r
+  with Not_found -> 
+    let i = Hashtbl.length term_index in Hashtbl.add term_index r i; i
+;;
+
+let rule_idx r = 
   try Hashtbl.find rl_index r
   with Not_found -> 
     let i = Hashtbl.length rl_index in Hashtbl.add rl_index r i; i
@@ -439,7 +445,7 @@ let idx r =
 
 let rlred state cc (s,t) =
   let ccs = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
-  let j = idx (s,t) in
+  (*let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
     try Hashtbl.find redc (j, i)
@@ -448,6 +454,20 @@ let rlred state cc (s,t) =
       let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
       let b = is_rule rl && (red t || red s) in
       Hashtbl.add redc (j, i) b; b)
+  in*)
+  let s_idx, t_idx = term_idx s, term_idx t in
+  let redcbl rl =
+    let i = rule_idx rl in
+    let redcbl_term u u_idx = 
+      try Hashtbl.find redc (u_idx, i)
+      with Not_found ->
+        let red = Rewriting.reducible_with [rl] in
+        let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
+        let b = is_rule rl && (red u) in
+        Hashtbl.add redc (u_idx, i) b;
+        b
+    in
+    redcbl_term s s_idx || redcbl_term t t_idx
   in
   let ctx = state.context in
   Logic.big_or ctx [ C.rule_var ctx rl | rl <- ccs; redcbl rl ]
