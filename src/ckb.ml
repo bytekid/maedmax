@@ -112,6 +112,8 @@ let use_maxsat _ = max_constraints () <> []
 
 let has_comp () = L.mem S.Comp (constraints ())
 
+let has_cpred () = L.mem S.CPsRed (max_constraints ())
+
 let debug d = !settings.debug >= d
 
 let check_subsumption n = !heuristic.check_subsumption >= n
@@ -572,9 +574,11 @@ let c_cpred_pre s ccl cc_vs =
   overlaps_with cc_new_vs cc_vs (*FIXME latter be better cc_old*)
 ;;
 
-let c_cpred s cc_vs =
+let c_cpred_pre s ccl = A.take_time A.t_ccpred (c_cpred_pre s ccl)
+
+let c_cpred s cc_vs = ()
   (* create indices, cc_vs is already symmetric *)
-  let rls = [ Lit.terms n | n <- s.new_nodes ] in
+  (*let rls = [ Lit.terms n | n <- s.new_nodes ] in
   let nn_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
   let rdc = new Rewriter.reducibility_checker nn_vs in
   rdc#init (Some !reducibility_checker);
@@ -591,7 +595,7 @@ let c_cpred s cc_vs =
   let cs = L.fold_left (fun cs rlv -> L.rev_append (c2 rlv) cs) [] cc_vs in
   (*Format.printf "before assert\n%!";*)
   L.iter (fun c -> Logic.assert_weighted c 1) cs;
-  reducibility_checker := rdc;
+  reducibility_checker := rdc;*)
 ;;
 
 let c_cpred s = A.take_time A.t_ccpred (c_cpred s)
@@ -705,6 +709,7 @@ let max_k s =
    (* FIXME: restrict to actual rules?! *)
    A.take_time A.t_orient_constr (St.assert_constraints strat 0 ctx) cc_symml;
    c_max_red_pre s cc_eq;
+   if has_cpred () then c_cpred_pre s cc_eq cc_symml_vars;
    Logic.push ctx; (* backtrack point for Yices *)
    Logic.require (St.bootstrap_constraints 0 ctx cc_symml_vars);
    search_constraints s (cc_eq, cc_symml_vars) gs;
@@ -1084,9 +1089,9 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
     }
   in
   let h =
-    if is_large then
+    if is_large then (
       let saql = St.strategy_aql in
-      { !heuristic with k = (fun _ -> 4); reduce_trss = false; strategy = saql }
+      { !heuristic with k = (fun _ -> 4); reduce_trss = false; strategy = saql })
     else
       { !heuristic with
         n = heuristic_flags.n;
