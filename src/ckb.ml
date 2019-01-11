@@ -486,7 +486,6 @@ let reducibility_checker = ref (new Rewriter.reducibility_checker []);;
 let c_min_cps _ cc =
   let ccsymm = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
   let rs = [ rl | rl <- ccsymm; Rule.is_rule rl ] in
-  let rule = C.find_rule in
   let c2 = [ !! (C.find_rule rl <&> (C.find_rule rl'))
              | rl <- rs; rl' <- rs; st <- O.nontrivial_cps rl rl' ] in
   L.iter (fun c -> Logic.assert_weighted c 1) c2;
