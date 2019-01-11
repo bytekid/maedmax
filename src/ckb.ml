@@ -739,6 +739,11 @@ else
   rep || limit_reached (A.runtime ()) || blowup
 ;;
 
+let long_strategy orders iterations =
+  let other = if orders = St.ts_lpo then St.ts_kbo else St.ts_lpo in
+  [orders, [], [MaxRed], IterationLimit iterations, Size;
+   other, [], [MaxRed], IterationLimit 10000, SizeAge 10]
+;;
 
 let detect_shape es =
   let shape = A.problem_shape es in
@@ -755,7 +760,7 @@ let detect_shape es =
         hard_bound_equations = 4000;
         hard_bound_goals = 200;
         n = 10;
-        strategy = St.strategy_ordered_lpo
+        strategy = long_strategy St.ts_lpo 28
       }
     | Zolfo -> { h with
         n = 10;
@@ -781,7 +786,7 @@ let detect_shape es =
         n = 10;
         n_goals = 1;
         size_age_ratio = 80;
-        strategy = St.strategy_ordered_lpo;
+        strategy = long_strategy St.ts_lpo 30;
         hard_bound_equations = 45;
         hard_bound_goals = 45;
         soft_bound_equations = emax 30;
@@ -822,7 +827,7 @@ let detect_shape es =
       hard_bound_equations = 65;
       n = 6;
       soft_bound_equations = 45;
-      strategy = St.strategy_ordered_lpo
+      strategy = long_strategy St.ts_lpo 37
       }
     | Boro -> { h with
         hard_bound_equations = 20;
@@ -830,7 +835,7 @@ let detect_shape es =
         n = 14;
         size_age_ratio = 70;
         soft_bound_equations = emax 16;
-        strategy = St.strategy_ordered_kbo
+        strategy = long_strategy St.ts_kbo 32
       }
   in
   set_heuristic h'
