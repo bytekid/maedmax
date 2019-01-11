@@ -182,8 +182,6 @@ let store_remaining_nodes ctx ns =
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   let ns = NS.smaller_than !heuristic.soft_bound_equations ns in
   let ns' = [n | n <- ns; not (NS.mem Select.all_nodes_set n)] in
-  (*Format.printf "store %d (%d new), in total %d\n%!"
-    (List.length ns) (List.length ns') (NS.size all_nodes_set);*)
   let ns_sized = [n, Lit.size n | n <- NS.sort_size ns' ] in
   Select.all_nodes := L.rev_append (L.rev !Select.all_nodes) ns_sized;
   ignore (NS.add_list ns' Select.all_nodes_set)
@@ -452,36 +450,11 @@ let rule_idx r =
     let i = Hashtbl.length rl_index in Hashtbl.add rl_index r i; i
 ;;
 
-let rlred state rdc (s,t) =
-  (*let j = idx (s,t) in
-  let redcbl rl =
-    let i = idx rl in (
-    try Hashtbl.find redc (j, i)
-    with Not_found ->
-      let red = Rewriting.reducible_with [rl] in
-      let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
-      let b = is_rule rl && (red t || red s) in
-      Hashtbl.add redc (j, i) b; b)
-  in*)
-  (*
-  let ccs = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
-  let s_idx, t_idx = term_idx s, term_idx t in
-  let redcbl rl =
-    let i = rule_idx rl in
-    let redcbl_term u u_idx = 
-      try Hashtbl.find redc (u_idx, i)
-      with Not_found ->
-        let red = Rewriting.reducible_with [rl] in
-        let is_rule (l,r) = Rule.is_rule (l,r) && (not (Term.is_subterm l r)) in
-        let b = is_rule rl && (red u) in
-        Hashtbl.add redc (u_idx, i) b;
-        b
-    in
-    redcbl_term s s_idx || redcbl_term t t_idx
-  in*)
-  let ctx = state.context in
-  (*Logic.big_or ctx [ C.rule_var ctx rl | rl <- ccs; redcbl rl ]*)
-  Logic.big_or ctx [rl | rl <- rdc#reducible_rule (s,t)]
+(* Returns constraint expressing reducibility of the term pair st using the
+   rewrite rules stored in the reducibility checker rdc. The constraint is
+   based on rule variables expressing presence of certain rewrite rules. *)
+let rlred state rdc st =
+  Logic.big_or state.context [rl | rl <- rdc#reducible_rule st]
 ;;
 
 let c_red s ccl ccsym_vs =
@@ -514,8 +487,8 @@ let c_min_cps _ cc =
   let ccsymm = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
   let rs = [ rl | rl <- ccsymm; Rule.is_rule rl ] in
   let rule = C.find_rule in
-  let c2 = [ !! (rule rl <&> (rule rl')) | rl <- rs; rl' <- rs;
-                                            st <- O.nontrivial_cps rl rl' ] in
+  let c2 = [ !! (C.find_rule rl <&> (C.find_rule rl'))
+             | rl <- rs; rl' <- rs; st <- O.nontrivial_cps rl rl' ] in
   L.iter (fun c -> Logic.assert_weighted c 1) c2;
 ;;
 
@@ -578,7 +551,7 @@ let c_cpred_pre s ccl cc_vs =
   ovl_new#init ();
   let rdc = new Rewriter.reducibility_checker cc_vs in
   rdc#init (Some !reducibility_checker);
-  let is_reducible uv = (*FIXME use rdc? *)
+  let is_reducible uv =
     try Hashtbl.find C.ht_rdcbl_constr uv
     with Not_found ->
       let c = rlred s rdc uv in
@@ -598,28 +571,6 @@ let c_cpred_pre s ccl cc_vs =
 ;;
 
 let c_cpred_pre s ccl = A.take_time A.t_ccpred (c_cpred_pre s ccl)
-
-let c_cpred s cc_vs = ()
-  (* create indices, cc_vs is already symmetric *)
-  (*let rls = [ Lit.terms n | n <- s.new_nodes ] in
-  let nn_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
-  let rdc = new Rewriter.reducibility_checker nn_vs in
-  rdc#init (Some !reducibility_checker);
-
-  let ovl = new Overlapper.overlapper_with cc_vs in
-  ovl#init ();
-  (* create constraints *)
-  let red st = Logic.big_or s.context (rdc#reducible_rule st) in
-  let c2 (rl,rl_var) =
-    let red_cp (st,rl_var') = rl_var <&> rl_var' <=>> (red st) in
-    L.rev_map red_cp (ovl#cps rl)
-  in
-  let cs = L.fold_left (fun cs rlv -> L.rev_append (c2 rlv) cs) [] cc_vs in
-  L.iter (fun c -> Logic.assert_weighted c 1) cs;
-  reducibility_checker := rdc;*)
-;;
-
-let c_cpred s = A.take_time A.t_ccpred (c_cpred s)
 
 let c_max_goal_red s cc ccsym_vs gs =
   let ccsym_vs = [(l,r),v | (l,r),v <- ccsym_vs; Term.size l >= Term.size r] in
@@ -671,7 +622,7 @@ let search_constraints s (ccl, ccsymlvs) gs =
    | S.MaxRed -> c_max_red s ccl
    | S.MinCPs -> c_min_cps s ccl
    | S.GoalRed -> c_max_goal_red s ccl ccsymlvs gs
-   | S.CPsRed -> c_cpred s ccsymlvs
+   | S.CPsRed
    | S.MaxEmpty -> ()
  in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())
 ;;
@@ -682,7 +633,6 @@ let last_trss = ref []
 let max_k s =
   let ctx, cc, gs = s.context, s.equations, s.goals in
   let k = !heuristic.k !(A.iterations) in
-  (*assert(List.for_all Lit.is_equality (NS.to_list cc));*)
   let cc_eq = [ Lit.terms n | n <- NS.to_list cc ] in
   let cc_symm = [n | n <- NS.to_list (NS.symmetric cc)] in 
   let cc_symml = [Lit.terms c | c <- cc_symm] in
