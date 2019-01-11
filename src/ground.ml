@@ -360,8 +360,8 @@ let lookup trs es st =
 ;;
 
 let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
-  if List.length sts > 50 then None
-  else (
+  (*if List.length sts > 50 then None
+  else*) (
     debug := d;
     extended_signature := xsig;
     let sys = mk_sys trs es acsyms fs str in

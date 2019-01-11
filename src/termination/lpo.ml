@@ -194,10 +194,14 @@ let init (ctx,k) fs =
   let bnd_0 = mk_zero ctx in
   let bnd_n = mk_num ctx (L.length fs') in
   let bounds f = let p = prec k f in (p <>=> bnd_0) <&> (bnd_n <>=> p) in
-  (* total *)
-  let ps = [ f,g | f,_ <- !funs; g,_ <- !funs; f <> g ] in
-  let p = prec k in
-  let total_prec = big_and ctx [ !! (p f <=> (p g)) | f, g <- ps ] in
+  (* total: causes stack overflow with too large signatures *)
+  let total_prec =
+    if List.length fs > 400 then mk_true ctx
+    else
+      let ps = [ f,g | f <- fs'; g <- fs'; f <> g ] in
+      let p = prec k in
+      big_and ctx [ !! (p f <=> (p g)) | f, g <- ps ]
+  in
   big_and1 (total_prec :: [ bounds f | f <- fs' ])
 ;;
 

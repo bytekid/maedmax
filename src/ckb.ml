@@ -333,13 +333,15 @@ let overlaps_on rr aa _ gs =
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let saturated ctx (rr, ee) rewriter (axs, cps, cps') =
+let saturated ctx (rr, ee) rew (axs, cps, cps') =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
-  let sys = rr, ee', rewriter#order in
+  let sys = rr, ee', rew#order in
   let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
+  let joinable (s,t) = try fst (rew#nf s) = fst (rew#nf t) with _ -> false in
   let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
-  let eqs' = L.filter (fun e -> not (L.mem e rr)) eqs in
+  let eqs' = L.filter (fun e -> not (L.mem e rr) && not (joinable e)) eqs in
+  (*Format.printf "remaining: \n%a\n%!" Rules.print eqs';*)
   let j = Ground.all_joinable !settings ctx str sys eqs' in
   if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
   j
@@ -524,7 +526,9 @@ let c_max_red_pre s cc =
   in
   let cc_newl = [ Lit.terms n |  n <- s.new_nodes ] in
   let cc_old = [ n |  n <- cc; not (List.mem n cc_newl) ] in
+  Format.printf "computed cc old\n%!";
   L.iter (fun st -> update_rdcbl_constr st cc) cc_newl;
+  Format.printf "constr 1\n%!";
   L.iter (fun st -> update_rdcbl_constr st cc_newl) cc_old
 ;;
 
@@ -553,7 +557,10 @@ let c_max_red s = A.take_time A.t_cred (c_max_red s)
 let c_cpred_pre s ccl cc_vs =
   let rls = [ Lit.terms n | n <- s.new_nodes ] in
   let cc_new_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
-  let rdc = !reducibility_checker in
+  let ovl_all = new Overlapper.overlapper_with cc_vs in
+  ovl_all#init ();
+  let ovl_new = new Overlapper.overlapper_with cc_new_vs in
+  ovl_new#init ();
   let is_reducible uv = (*FIXME use rdc? *)
     try Hashtbl.find C.ht_rdcbl_constr uv
     with Not_found ->
@@ -561,17 +568,17 @@ let c_cpred_pre s ccl cc_vs =
       Hashtbl.add C.ht_rdcbl_constr uv c;
       c
   in
-  let overlaps_with cc1 cc2 =
-    let ovl = new Overlapper.overlapper_with cc1 in
-    ovl#init ();
+  let overlaps_with ovl cc2 =
     let update_cp_reducible_constr (rl, rl_var) =
       let cp_red (uv, rl_var') = rl_var <&> rl_var' <=>> (is_reducible uv) in
       List.iter (fun ovl -> Logic.assert_weighted (cp_red ovl) 1) (ovl#cps rl)
     in
     List.iter update_cp_reducible_constr cc2
   in
-  overlaps_with cc_vs cc_new_vs;
-  overlaps_with cc_new_vs cc_vs (*FIXME latter be better cc_old*)
+  Format.printf " CPs %d x %d \n%!" (List.length cc_vs) (List.length cc_new_vs);
+  overlaps_with ovl_all cc_new_vs;
+  (*FIXME latter be better cc_old*)
+  if !A.iterations > 1 then overlaps_with ovl_new cc_vs
 ;;
 
 let c_cpred_pre s ccl = A.take_time A.t_ccpred (c_cpred_pre s ccl)
@@ -708,7 +715,9 @@ let max_k s =
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
    A.take_time A.t_orient_constr (St.assert_constraints strat 0 ctx) cc_symml;
+   Format.printf "before c_max_red_pre\n%!";
    c_max_red_pre s cc_eq;
+   Format.printf "before c_cpred_pre\n%!";
    if has_cpred () then c_cpred_pre s cc_eq cc_symml_vars;
    Logic.push ctx; (* backtrack point for Yices *)
    Logic.require (St.bootstrap_constraints 0 ctx cc_symml_vars);
@@ -1001,6 +1010,7 @@ let rec phi s =
     let rew = get_rewriter s.context j sys in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     irreducible := NS.to_list irred;
+    if debug 2 then Format.printf "irreducible: %d\n%!" (NS.size irred);
     redcount := !redcount + (NS.size red);
 
     let t = Unix.gettimeofday () in
@@ -1091,7 +1101,7 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   let h =
     if is_large then (
       let saql = St.strategy_aql in
-      { !heuristic with k = (fun _ -> 4); reduce_trss = false; strategy = saql })
+      { !heuristic with k = (fun _ -> 6); reduce_trss = false; strategy = saql })
     else
       { !heuristic with
         n = heuristic_flags.n;
