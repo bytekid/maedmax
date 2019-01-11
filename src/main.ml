@@ -78,9 +78,9 @@ let options =
     " use AC-completion");*)
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
      " print problem characteristics");
-   ("--aql", Arg.Unit (fun _ ->
-     settings := { !settings with complete_if_no_goal = true}),
-     " use heuristics for AQL examples");
+   ("--casc", Arg.Unit (fun _ ->
+     settings := { !settings with complete_if_no_goal = false}),
+     " CASC strategy");
    ("--benchmark", Arg.Set Settings.benchmark,
      " produce benchmarks");
    ("--concon", Arg.Unit do_concon,

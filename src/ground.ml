@@ -360,8 +360,6 @@ let lookup trs es st =
 ;;
 
 let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
-  (*if List.length sts > 50 then None
-  else*) (
     debug := d;
     extended_signature := xsig;
     let sys = mk_sys trs es acsyms fs str in
@@ -384,7 +382,7 @@ let all_joinable ctx str (trs, es, acsyms, fs, ord) sts xsig d =
     if d > 0 then
       Format.printf "all equations are joinable: %s\n%!"
         (if j <> None then "YES" else "NO");
-    j)
+    j
 ;;
 
 let all_joinable settings ctx str (rr, ee, order) sts =

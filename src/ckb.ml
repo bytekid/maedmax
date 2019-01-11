@@ -338,11 +338,16 @@ let saturated ctx (rr, ee) rew (axs, cps, cps') =
   let str = termination_strategy () in
   let sys = rr, ee', rew#order in
   let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
-  let joinable (s,t) = try fst (rew#nf s) = fst (rew#nf t) with _ -> false in
   let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
-  let eqs' = L.filter (fun e -> not (L.mem e rr) && not (joinable e)) eqs in
-  (*Format.printf "remaining: \n%a\n%!" Rules.print eqs';*)
-  let j = Ground.all_joinable !settings ctx str sys eqs' in
+  let eqs = L.filter (fun e -> not (L.mem e rr)) eqs in
+  let j =
+    (* skip if too many equations, except for large (AQL) systems *)
+    if List.length eqs > 50 && L.length !settings.axioms < 90 then None
+    else
+      let joinable (s,t) = try fst (rew#nf s) =fst (rew#nf t) with _ -> false in
+      let eqs = L.filter (fun e -> not (joinable e)) eqs in
+      Ground.all_joinable !settings ctx str sys eqs
+  in
   if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
   j
 ;;
@@ -447,8 +452,7 @@ let rule_idx r =
     let i = Hashtbl.length rl_index in Hashtbl.add rl_index r i; i
 ;;
 
-let rlred state cc (s,t) =
-  let ccs = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
+let rlred state rdc (s,t) =
   (*let j = idx (s,t) in
   let redcbl rl =
     let i = idx rl in (
@@ -459,6 +463,8 @@ let rlred state cc (s,t) =
       let b = is_rule rl && (red t || red s) in
       Hashtbl.add redc (j, i) b; b)
   in*)
+  (*
+  let ccs = L.fold_left (fun ccs (l,r) -> (r,l) :: ccs) cc cc in
   let s_idx, t_idx = term_idx s, term_idx t in
   let redcbl rl =
     let i = rule_idx rl in
@@ -472,14 +478,20 @@ let rlred state cc (s,t) =
         b
     in
     redcbl_term s s_idx || redcbl_term t t_idx
-  in
+  in*)
   let ctx = state.context in
-  Logic.big_or ctx [ C.rule_var ctx rl | rl <- ccs; redcbl rl ]
+  (*Logic.big_or ctx [ C.rule_var ctx rl | rl <- ccs; redcbl rl ]*)
+  Logic.big_or ctx [rl | rl <- rdc#reducible_rule (s,t)]
 ;;
 
-let c_red s cc = L.iter (fun rl -> Logic.require (rlred s cc rl)) cc
+let c_red s ccl ccsym_vs =
+  let ccym_vs = [(l,r),v | (l,r),v <- ccsym_vs; Term.size l >= Term.size r] in
+  let rdc = new Rewriter.reducibility_checker ccym_vs in
+  rdc#init None;
+  L.iter (fun rl -> Logic.require (rlred s rdc rl)) ccl
+;;
 
-let c_red s = A.take_time A.t_cred (c_red s)
+let c_red s ccl = A.take_time A.t_cred (c_red s ccl)
 
 (* this heuristic uses rules only in a non-increasing way *)
 let c_red_size s ccr cc_vs =
@@ -514,22 +526,25 @@ let check_equiv ctx a b =
   Logic.pop ctx
 ;;
 
-let c_max_red_pre s cc =
-  let ctx = s.context in
-  let update_rdcbl_constr st cc' =
+let c_max_red_pre s cc ccsym_vs =
+  let update_rdcbl_constr st rdc =
     let constr =
-      try let c = Hashtbl.find C.ht_rdcbl_constr st in c <|> rlred s cc' st
-      with Not_found -> rlred s cc' st
+      try let c = Hashtbl.find C.ht_rdcbl_constr st in c <|> rlred s rdc st
+      with Not_found -> rlred s rdc st
     in
     Hashtbl.replace C.ht_rdcbl_constr st constr;
-    ignore (C.get_rdcbl_var ctx st)
+    ignore (C.get_rdcbl_var s.context st)
   in
-  let cc_newl = [ Lit.terms n |  n <- s.new_nodes ] in
-  let cc_old = [ n |  n <- cc; not (List.mem n cc_newl) ] in
-  Format.printf "computed cc old\n%!";
-  L.iter (fun st -> update_rdcbl_constr st cc) cc_newl;
-  Format.printf "constr 1\n%!";
-  L.iter (fun st -> update_rdcbl_constr st cc_newl) cc_old
+  (* build reducibility checkers, one for all and one for new nodes only*)
+  let cc_new = [Lit.terms n | n <- s.new_nodes] in
+  let cc_vs_new = [e, C.find_rule e | e <- cc_new @ [ r,l | l,r <- cc_new]] in
+  let rdc_new = new Rewriter.reducibility_checker cc_vs_new in
+  rdc_new#init None;
+  let rdc_all = new Rewriter.reducibility_checker ccsym_vs in
+  rdc_all#init (Some !reducibility_checker);
+  let cc_old = [n | n <- cc; not (List.mem n cc_new)] in
+  L.iter (fun st -> update_rdcbl_constr st rdc_all) cc_new;
+  L.iter (fun st -> update_rdcbl_constr st rdc_new) cc_old
 ;;
 
 let c_max_red_pre s = A.take_time A.t_cred (c_max_red_pre s)
@@ -555,16 +570,18 @@ let c_max_red s ccl =
 let c_max_red s = A.take_time A.t_cred (c_max_red s)
 
 let c_cpred_pre s ccl cc_vs =
-  let rls = [ Lit.terms n | n <- s.new_nodes ] in
-  let cc_new_vs = [ rl, C.find_rule rl | rl <- rls @ [ r,l | l,r <- rls ] ] in
   let ovl_all = new Overlapper.overlapper_with cc_vs in
   ovl_all#init ();
+  let rsn = [ Lit.terms n | n <- s.new_nodes ] in
+  let cc_new_vs = [ rl, C.find_rule rl | rl <- rsn @ [ r,l | l,r <- rsn ] ] in
   let ovl_new = new Overlapper.overlapper_with cc_new_vs in
   ovl_new#init ();
+  let rdc = new Rewriter.reducibility_checker cc_vs in
+  rdc#init (Some !reducibility_checker);
   let is_reducible uv = (*FIXME use rdc? *)
     try Hashtbl.find C.ht_rdcbl_constr uv
     with Not_found ->
-      let c = rlred s ccl uv in
+      let c = rlred s rdc uv in
       Hashtbl.add C.ht_rdcbl_constr uv c;
       c
   in
@@ -575,7 +592,6 @@ let c_cpred_pre s ccl cc_vs =
     in
     List.iter update_cp_reducible_constr cc2
   in
-  Format.printf " CPs %d x %d \n%!" (List.length cc_vs) (List.length cc_new_vs);
   overlaps_with ovl_all cc_new_vs;
   (*FIXME latter be better cc_old*)
   if !A.iterations > 1 then overlaps_with ovl_new cc_vs
@@ -598,17 +614,18 @@ let c_cpred s cc_vs = ()
     let red_cp (st,rl_var') = rl_var <&> rl_var' <=>> (red st) in
     L.rev_map red_cp (ovl#cps rl)
   in
-  (*Format.printf "before big fold\n%!";*)
   let cs = L.fold_left (fun cs rlv -> L.rev_append (c2 rlv) cs) [] cc_vs in
-  (*Format.printf "before assert\n%!";*)
   L.iter (fun c -> Logic.assert_weighted c 1) cs;
   reducibility_checker := rdc;*)
 ;;
 
 let c_cpred s = A.take_time A.t_ccpred (c_cpred s)
 
-let c_max_goal_red s cc gs =
-  NS.iter (fun g -> Logic.assert_weighted (rlred s cc (Lit.terms g)) 1) gs
+let c_max_goal_red s cc ccsym_vs gs =
+  let ccsym_vs = [(l,r),v | (l,r),v <- ccsym_vs; Term.size l >= Term.size r] in
+  let rdc = new Rewriter.reducibility_checker ccsym_vs in
+  rdc#init None;
+  NS.iter (fun g -> Logic.assert_weighted (rlred s rdc (Lit.terms g)) 1) gs
 ;;
 
 let c_comp s ns =
@@ -643,7 +660,7 @@ let search_constraints s (ccl, ccsymlvs) gs =
  let take_max = nth_iteration !heuristic.max_oriented (*|| !(S.do_proof)*) in
  (* A.little_progress 5 && !A.equalities < 500 *)
  let assert_c = function
-   | S.Red -> c_red s ccl
+   | S.Red -> c_red s ccl ccsymlvs
    | S.Empty -> ()
    | S.Comp -> c_comp s ccl
    | S.RedSize -> c_red_size s ccl ccsymlvs
@@ -653,7 +670,7 @@ let search_constraints s (ccl, ccsymlvs) gs =
    | S.NotOriented -> c_not_oriented s ccl
    | S.MaxRed -> c_max_red s ccl
    | S.MinCPs -> c_min_cps s ccl
-   | S.GoalRed -> c_max_goal_red s ccl gs
+   | S.GoalRed -> c_max_goal_red s ccl ccsymlvs gs
    | S.CPsRed -> c_cpred s ccsymlvs
    | S.MaxEmpty -> ()
  in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())
@@ -715,9 +732,7 @@ let max_k s =
      NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) cc;
    (* FIXME: restrict to actual rules?! *)
    A.take_time A.t_orient_constr (St.assert_constraints strat 0 ctx) cc_symml;
-   Format.printf "before c_max_red_pre\n%!";
-   c_max_red_pre s cc_eq;
-   Format.printf "before c_cpred_pre\n%!";
+   c_max_red_pre s cc_eq cc_symml_vars;
    if has_cpred () then c_cpred_pre s cc_eq cc_symml_vars;
    Logic.push ctx; (* backtrack point for Yices *)
    Logic.require (St.bootstrap_constraints 0 ctx cc_symml_vars);

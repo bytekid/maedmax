@@ -185,7 +185,7 @@ let default = {
   keep_orientation = false;
   selection = MixedSelect;
   select_classify = None;
-  complete_if_no_goal = false;
+  complete_if_no_goal = true;
 }
 
 (* default settings *)
