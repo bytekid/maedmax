@@ -741,7 +741,7 @@ else
 
 let long_strategy orders iterations =
   let other = if orders = St.ts_lpo then St.ts_kbo else St.ts_lpo in
-  [orders, [], [MaxRed], IterationLimit iterations, Size;
+  [orders, [], [MaxRed], IterationLimit 60, Size;
    other, [], [MaxRed], IterationLimit 10000, SizeAge 10]
 ;;
 
