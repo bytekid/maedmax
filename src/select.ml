@@ -146,8 +146,8 @@ let select_size_age aarew ns_sorted all n =
   let rec smallest acc = function
     [] -> acc, []
   | n :: ns ->
-    if little_progress && List.exists (similar n) acc then smallest acc ns
-    else n :: acc, ns
+    (*if little_progress && List.exists (similar n) acc then smallest acc ns
+    else*) n :: acc, ns
   in
   let rec select ns acc n =
     (* if ns is empty then there is also no interesting old node*)

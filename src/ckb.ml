@@ -302,12 +302,10 @@ let overlaps s rr aa =
      let aa' = Listset.diff aa !acx_rules in
      let aa' = NS.ac_equivalence_free acs aa' in
      let occasionally = if !A.restarts > 0 then !A.iterations mod 3 = 0 else false in
-     let rr' = if occasionally then rr else NS.ac_equivalence_free acs rr in
+     let rr' = (*if occasionally then rr else*) NS.ac_equivalence_free acs rr in
      let aa' = NS.c_equivalence_free cs aa' in
      let is_large_state = A.last_cp_count () < 1000 in
-     let rr' = if is_large_state || occasionally then rr' else NS.c_equivalence_free cs rr' in
-     (*Format.printf "Rules for CPs: %a\n%!" NS.print (NS.of_list rr');
-     Format.printf "Equations for CPs: %a\n%!" NS.print (NS.of_list aa');*)
+     let rr' = if is_large_state (*|| occasionally*) then rr' else NS.c_equivalence_free cs rr' in
      rr' @ aa'
  in
  (* only proper overlaps with rules*)
@@ -697,7 +695,7 @@ let max_k s =
      Smtlib.benchmark (string_of_int rs ^ "_" ^ (string_of_int is)));
    let trss = max_k [] ctx k in
    Logic.pop ctx; (* backtrack: get rid of all assertions added since push *)
-   last_trss := trss;
+   (*last_trss := trss;*)
    trss
 ;;
 
@@ -747,7 +745,7 @@ else
 
 let long_strategy orders iterations =
   let other = if orders = St.ts_lpo then St.ts_kbo else St.ts_lpo in
-  [orders, [], [MaxRed], IterationLimit iterations, Size;
+  [orders, [], [MaxRed], IterationLimit 10000, Size;
    other, [], [MaxRed], IterationLimit 10000, SizeAge 10]
 ;;
 
