@@ -321,7 +321,8 @@ let reset_proof_track _ =
   ucount := 0;
   track_equations_state := []
 
-let update_proof_track aa pp i =
+let update_proof_track aa pp =
+  let i = !iterations in
   let (>) s1 s2 =
     match s1,s2 with
     | _, Unseen -> true

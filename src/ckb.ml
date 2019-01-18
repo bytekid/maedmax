@@ -1002,18 +1002,15 @@ let rec phi s =
     let cps = reduced rew cps in
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = Select.select (aa,rew) nn in
-    if !(Settings.track_equations) <> [] then
-      A.update_proof_track sel (NS.to_list rest) !(A.iterations);
-    let gos = overlaps_on rr aa_for_ols ovl gs in
-    let g_bound = !heuristic.hard_bound_goals in
-    let gcps = NS.filter (fun g -> Lit.size g < g_bound) gos in
-    let t = Unix.gettimeofday () in
-    let gcps = reduced ~max_size:g_bound rew gcps in
-    A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
-    let gs' = NS.diff (NS.add_all gs_big gcps) gs in
+
+    let go = overlaps_on rr aa_for_ols ovl gs in
+    let go = NS.filter (fun g -> Lit.size g < !heuristic.hard_bound_goals) go in
+    let gcps, gcps' = reduced_goals rew go in
+    let gs' = NS.diff (NS.add_all gs_big (NS.add_all gcps' gcps)) gs in
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
+
     if !(Settings.track_equations) <> [] then
-      A.update_proof_track gg (NS.to_list grest) !(A.iterations);
+      A.update_proof_track (sel @ gg) (NS.to_list rest @ (NS.to_list grest));
     store_remaining_nodes s.context rest grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
     let cc = (axs (), cps, cps_large) in
@@ -1088,7 +1085,7 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
     let acx = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
     acx_rules := [ Lit.flip r | r <- acx ] @ acx);
   A.init_proof_track !(Settings.track_equations);
-  A.update_proof_track axs [] 0;
+  A.update_proof_track axs [];
 ;;
 
 let remember_state es gs =
