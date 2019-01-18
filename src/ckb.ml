@@ -175,20 +175,17 @@ let update_state s es gs = { s with
 (* TODO: there might be inequalities *)
 let axs _ = !settings.axioms
 
-let store_remaining_nodes ctx ns =
+let store_remaining_nodes ctx ns gs =
   if has_comp () then
     NS.iter (fun n -> ignore (C.store_eq_var ctx (Lit.terms n))) ns;
   let ns = NS.smaller_than !heuristic.soft_bound_equations ns in
   let ns' = [n | n <- ns; not (NS.mem Select.all_nodes_set n)] in
   let ns_sized = [n, Lit.size n | n <- NS.sort_size ns' ] in
   Select.all_nodes := L.rev_append (L.rev !Select.all_nodes) ns_sized;
-  ignore (NS.add_list ns' Select.all_nodes_set)
-;;
-
-let store_remaining_goals ctx ns =
-  let ns = NS.smaller_than !heuristic.soft_bound_goals ns in
-  let ns_sized = [n, Lit.size n | n <- NS.sort_size ns] in
-  Select.all_goals := L.rev_append (L.rev !Select.all_goals) ns_sized
+  ignore (NS.add_list ns' Select.all_nodes_set);
+  let gs = NS.smaller_than !heuristic.soft_bound_goals gs in
+  let gs_sized = [n, Lit.size n | n <- NS.sort_size gs] in
+  Select.all_goals := L.rev_append (L.rev !Select.all_goals) gs_sized
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -1017,8 +1014,7 @@ let rec phi s =
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
     if !(Settings.track_equations) <> [] then
       A.update_proof_track gg (NS.to_list grest) !(A.iterations);
-    store_remaining_nodes s.context rest;
-    store_remaining_goals s.context grest;
+    store_remaining_nodes s.context rest grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
     let cc = (axs (), cps, cps_large) in
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
