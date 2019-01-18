@@ -1010,9 +1010,6 @@ let rec phi s =
     let gos = overlaps_on rr aa_for_ols ovl gs in
     let g_bound = !heuristic.hard_bound_goals in
     let gcps = NS.filter (fun g -> Lit.size g < g_bound) gos in
-    (*if NS.exists (fun g -> Lit.size g < g_bound) gos then
-      if unsat_allowed () then heuristic := { !heuristic with mode = OnlyUNSAT }
-      else raise (if s.extension <> None then Backtrack else Restart []);*)
     let t = Unix.gettimeofday () in
     let gcps = reduced ~max_size:g_bound rew gcps in
     A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
