@@ -186,6 +186,9 @@ let options =
    ("--hard-bound-gls", Arg.Int (fun n ->
      heuristic := { !heuristic with hard_bound_goals = n}),
       "<b> hard size bound for goals");
+   ("--switch-okb", Arg.Unit (fun _ ->
+     settings := { !settings with switch_to_okb = true}),
+     "switch to standard oKB");
    ("--term", Arg.Set only_termination,
      " perform termination check");
    ("-T", Arg.Float (fun f -> timeout := Some f),

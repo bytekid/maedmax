@@ -42,6 +42,17 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
     index <- FingerprintIndex.create ixd
   ;;
 
+  method add_symm (s,t) =
+    let l, l' = Lit.make_axiom (s,t), Lit.make_axiom (t,s) in
+    let eqs = [s, (l, Term.size t); t, (l', Term.size s)] in
+    index <- FingerprintIndex.add eqs index
+  ;;
+  
+  method add (s,t) =
+    let l = Lit.make_axiom (s,t) in
+    index <- FingerprintIndex.add [s, (l, Term.size t)] index
+  ;;
+
   method trs = trs
 
   (* Returns terms unifiable with t. Lookup in table, otherwise use index. *)

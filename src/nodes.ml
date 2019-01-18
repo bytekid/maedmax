@@ -17,11 +17,13 @@ let mem = H.mem
 
 let copy = H.copy
 
-let rec add n ns = if not (H.mem ns n) then H.add ns n true; ns
+let add n ns = if not (H.mem ns n) then H.add ns n true; ns
 
-let rec remove n ns = H.remove ns n; ns
+let remove n ns = H.remove ns n; ns
 
 let add_all ns ns' = H.fold (fun n _ h -> add n h) ns ns'
+
+let remove_all rem ns' = H.fold (fun n _ h -> remove n h) rem ns'
 
 let add_list l ns = L.fold_left (fun h n -> add n h) ns l
 

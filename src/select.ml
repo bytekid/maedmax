@@ -57,7 +57,11 @@ let shape_changed es =
 
 let yes _ = true
 
+let old_select = ref 0
+
 let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
+  old_select := !old_select + 1;
+  let rewrite_nf = !old_select mod 3 <> 0 in
   let rec get_oldest acc max k =
     if k > 5000 then (
       nodelist := List.rev acc @ !nodelist;
@@ -70,8 +74,11 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
         (match onodeset with Some nss -> ignore (NS.remove n nss) | None -> ());
         let s,t = Lit.terms n in
         let nfs =
-          try Some (rew#nf s, rew#nf t)
-          with Rewriter.Max_term_size_exceeded -> None
+          if false (*A.runtime () > 5.0 && !A.t_select /. (A.runtime ()) > 0.2*) then
+            Some ((s, []),(t, []))
+          else
+            try Some (rew#nf s, rew#nf t)
+            with Rewriter.Max_term_size_exceeded -> None
         in
         match nfs with
         | None -> get_oldest acc max (k+1)
@@ -131,16 +138,16 @@ let selections = ref 0
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
-  (*let acs, cs = !settings.ac_syms, !settings.only_c_syms in
+  let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let little_progress = A.little_progress 3 in
   let similar n n' =
     (Lit.are_ac_equivalent acs n n') || (Lit.are_c_equivalent cs n n')
-  in*)
+  in
   let rec smallest acc = function
     [] -> acc, []
   | n :: ns ->
-    (*if little_progress && List.exists (similar n) acc then smallest acc ns
-    else*) n :: acc, ns
+    if little_progress && List.exists (similar n) acc then smallest acc ns
+    else n :: acc, ns
   in
   let rec select ns acc n =
     (* if ns is empty then there is also no interesting old node*)

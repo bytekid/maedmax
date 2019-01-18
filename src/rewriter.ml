@@ -69,6 +69,18 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
     index <- L.fold_left FingerprintIndex.insert index eqs;
     Hashtbl.clear nf_table;
     Hashtbl.clear step_table
+    
+  method add_eq (s,t) =
+    index <- FingerprintIndex.add [s, ((s,t), false); t, ((t,s), false)] index;
+    Hashtbl.clear nf_table;
+    Hashtbl.clear step_table
+  ;;
+  
+  method add_rule (s,t) =
+    index <- FingerprintIndex.add [s, ((s,t), true)] index;
+    Hashtbl.clear nf_table;
+    Hashtbl.clear step_table
+  ;;
 
   (* Returns tuple (u, rs) of some normal form u of t that was obtained using
      rules rs *)

@@ -58,8 +58,6 @@ let rewrite_trace : (Rule.t, (Rules.t * Rule.t) list) Hashtbl.t =
 
 let acx_rules = ref []
 
-let irreducible = ref []
-
 (*** FUNCTIONS ***************************************************************)
 let set_settings s =
   settings := s;
@@ -135,7 +133,7 @@ let normalize = Variant.normalize_rule
 let ac_eqs () = [ normalize e | e <- Ac.eqs !settings.ac_syms ]
 
 let set_extension s =
-  let sign = !settings.signature (*Rules.signature [Lit.terms r | r <- !irreducible]*) in
+  let sign = !settings.signature in
   let cs = [Term.F (c, []) | c, a <- sign; a = 0] in
   let us = [u | u, a <- sign; a = 1] in
   let extensions f a =
@@ -230,6 +228,14 @@ let reduced ?(max_size=0) rr ns =
   let (irred, news) = rewrite ~max_size:max_size rr ns in NS.add_all news irred
 ;;
 
+let reduced_goals rew gs =
+  let t = Unix.gettimeofday () in
+  let gs_red = reduced ~max_size:!heuristic.hard_bound_goals rew gs in
+  A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
+  if NS.size gs_red < 10 then gs_red, NS.empty ()
+  else NS.filter_out (fun n -> Lit.size n > (NS.avg_size gs + 8)) gs_red
+;;
+
 let interreduce rr =
  let rew = new Rewriter.rewriter !heuristic rr [] Order.default in
  let right_reduce (l,r) =
@@ -296,12 +302,15 @@ let overlaps s rr aa =
    if not !settings.unfailing then rr
    else
      let acs, cs = !settings.ac_syms, !settings.only_c_syms in
-     let aa' = (*if List.length aa < 10 then aa else*) Listset.diff aa !acx_rules in
+     let aa' = Listset.diff aa !acx_rules in
      let aa' = NS.ac_equivalence_free acs aa' in
-     let rr' = NS.ac_equivalence_free acs rr in
+     let occasionally = if !A.restarts > 0 then !A.iterations mod 3 = 0 else false in
+     let rr' = if occasionally then rr else NS.ac_equivalence_free acs rr in
      let aa' = NS.c_equivalence_free cs aa' in
      let is_large_state = A.last_cp_count () < 1000 in
-     let rr' = if is_large_state then rr' else NS.c_equivalence_free cs rr' in
+     let rr' = if is_large_state || occasionally then rr' else NS.c_equivalence_free cs rr' in
+     (*Format.printf "Rules for CPs: %a\n%!" NS.print (NS.of_list rr');
+     Format.printf "Equations for CPs: %a\n%!" NS.print (NS.of_list aa');*)
      rr' @ aa'
  in
  (* only proper overlaps with rules*)
@@ -741,7 +750,7 @@ else
 
 let long_strategy orders iterations =
   let other = if orders = St.ts_lpo then St.ts_kbo else St.ts_lpo in
-  [orders, [], [MaxRed], IterationLimit 60, Size;
+  [orders, [], [MaxRed], IterationLimit iterations, Size;
    other, [], [MaxRed], IterationLimit 10000, SizeAge 10]
 ;;
 
@@ -874,6 +883,7 @@ let set_iteration_stats s =
     set_settings s)
 ;;
 
+let last_trss = ref []
 
 let store_trs ctx j rr cost =
   let rr = [ Lit.terms r | r <- rr ] in
@@ -884,6 +894,9 @@ let store_trs ctx j rr cost =
     else if !(Settings.do_proof) <> None then interreduce rr
     else Variant.reduce_encomp rr
   in
+  (*let rr_red_sort = List.sort Pervasives.compare rr_reduced in
+  if List.mem rr_red_sort !last_trss then Format.printf "repeated TRS %d\n%!" j;
+  last_trss := rr_red_sort :: !last_trss;*)
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;
@@ -978,17 +991,9 @@ let rec phi s =
     let aa, gs = s.equations, s.goals in
     let rew = get_rewriter s.context j sys in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
-    irreducible := NS.to_list irred;
-    if debug 2 then Format.printf "irreducible: %d\n%!" (NS.size irred);
     redcount := !redcount + (NS.size red);
 
-    let t = Unix.gettimeofday () in
-    let gs_red = reduced ~max_size:!heuristic.hard_bound_goals rew gs in
-    A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
-    let gs_red', gs_big =
-      if NS.size gs_red < 10 then gs_red, NS.empty ()
-      else NS.filter_out (fun n -> Lit.size n > (NS.avg_size gs + 8)) gs_red
-    in
+    let gs_red', gs_big = reduced_goals rew gs in
     let gs = NS.add_all gs_red' gs in
 
     let aa_for_ols = equations_for_overlaps irred aa in
@@ -1038,11 +1043,15 @@ let rec phi s =
   try
     let s = update_state s aa gs in
     let rrs = max_k s in
+    (*if rrs <> [] && !settings.switch_to_okb && !A.iterations > 5 then
+      Okb.run (!settings, !heuristic) (s.equations, s.goals) (match rrs with (_,_,o) :: _ -> o)
+    else*) (
     let _, s', aa_new = L.fold_left process (0, s, []) rrs in
     let sz = match rrs with (trs,c,_) :: _ -> List.length trs,c | _ -> 0,0 in
     let cp_count = if rrs = [] then 0 else !cp_count / (List.length rrs) in
     A.add_state !redcount (fst sz) (snd sz) cp_count;
     phi {s' with new_nodes = aa_new}
+    )
   with Success r -> r
   | Backtrack -> raise (Restart [])
 ;;

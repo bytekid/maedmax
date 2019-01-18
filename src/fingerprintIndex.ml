@@ -83,6 +83,8 @@ let insert (ps, trie) (term, value) =
 
 let create ?(poss = F.poss_set) xs = L.fold_left insert (empty poss) xs
 
+let add xs (ps, idx) = L.fold_left insert (ps, idx) xs
+
 let get_matches t ((ps, trie) as idx) =
   let rec retrieve fs0 = function
     | Leaf rs -> assert (fs0 = []); rs
