@@ -36,9 +36,19 @@ let of_termss ctx rs =
 
 let symmetric ns = H.fold (fun n _ res -> add (Lit.flip n) res) ns (copy ns)
 
+let print_list ppf l =
+  let rs = List.sort Pervasives.compare l in
+  let print_list = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
+  Format.fprintf ppf "@[<v 0> %a@]" print_list rs
+;;
+
 let to_list ns =
-  L.sort (fun n n' -> Pervasives.compare (Lit.terms n) (Lit.terms n'))
-  (H.fold (fun n _ l -> n::l) ns [] )
+  let cmp n n' = Pervasives.compare (Lit.terms n) (Lit.terms n') in
+  L.sort cmp (H.fold (fun n _ l -> n :: l) ns [])
+;;
+  
+let print ppf ns = print_list ppf (to_list ns)
+
 
 let to_rules ns = L.map Lit.terms (to_list ns)
 
@@ -155,14 +165,6 @@ let filter_out p ns =
 let diff ns d = H.fold (fun n _ nsr -> remove n nsr) d ns 
 
 let diff_list ns = L.fold_left (fun nsr n -> remove n nsr) ns
-
-let print_list ppf l =
-  let rs = List.sort Pervasives.compare l in
-  let print_list = Formatx.print_list (fun f n -> Lit.print f n) "\n " in
-  Format.fprintf ppf "@[<v 0> %a@]" print_list rs
-;;
-
-let print ppf ns = print_list ppf (to_list ns)
 
 let iter f = H.iter (fun n _ -> f n)
 

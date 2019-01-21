@@ -301,7 +301,7 @@ let overlaps s rr aa =
      let acs, cs = !settings.ac_syms, !settings.only_c_syms in
      let aa' = Listset.diff aa !acx_rules in
      let aa' = NS.ac_equivalence_free acs aa' in
-     let occasionally = if !A.restarts > 0 then !A.iterations mod 3 = 0 else false in
+     (*let occasionally = if !A.restarts > 0 then !A.iterations mod 3 = 0 else false in*)
      let rr' = (*if occasionally then rr else*) NS.ac_equivalence_free acs rr in
      let aa' = NS.c_equivalence_free cs aa' in
      let is_large_state = A.last_cp_count () < 1000 in
@@ -752,9 +752,8 @@ let long_strategy orders iterations =
 let detect_shape es =
   let shape = A.problem_shape es in
   A.shape := shape;
-  let fs_count = L.length (Rules.signature es) in
   if debug 1 then
-    F.printf "detected shape %s %i\n%!" (Settings.shape_to_string shape) fs_count;
+    F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
   let h = {!heuristic with hard_bound_equations = 200;hard_bound_goals = 100} in
   let emax k = L.fold_left max k [ Lit.size l  | l <- !settings.axioms] in
   let gmax k = L.fold_left max k [ Rule.size l  | l <- !settings.gs] in
@@ -768,7 +767,7 @@ let detect_shape es =
       }
     | Zolfo -> { h with
         n = 10;
-        restart_carry = 2
+        restart_carry = (2, 0)
       }
     | Xeno -> { h with
         n = 10;
@@ -780,11 +779,12 @@ let detect_shape es =
         soft_bound_equations = emax 70;
         soft_bound_goals = gmax 100
       }
-    | Elio when fs_count > 3 -> { h with n = 10;
+    | ElioBig -> { h with n = 10;
         hard_bound_equations = 45;
         hard_bound_goals = 45;
         soft_bound_equations = emax 30;
-        soft_bound_goals = gmax 30
+        soft_bound_goals = gmax 30;
+        restart_carry = (2, 2)
     }
     | Silicio -> { h with
         n = 10;
@@ -802,7 +802,8 @@ let detect_shape es =
         hard_bound_equations = 45;
         hard_bound_goals = 45;
         soft_bound_equations = emax 30;
-        soft_bound_goals = gmax 30
+        soft_bound_goals = gmax 30;
+        restart_carry = (2, 2)
       }
     | Carbonio -> { h with
         full_CPs_with_axioms = true;
@@ -825,9 +826,10 @@ let detect_shape es =
       hard_bound_equations = 60;
       hard_bound_goals = 90;
       soft_bound_equations = emax 40;
-      soft_bound_goals = gmax 70
+      soft_bound_goals = gmax 70;
+      restart_carry = (2, 2)
       }
-    | Elio -> { h with 
+    | ElioSmall -> { h with 
       hard_bound_equations = 65;
       n = 6;
       soft_bound_equations = 45;

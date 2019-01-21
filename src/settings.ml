@@ -54,7 +54,8 @@ type shape =
   | Boro
   | Calcio
   | Carbonio
-  | Elio
+  | ElioBig
+  | ElioSmall
   | Magnesio
   | Silicio
   | Ossigeno
@@ -139,7 +140,7 @@ type heuristic = {
   max_oriented : int;
   pcp : int; (* use critical pair criterion *)
   reduce_trss : bool; (* interreduce TRSs *)
-  restart_carry : int; (* restart_carry * #restarts: equations carried over *)
+  restart_carry : int * int; (* (c, d) * #restarts * c + d equations selected *)
   size_age_ratio: int;
   soft_bound_equations: int;
   soft_bound_goals: int;
@@ -202,7 +203,7 @@ let default_heuristic = {
   check_subsumption = 1;
   pcp = 0;
   reduce_trss = true;
-  restart_carry = 3;
+  restart_carry = (2, 0);
   size_age_ratio = 100;
   soft_bound_equations = 200;
   soft_bound_goals = 30;
@@ -228,7 +229,8 @@ let shape_to_string = function
   | Boro -> "boro"
   | Calcio -> "calcio"
   | Carbonio -> "carbonio"
-  | Elio -> "elio"
+  | ElioBig -> "elio1"
+  | ElioSmall -> "elio0"
   | Magnesio -> "magnesio"
   | Silicio -> "silicio"
   | Ossigeno -> "ossigeno"
@@ -238,4 +240,4 @@ let shape_to_string = function
   | NoShape -> "none"
 ;;
 
-let do_proof_debug () = true (*!do_debug && !do_proof <> None*)
+let do_proof_debug () = !do_debug && !do_proof <> None

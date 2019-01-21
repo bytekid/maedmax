@@ -179,7 +179,8 @@ let problem_shape es =
   if s = "boro" then Boro
   else if s = "calcio" then Calcio
   else if s = "carbonio" then Carbonio
-  else if s = "elio" then Elio
+  else if s = "elio0" then ElioSmall
+  else if s = "elio1" then ElioBig
   else if s = "magnesio" then Magnesio
   else if s = "ossigeno" then Ossigeno
   else if s = "piombo" then Piombo
@@ -204,6 +205,7 @@ let problem_shape es =
   let distrib = Theory.Ring.has_distrib es in
   let no_prop = not app && not dup && not distrib && acs + cs = 0 && not mon in
   let large = max_arity > 4 && es_count > 25 && es_size > 200 in
+  let fs_count = List.length (Rules.signature es) in
   (* Piombo: heavy terms like in lattices, LAT084-1, LAT392-1, ... *)
   if (max_term_size > 65 && max_term_depth > 10) then Piombo
   (* Ossigeno: GRP166-1, GRP185-3, GRP193-2, GRP184-4 *)
@@ -217,7 +219,8 @@ let problem_shape es =
   (* Silicio: lattice problems *)
   else if (not app && not distrib && acs > 1 && lat && not mon) then Silicio
   (* Elio: no structure detected *)
-  else if no_prop then if max_arity = 2 then Elio else Magnesio
+  else if no_prop then if max_arity = 2 then
+    (if fs_count > 3 then ElioBig else ElioSmall) else Magnesio
   (* Boro: commutative symbols, duplication *)
   else if (dup && not app && acs = 0 && cs > 1 && not mon) then Boro
   (* Magnesio: commutative symbols, monoid *)

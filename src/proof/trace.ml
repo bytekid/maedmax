@@ -294,8 +294,6 @@ let normalize rl d =
 let rewrite_conv t steps =
   let step_conv (t, acc) (rl, p, sub) =
     try
-      Format.printf "rewrite %a with %a (%a)\n%!"
-        Term.print t Rule.print rl Rule.print (Rule.substitute sub rl);
       let u, _ = Rewriting.step_at_with t p rl in
       let rl', d' = normalize rl LeftRight in
       u, (p, rl', d', sub, u) :: acc

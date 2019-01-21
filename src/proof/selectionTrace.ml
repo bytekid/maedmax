@@ -30,6 +30,8 @@ let extend p q t =
 
 type node = Fun of int | Var | Dummy
 
+type node_named = FunN of string | VarN | DummyN
+
 type pq_gram = node list
 
 let pq_count_table : (Term.t, int list) Hashtbl.t = Hashtbl.create 256
@@ -78,6 +80,47 @@ let pq_grams p q t =
       [ node t :: g | g <- gs_i ] @ gs_c
   in
   [g | g <- pqs tx; complete g]
+;;
+
+let extend_named p q t =
+  let dummies = Listx.copy (q - 1) (T.F (dummy, [])) in
+  let rec ext_q = function
+    | (T.V _ as t) -> t
+    | T.F (f, []) -> T.F (f, [])
+    | T.F (f, ts) -> T.F(f, dummies @ [ext_q ti | ti <- ts] @ dummies)
+  in
+  let rec ext_p i t = if i = 0 then t else T.F(dummy, [ext_p (i - 1) t]) in
+  ext_p (p - 1) (ext_q t)
+;;
+
+let pq_grams_named p q t =
+  let tx = extend_named p q t in
+  let complete g = List.length g = (p + q) in
+  let rec takeq ts =
+    if List.length ts < q then []
+    else Listx.take q ts :: (takeq (List.tl ts))
+  in
+  let node = function
+    | T.V _ -> VarN
+    | T.F (d, _) when d = dummy -> DummyN
+    | T.F (f, _) -> FunN (Signature.get_fun_name f)
+  in
+  let rec pqs = function
+    | T.V _ -> []
+    | T.F (d, []) when d = dummy -> []
+    | T.F (f, ts) as t ->
+      let gs = List.concat [pqs ti | ti <- ts] in
+      let gs_c, gs_i = List.partition complete gs in
+      [ node t :: g | g <- takeq [node ti | ti <- ts]] @
+      [ node t :: g | g <- gs_i ] @ gs_c
+  in
+  [g | g <- pqs tx; complete g]
+;;
+
+let print_named_pq_gram =
+  let nstr = function Dummy -> "*" | Fun i -> string_of_int i | _ -> "X" in
+  let pnode f n = Format.fprintf f "%s" (nstr n) in
+  Formatx.print_list pnode "."
 ;;
 
 let count_vector t =
@@ -222,6 +265,32 @@ let report ancs =
       Rule.print rl sn_fs sst_fs print_vector vs print_vector vt u; 
   in
   List.iter show !selections
+;;
+
+let report ancs =
+  let ht = Hashtbl.create 256 in
+  let collect (n, _, _) =
+    let (s, t) = Literal.terms n in
+    let pqgs = pq_grams_named 1 2 s @ (pq_grams_named 1 2 t) in
+    let add g = 
+      try Hashtbl.replace ht g (Hashtbl.find ht g + 1)
+      with Not_found -> Hashtbl.add ht g 1
+    in
+    List.iter add pqgs
+  in
+  let repl s =
+    if s = "b" || s = "c" || s = "d" || s = "aa" || s = "sk1" || s = "sk2" ||
+       s = "sk3" then "a" else s
+    in
+  let print =
+    let nstr = function DummyN -> "*" | FunN i -> repl i | _ -> "X" in
+    let pnode f n = Format.fprintf f "%s" (nstr n) in
+    Formatx.print_list pnode "."
+  in
+  List.iter collect !selections;
+  let l = Hashtbl.fold (fun g n l -> if n > 9 then (g, n) :: l else l) ht [] in
+  let l = List.sort (fun (_,a) (_,b) -> compare b a) l in
+  List.iter (fun (g, n) -> Format.printf "%a  %d\n%!" print g n) l
 ;;
 
 let for_goal_disproof (rr, ee) (rs, rt) =

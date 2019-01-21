@@ -61,7 +61,6 @@ let old_select = ref 0
 
 let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
   old_select := !old_select + 1;
-  let rewrite_nf = !old_select mod 3 <> 0 in
   let rec get_oldest acc max k =
     if k > 5000 then (
       nodelist := List.rev acc @ !nodelist;
@@ -138,11 +137,11 @@ let selections = ref 0
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
-  let acs, cs = !settings.ac_syms, !settings.only_c_syms in
+  (*let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let little_progress = A.little_progress 3 in
   let similar n n' =
     (Lit.are_ac_equivalent acs n n') || (Lit.are_c_equivalent cs n n')
-  in
+  in*)
   let rec smallest acc = function
     [] -> acc, []
   | n :: ns ->
@@ -233,7 +232,8 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
 ;;
 
 let select_for_restart cc =
-  let k = !A.restarts * !heuristic.restart_carry in
+  let c, d = !heuristic.restart_carry in
+  let k = !A.restarts * c + d in
   let rew = new Rewriter.rewriter !heuristic [] [] Order.default in
   let axs = !settings.axioms in
   let ths = Listset.diff (A.theory_equations (NS.to_list cc)) axs in
@@ -337,9 +337,7 @@ let classify aa =
           if !Settings.tmp > 0.01 then !Settings.tmp 
           else (*if !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio then 0.15 else*) 0.1
         in
-        let t = Unix.gettimeofday () in
         let c = classify ~bound:bnd n s pqs in
-        A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
         Hashtbl.add classification_table node c;
         c
     )
