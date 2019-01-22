@@ -40,6 +40,8 @@ type state = {
 (*** GLOBALS *****************************************************************)
 let settings = ref Settings.default
 let heuristic = ref Settings.default_heuristic
+let heuristics = ref []
+let time_limit = ref 0.0
 
 (* caching for search strategies*)
 let redc : (int * int, bool) Hashtbl.t = Hashtbl.create 512;;
@@ -295,25 +297,25 @@ let cps rew n1 n2 =
 
 (* get overlaps for rules rr and equations aa *)
 let overlaps s rr aa =
- let ns =
-   if not !settings.unfailing then rr
-   else
-     let acs, cs = !settings.ac_syms, !settings.only_c_syms in
-     let aa' = Listset.diff aa !acx_rules in
-     let aa' = NS.ac_equivalence_free acs aa' in
-     (*let occasionally = if !A.restarts > 0 then !A.iterations mod 3 = 0 else false in*)
-     let rr' = (*if occasionally then rr else*) NS.ac_equivalence_free acs rr in
-     let aa' = NS.c_equivalence_free cs aa' in
-     let is_large_state = A.last_cp_count () < 1000 in
-     let rr' = if is_large_state (*|| occasionally*) then rr' else NS.c_equivalence_free cs rr' in
-     rr' @ aa'
- in
- (* only proper overlaps with rules*)
- let ovl = new Overlapper.overlapper !heuristic ns in
- ovl#init ();
- let cpl = [cp | n <- ns; cp <- ovl#cps n] in
- let cps = NS.of_list cpl in
- cps, ovl
+  let prune_AC = !heuristic.prune_AC || !A.iterations mod 2 <> 0 in
+  let ns =
+    if not !settings.unfailing then rr
+    else
+      let acs, cs = !settings.ac_syms, !settings.only_c_syms in
+      let aa' = Listset.diff aa !acx_rules in
+      let aa' = if prune_AC then NS.ac_equivalence_free acs aa' else aa' in
+      let rr' = if prune_AC then NS.ac_equivalence_free acs rr else rr in
+      let aa' = NS.c_equivalence_free cs aa' in
+      let large_or_keep = A.last_cp_count () < 1000 || not prune_AC in
+      let rr' = if large_or_keep then rr' else NS.c_equivalence_free cs rr' in
+      rr' @ aa'
+  in
+  (* only proper overlaps with rules*)
+  let ovl = new Overlapper.overlapper !heuristic ns in
+  ovl#init ();
+  let cpl = [cp | n <- ns; cp <- ovl#cps n] in
+  let cps = NS.of_list cpl in
+  cps, ovl
 ;;
 
 let overlaps s rr = A.take_time A.t_overlap (overlaps s rr)
@@ -739,14 +741,24 @@ else
   let blowup = !(A.iterations) > 6 && is_exp eqcounts in
   if blowup && debug 1 then F.printf "restart (blowup)\n%!";
   if limit_reached (A.runtime ()) && debug 1 then
-    F.printf "restart (limit reached)\n";
+    F.printf "restart (limit reached)\n%!";
   rep || limit_reached (A.runtime ()) || blowup
 ;;
 
-let long_strategy orders iterations =
-  let other = if orders = St.ts_lpo then St.ts_kbo else St.ts_lpo in
-  [orders, [], [MaxRed], IterationLimit 10000, Size;
-   other, [], [MaxRed], IterationLimit 10000, SizeAge 10]
+let check_hard_restart s =
+  if Unix.gettimeofday () -. !A.hard_restart_time > !time_limit then (
+    match !heuristics with
+    | (h, t) :: hs ->
+      set_heuristic h;
+      time_limit := t;
+      heuristics := hs;
+      if debug 1 then
+        Format.printf "hard restart %.2f\n%!" !time_limit;
+      A.hard_restarts := !A.hard_restarts + 1;
+      A.hard_restart_time := Unix.gettimeofday ();
+      raise (Restart [])
+    | _ -> failwith "no further heuristic found"
+  )
 ;;
 
 let detect_shape es =
@@ -754,97 +766,36 @@ let detect_shape es =
   A.shape := shape;
   if debug 1 then
     F.printf "detected shape %s\n%!" (Settings.shape_to_string shape);
-  let h = {!heuristic with hard_bound_equations = 200;hard_bound_goals = 100} in
   let emax k = L.fold_left max k [ Lit.size l  | l <- !settings.axioms] in
   let gmax k = L.fold_left max k [ Rule.size l  | l <- !settings.gs] in
-  let h' =
+  let h = !heuristic in
+  let hs =
     match shape with
-    | Piombo -> { h with
-        hard_bound_equations = 4000;
-        hard_bound_goals = 200;
-        n = 10;
-        strategy = long_strategy St.ts_lpo 28
-      }
-    | Zolfo -> { h with
-        n = 10;
-        restart_carry = (2, 0)
-      }
-    | Xeno -> { h with
-        n = 10;
-        n_goals = 1;
-        reduce_AC_equations_for_CPs = true;
-        hard_bound_equations = 90;
-        hard_bound_goals = 120;
-        size_age_ratio = 60;
-        soft_bound_equations = emax 70;
-        soft_bound_goals = gmax 100
-      }
-    | ElioBig -> { h with n = 10;
-        hard_bound_equations = 45;
-        hard_bound_goals = 45;
-        soft_bound_equations = emax 30;
-        soft_bound_goals = gmax 30;
-        restart_carry = (2, 2)
-    }
-    | Silicio -> { h with
-        n = 10;
-        n_goals = 1;
-        size_age_ratio = 80;
-        strategy = long_strategy St.ts_lpo 30;
-        hard_bound_equations = 45;
-        hard_bound_goals = 45;
-        soft_bound_equations = emax 30;
-        soft_bound_goals = gmax 30
-      }
-    | Ossigeno -> { h with
-        n = 12;
-        size_age_ratio = 80;
-        hard_bound_equations = 45;
-        hard_bound_goals = 45;
-        soft_bound_equations = emax 30;
-        soft_bound_goals = gmax 30;
-        restart_carry = (2, 2)
-      }
-    | Carbonio -> { h with
-        full_CPs_with_axioms = true;
-        hard_bound_equations = 360;
-        hard_bound_goals = 270;
-        n = 10;
-        n_goals = 3;
-        size_age_ratio = 60;
-        soft_bound_equations = emax 40;
-        soft_bound_goals = gmax 100;
-      }
-    | Calcio -> { h with n = 6 }
-    | Magnesio -> { h with n = 6;
-      hard_bound_equations = 40;
-      hard_bound_goals = 45;
-      soft_bound_equations = emax 25;
-      soft_bound_goals = gmax 37
-      }
-    | NoShape -> { h with n = 6;
-      hard_bound_equations = 60;
-      hard_bound_goals = 90;
-      soft_bound_equations = emax 40;
-      soft_bound_goals = gmax 70;
-      restart_carry = (2, 2)
-      }
-    | ElioSmall -> { h with 
-      hard_bound_equations = 65;
-      n = 6;
-      soft_bound_equations = 45;
-      strategy = long_strategy St.ts_lpo 37
-      }
-    | Boro -> { h with
-        hard_bound_equations = 20;
-        hard_bound_goals = 20;
-        n = 14;
-        size_age_ratio = 70;
-        soft_bound_equations = emax 16;
-        strategy = long_strategy St.ts_kbo 32
-      }
+    | Piombo -> [h_piombo h, 1000.]
+    | Zolfo -> [h_zolfo h, 200.; h_ossigeno h, 1000.]
+    | Xeno -> [h_xeno0 h, 1000.] 
+    | Elio -> [h_elio h, 1000.]
+    | Silicio -> [h_silicio h, 1000.]
+    | Ossigeno -> [h_ossigeno h, 1000.]
+    | Carbonio -> [h_carbonio h, 1000.]
+    | Calcio -> [h_calcio h, 1000.]
+    | Magnesio -> [h_magnesio h, 1000.]
+    | NoShape -> [h_no_shape0 h, 120.; h_no_shape1 h, 60.; h_boro h, 1000.]
+    | Idrogeno -> [h_idrogeno h, 1000.]
+    | Boro -> [h_boro h, 1000.]
   in
-  set_heuristic h'
+  let fix_bounds (h, l) = ({ h with
+    soft_bound_equations = emax h.soft_bound_equations;
+    soft_bound_goals = gmax h.soft_bound_goals;
+    }, l)
+  in
+  match List.map fix_bounds hs with
+  | (h0, t) :: hs' -> (
+    set_heuristic h0;
+    time_limit := t;
+    heuristics := hs';
+    try ignore(termination_strategy ()) with _ -> failwith "no strat")
+  | _ -> failwith "no heuristic found"
 ;;
 
 
@@ -962,6 +913,7 @@ let inconsistent ee=
 
 let rec phi s =
   if do_restart s then raise (Restart (Select.select_for_restart s.equations));
+  check_hard_restart s;
   let redcount, cp_count = ref 0, ref 0 in
   set_iteration_stats s;
   Select.reset ();
@@ -1099,19 +1051,21 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
   set_settings settings_flags;
   set_heuristic heuristic_flags;
   if debug 2 then Format.printf "%d goal count\n" (List.length (snd input));
+  A.hard_restart_time := Unix.gettimeofday ();
+  
+  let eq_ok e = Lit.is_equality e || Lit.is_ground e in
+  if not (L.for_all eq_ok (fst input)) then
+    raise Fail;
+  remember_state (fst input) (snd input);
   let rec ckb (es, gs) =
-    let eq_ok e = Lit.is_equality e || Lit.is_ground e in
-    if not (L.for_all eq_ok es) then
-      raise Fail;
-    let est =
-      if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
-    in
-    let es' = L.map Lit.normalize est in
-    let es0 = L.sort Pervasives.compare es' in
-    let gs0 = L.map Lit.normalize gs in
-    Select.init es0 gs0;
-    init_settings flags es0 [ Lit.terms g | g <- gs0 ];
-    remember_state es gs;
+      let est =
+        if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
+      in
+      let es' = L.map Lit.normalize est in
+      let es0 = L.sort Pervasives.compare es' in
+      let gs0 = L.map Lit.normalize gs in
+      Select.init es0 gs0;
+      init_settings flags es0 [ Lit.terms g | g <- gs0 ];
     try
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
       let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
@@ -1132,6 +1086,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       Logic.del_context ctx;
       res
     with Restart es_new -> (
+      if debug 1 then
+        Format.printf "New lemmas on restart:\n%a\n%!" NS.print_list es_new;
       pop_strategy ();
       St.clear ();
       Cache.clear ();
@@ -1142,6 +1098,10 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       A.mem_diffs := [];
       A.time_diffs := [];
       let es' = if gs = [] || not (unsat_allowed ()) then [] else es_new in
+      let esx = List.map Lit.terms (es' @ es0) in
+      let shape = A.problem_shape esx in
+      if !settings.auto && shape <> !A.shape && shape <> NoShape then
+        detect_shape esx;
       heuristic := {!heuristic with mode = SATorUNSAT};
       ckb (es' @ es, gs))
   in

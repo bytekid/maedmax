@@ -15,9 +15,9 @@ let ts_dp5 = Dp (Seq [Cfs; Cfs; Cfs; Cfs; Cfs; LPO])
 let ts_dpn = Dp (Seq [Cfsn; LPO])
 let ts_dg = Dg (Seq [Cfsn; LPO])
 let ts_dgk = DgScc (2, Seq [Cfsn; LPO])
-let ts_lpo = Orders (Seq [LPO])
+let ts_lpo = Settings.ts_lpo
 let ts_cfsn = Orders (Seq [Cfsn])
-let ts_kbo = Orders (Seq [KBO])
+let ts_kbo = Settings.ts_kbo
 let ts_lpokbo = Orders (Choice (LPO, KBO))
 let ts_mpol = Orders (Seq [MPol])
 

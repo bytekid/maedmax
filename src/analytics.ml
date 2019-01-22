@@ -18,6 +18,7 @@ type track_footprint = {
 
 type state = {
   restarts: int;
+  hard_restarts: int;
   iterations: int;
   equalities: int;
   goals: int;
@@ -55,6 +56,7 @@ let iterations = ref 0;;
 let equalities = ref 0;;
 let goals = ref 0;;
 let restarts = ref 0
+let hard_restarts = ref 0
 let time_diffs = ref []
 let mem_diffs = ref []
 let eq_counts = ref []
@@ -74,6 +76,7 @@ let ac_syms = ref []
 let only_c_syms = ref []
 
 let start_time = ref 0.0
+let hard_restart_time = ref 0.0
 let last_time = ref 0.0
 
 let track_equations_state : (Literal.t * equation_state) list ref = ref []
@@ -127,6 +130,7 @@ let print () =
   if !goals > 0 then
     printf "goals               %i@." !goals;
   printf "restarts            %i@." !restarts;
+  printf "hard restarts       %i@." !hard_restarts;
   printf "memory (MB)         %d@." (memory ());
   printf "time diffs         %s@." (float_count_str time_diffs);
   printf "memory diffs       %s@." (int_count_str mem_diffs);
@@ -179,8 +183,8 @@ let problem_shape es =
   if s = "boro" then Boro
   else if s = "calcio" then Calcio
   else if s = "carbonio" then Carbonio
-  else if s = "elio0" then ElioSmall
-  else if s = "elio1" then ElioBig
+  else if s = "idrogeno" then Idrogeno
+  else if s = "elio" then Elio
   else if s = "magnesio" then Magnesio
   else if s = "ossigeno" then Ossigeno
   else if s = "piombo" then Piombo
@@ -220,7 +224,7 @@ let problem_shape es =
   else if (not app && not distrib && acs > 1 && lat && not mon) then Silicio
   (* Elio: no structure detected *)
   else if no_prop then if max_arity = 2 then
-    (if fs_count > 3 then ElioBig else ElioSmall) else Magnesio
+    (if fs_count > 3 then Elio else Idrogeno) else Magnesio
   (* Boro: commutative symbols, duplication *)
   else if (dup && not app && acs = 0 && cs > 1 && not mon) then Boro
   (* Magnesio: commutative symbols, monoid *)
@@ -298,9 +302,10 @@ let json () =
   let t_sat = "time/sat", trunc !t_sat in
   let t_cache = "time/cache", trunc !t_cache in
   let res = "restarts", `Int !restarts in
+  let hres = "hard restarts", `Int !hard_restarts in
   let shp = "shape", `String (Settings.shape_to_string !shape) in
   let assoc =
-    [it; ea; gs; res; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
+    [it; ea; gs; res; hres; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
     t_select; t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process;
     t_sat; t_sub; t_cache]
   in
@@ -455,6 +460,7 @@ let record_state red_count trs_size cost cp_count =
   in
   let s = {
     restarts = !restarts;
+    hard_restarts = !hard_restarts;
     iterations = !iterations;
     equalities = !equalities;
     goals = !goals;

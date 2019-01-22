@@ -234,11 +234,14 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
 let select_for_restart cc =
   let c, d = !heuristic.restart_carry in
   let k = !A.restarts * c + d in
+  if debug 1 then
+    Format.printf "select %d for restart (%d restarts)\n%!" k !A.restarts;
   let rew = new Rewriter.rewriter !heuristic [] [] Order.default in
   let axs = !settings.axioms in
   let ths = Listset.diff (A.theory_equations (NS.to_list cc)) axs in
   let ths' = if shape_changed cc then ths else [] in
-fst (select' true (NS.empty (),rew) k (NS.diff_list cc (axs @ ths)) 30) @ ths'
+  let cc' = NS.diff_list cc (axs @ ths) in
+  fst (select' true (NS.empty (),rew) k cc' 30) @ ths'
 ;;
 
 let select_goals' (aa, _) k gg thresh =

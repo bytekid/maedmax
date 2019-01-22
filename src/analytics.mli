@@ -21,12 +21,16 @@ val equalities : int ref
 val goals : int ref
 val iterations : int ref
 val restarts : int ref
+val hard_restarts : int ref
 val smt_checks : int ref
 val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref
 val goal_counts : int list ref
 val shape : Settings.shape ref
+
+val start_time : float ref
+val hard_restart_time : float ref
 
 val memory : unit -> int
 

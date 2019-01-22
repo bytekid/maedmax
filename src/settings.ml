@@ -20,7 +20,10 @@ type t_term =
   | Dp of orders (* dependency pairs followed by orders *)
   | Dg of orders (* dependency graph without SCCs *)
   | DgScc of (int * orders) (* dependency graph with k SCCs *)
- 
+
+let ts_lpo = Orders (Seq [LPO])
+let ts_kbo = Orders (Seq [KBO])
+
 type selection =
   | Size
   | SizeAge of int
@@ -54,8 +57,8 @@ type shape =
   | Boro
   | Calcio
   | Carbonio
-  | ElioBig
-  | ElioSmall
+  | Elio
+  | Idrogeno
   | Magnesio
   | Silicio
   | Ossigeno
@@ -146,6 +149,7 @@ type heuristic = {
   soft_bound_goals: int;
   reduce_AC_equations_for_CPs: bool;
   full_CPs_with_axioms : bool;
+  prune_AC : bool;
   mode : mode
 }
 
@@ -209,6 +213,7 @@ let default_heuristic = {
   soft_bound_goals = 30;
   reduce_AC_equations_for_CPs = false;
   full_CPs_with_axioms = false;
+  prune_AC = true;
   mode = SATorUNSAT
 }
 
@@ -229,8 +234,8 @@ let shape_to_string = function
   | Boro -> "boro"
   | Calcio -> "calcio"
   | Carbonio -> "carbonio"
-  | ElioBig -> "elio1"
-  | ElioSmall -> "elio0"
+  | Elio -> "elio"
+  | Idrogeno -> "idrogeno"
   | Magnesio -> "magnesio"
   | Silicio -> "silicio"
   | Ossigeno -> "ossigeno"
@@ -241,3 +246,111 @@ let shape_to_string = function
 ;;
 
 let do_proof_debug () = !do_debug && !do_proof <> None
+
+let h_piombo h = { h with
+  hard_bound_equations = 4000;
+  hard_bound_goals = 200;
+  n = 10;
+  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
+}
+
+let h_zolfo h = { h with
+  n = 10;
+  restart_carry = (2, 0)
+}
+
+let h_xeno0 h = { h with
+  n = 10;
+  n_goals = 1;
+  reduce_AC_equations_for_CPs = true;
+  hard_bound_equations = 90;
+  hard_bound_goals = 120;
+  size_age_ratio = 60;
+  soft_bound_equations = 70;
+  soft_bound_goals = 100;
+  restart_carry = (2, 0);
+}
+
+let h_xeno1 h = { h_xeno0 h with
+  restart_carry = (2, 2)
+}
+
+let h_elio h = { h with
+  n = 10;
+  hard_bound_equations = 45;
+  hard_bound_goals = 45;
+  soft_bound_equations = 30;
+  soft_bound_goals = 30;
+  restart_carry = (2, 2)
+}
+
+let h_silicio h = { h with
+  n = 10;
+  n_goals = 1;
+  size_age_ratio = 80;
+  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
+  hard_bound_equations = 45;
+  hard_bound_goals = 45;
+  soft_bound_equations = 30;
+  soft_bound_goals = 30
+}
+
+let h_ossigeno h = { h with
+  n = 12;
+  size_age_ratio = 80;
+  hard_bound_equations = 45;
+  hard_bound_goals = 45;
+  soft_bound_equations = 30;
+  soft_bound_goals = 30;
+  restart_carry = (2, 2)
+}
+
+let h_carbonio h = { h with
+  full_CPs_with_axioms = true;
+  hard_bound_equations = 360;
+  hard_bound_goals = 270;
+  n = 10;
+  n_goals = 3;
+  size_age_ratio = 60;
+  soft_bound_equations = 40;
+  soft_bound_goals = 100;
+}
+
+let h_calcio h = { h with n = 6 }
+
+let h_magnesio h = { h with
+  n = 6;
+  hard_bound_equations = 40;
+  hard_bound_goals = 45;
+  soft_bound_equations = 25;
+  soft_bound_goals = 37
+}
+
+let h_no_shape1 h = { h with
+  n = 6;
+  hard_bound_equations = 60;
+  hard_bound_goals = 90;
+  soft_bound_equations = 40;
+  soft_bound_goals = 70;
+  restart_carry = (3, 0)
+}
+
+let h_no_shape0 h = { h_no_shape1 h with
+  restart_carry = (2, 2)
+}
+
+let h_idrogeno h = { h with
+  hard_bound_equations = 65;
+  n = 6;
+  soft_bound_equations = 45;
+  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
+}
+
+let h_boro h = { h with
+  hard_bound_equations = 20;
+  hard_bound_goals = 20;
+  n = 14;
+  size_age_ratio = 70;
+  soft_bound_equations = 16;
+  strategy = [ts_kbo, [], [MaxRed], IterationLimit 10000, Size]
+}
