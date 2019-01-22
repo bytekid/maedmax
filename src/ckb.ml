@@ -780,7 +780,7 @@ let detect_shape es =
     | Carbonio -> [h_carbonio h, 1000.]
     | Calcio -> [h_calcio h, 1000.]
     | Magnesio -> [h_magnesio h, 1000.]
-    | NoShape -> [h_no_shape0 h, 120.; h_no_shape1 h, 60.; h_boro h, 1000.]
+    | NoShape -> [h_no_shape0 h, 120.; h_no_shape1 h, 60.; h_no_shape2 h, 1000.]
     | Idrogeno -> [h_idrogeno h, 1000.]
     | Boro -> [h_boro h, 1000.]
   in

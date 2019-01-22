@@ -73,7 +73,7 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
         (match onodeset with Some nss -> ignore (NS.remove n nss) | None -> ());
         let s,t = Lit.terms n in
         let nfs =
-          if false (*A.runtime () > 5.0 && !A.t_select /. (A.runtime ()) > 0.2*) then
+          if false then
             Some ((s, []),(t, []))
           else
             try Some (rew#nf s, rew#nf t)

@@ -151,6 +151,7 @@ type heuristic = {
   full_CPs_with_axioms : bool;
   prune_AC : bool;
   no_similar_select: bool;
+  select_recursion_limit: int;
   mode : mode
 }
 
@@ -216,6 +217,7 @@ let default_heuristic = {
   full_CPs_with_axioms = false;
   prune_AC = true;
   no_similar_select = false;
+  select_recursion_limit = 5000;
   mode = SATorUNSAT
 }
 
@@ -271,6 +273,7 @@ let h_xeno0 h = { h with
   soft_bound_equations = 70;
   soft_bound_goals = 100;
   restart_carry = (2, 0);
+  select_recursion_limit = 2000
 }
 
 let h_xeno1 h = { h_xeno0 h with
@@ -339,6 +342,10 @@ let h_no_shape1 h = { h with
 
 let h_no_shape0 h = { h_no_shape1 h with
   restart_carry = (2, 2)
+}
+
+let h_no_shape2 h = { h_no_shape1 h with (* LDA002-1 *)
+  restart_carry = (4, 0) (* select limit 1000 also possible*)
 }
 
 let h_idrogeno h = { h with
