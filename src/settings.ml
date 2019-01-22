@@ -259,7 +259,8 @@ let h_piombo h = { h with
 
 let h_zolfo h = { h with
   n = 10;
-  restart_carry = (2, 0)
+  restart_carry = (2, 0);
+  k = k_limiting
 }
 
 let h_xeno0 h = { h with
@@ -276,7 +277,8 @@ let h_xeno0 h = { h with
 }
 
 let h_xeno1 h = { h_xeno0 h with
-  no_similar_select = true
+  no_similar_select = true;
+  k = k_limiting
 }
 
 let h_elio h = { h with
@@ -296,7 +298,8 @@ let h_silicio h = { h with
   hard_bound_equations = 45;
   hard_bound_goals = 45;
   soft_bound_equations = 30;
-  soft_bound_goals = 30
+  soft_bound_goals = 30;
+  k = (fun i -> if i > 30 then 1 else 2)
 }
 
 let h_ossigeno h = { h with
@@ -306,7 +309,8 @@ let h_ossigeno h = { h with
   hard_bound_goals = 45;
   soft_bound_equations = 30;
   soft_bound_goals = 30;
-  restart_carry = (2, 2)
+  restart_carry = (2, 2);
+  k = k_limiting
 }
 
 let h_carbonio0 h = { h with
@@ -332,20 +336,21 @@ let h_magnesio h = { h with
   soft_bound_goals = 37
 }
 
-let h_no_shape1 h = { h with
+let h_no_shape0 h = { h with
   n = 6;
   hard_bound_equations = 60;
   hard_bound_goals = 90;
   soft_bound_equations = 40;
   soft_bound_goals = 70;
-  restart_carry = (3, 0)
-}
-
-let h_no_shape0 h = { h_no_shape1 h with
   restart_carry = (2, 2)
 }
 
-let h_no_shape2 h = { h_no_shape1 h with (* LDA002-1 *)
+let h_no_shape1 h = { h_no_shape0 h with
+  restart_carry = (3, 0);
+  k = k_limiting
+}
+
+let h_no_shape2 h = { h_no_shape0 h with (* LDA002-1 *)
   restart_carry = (4, 0) (* select limit 1000 also possible*)
 }
 
@@ -353,6 +358,7 @@ let h_idrogeno h = { h with
   hard_bound_equations = 65;
   n = 6;
   soft_bound_equations = 45;
+  k = k_limiting;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
 }
 

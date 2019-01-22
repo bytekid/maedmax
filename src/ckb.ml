@@ -230,9 +230,13 @@ let reduced ?(max_size=0) rr ns =
 let reduced_goals rew gs =
   let t = Unix.gettimeofday () in
   let gs_red = reduced ~max_size:!heuristic.hard_bound_goals rew gs in
+  let thresh = NS.avg_size gs + 8 in
+  let res =
+    if NS.size gs_red < 10 then gs_red, NS.empty ()
+    else NS.filter_out (fun n -> Lit.size n > thresh) gs_red
+  in
   A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
-  if NS.size gs_red < 10 then gs_red, NS.empty ()
-  else NS.filter_out (fun n -> Lit.size n > (NS.avg_size gs + 8)) gs_red
+  res
 ;;
 
 let interreduce rr =
@@ -956,8 +960,12 @@ let rec phi s =
     let t = Unix.gettimeofday () in
     let go = overlaps_on rr aa_for_ols ovl gs in
     let go = NS.filter (fun g -> Lit.size g < !heuristic.hard_bound_goals) go in
+    let tt = Unix.gettimeofday () in
     let gcps, gcps' = reduced_goals rew go in
+    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
+    let tt = Unix.gettimeofday () in
     let gs' = NS.diff (NS.add_all gs_big (NS.add_all gcps' gcps)) gs in
+    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. tt);
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
     A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
 
