@@ -55,7 +55,6 @@ type termination_strategy = t_setting list
 (* heuristically detected problem class *)
 type shape =
   | Boro
-  | Calcio
   | Carbonio
   | Elio
   | Idrogeno
@@ -172,8 +171,8 @@ type result = answer * proof
 
 (*** GLOBALS *****************************************************************)
 (* k functions *)
-let k_default = fun i -> if i < 3 then 6 else 2
-let k_limiting = fun i -> if i < 3 then 6 else if i > 15 then 1 else 2
+let k_default i = if i < 3 then 6 else 2
+let k_limiting i = if i > 15 then 1 else 2
 let k2 _ = 2
 
 (* default settings *)
@@ -237,7 +236,6 @@ let fixed_shape = ref ""
 
 let shape_to_string = function
   | Boro -> "boro"
-  | Calcio -> "calcio"
   | Carbonio -> "carbonio"
   | Elio -> "elio"
   | Idrogeno -> "idrogeno"
@@ -325,8 +323,6 @@ let h_carbonio0 h = { h with
 let h_carbonio1 h = { h_carbonio0 h with
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
 }
-
-let h_calcio h = { h with n = 6 }
 
 let h_magnesio h = { h with
   n = 6;

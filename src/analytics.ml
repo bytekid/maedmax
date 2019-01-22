@@ -182,7 +182,6 @@ let find_duplicating es =
 let problem_shape es =
   let s = !Settings.fixed_shape in
   if s = "boro" then Boro
-  else if s = "calcio" then Calcio
   else if s = "carbonio" then Carbonio
   else if s = "idrogeno" then Idrogeno
   else if s = "elio" then Elio
@@ -198,8 +197,7 @@ let problem_shape es =
   let rmax (l, r) = max (Term.depth l) (Term.depth r) in
   let max_term_depth = L.fold_left max 0 [rmax e | e <- es] in
   let max_arity = L.fold_left max 0 [ a | _, a <- Rules.signature es ] in
-  let es_size = L.fold_left (+) 0 [Rule.size e | e <- es] in 
-  let es_count = List.length es in
+  let es_size = L.fold_left (+) 0 [Rule.size e | e <- es] in
   let app = is_applicative es in
   let dup = is_duplicating es in
   let mon = Theory.Monoid.count es > 0 in
@@ -209,7 +207,6 @@ let problem_shape es =
   let cs = Theory.Commutativity.count es - acs in
   let distrib = Theory.Ring.has_distrib es in
   let no_prop = not app && not dup && not distrib && acs + cs = 0 && not mon in
-  let large = max_arity > 4 && es_count > 25 && es_size > 200 in
   let fs_count = List.length (Rules.signature es) in
   (* Piombo: heavy terms like in lattices, LAT084-1, LAT392-1, ... *)
   if (max_term_size > 65 && max_term_depth > 10) then Piombo
@@ -230,8 +227,6 @@ let problem_shape es =
   else if (dup && not app && acs = 0 && cs > 1 && not mon) then Boro
   (* Magnesio: commutative symbols, monoid *)
   else if (not app && acs > 0 && cs > 0 && mon && max_arity = 2) then Magnesio
-  (* Calcio: large problems *)
-  else if (dup && large) then Calcio
   else if dup && max_arity > 2 && es_size > 100 then Zolfo else NoShape)
 ;;
 
