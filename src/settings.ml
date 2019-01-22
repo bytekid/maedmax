@@ -150,6 +150,7 @@ type heuristic = {
   reduce_AC_equations_for_CPs: bool;
   full_CPs_with_axioms : bool;
   prune_AC : bool;
+  no_similar_select: bool;
   mode : mode
 }
 
@@ -214,6 +215,7 @@ let default_heuristic = {
   reduce_AC_equations_for_CPs = false;
   full_CPs_with_axioms = false;
   prune_AC = true;
+  no_similar_select = false;
   mode = SATorUNSAT
 }
 
@@ -272,7 +274,7 @@ let h_xeno0 h = { h with
 }
 
 let h_xeno1 h = { h_xeno0 h with
-  restart_carry = (2, 2)
+  no_similar_select = true
 }
 
 let h_elio h = { h with

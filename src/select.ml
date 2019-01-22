@@ -137,16 +137,15 @@ let selections = ref 0
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
-  (*let acs, cs = !settings.ac_syms, !settings.only_c_syms in
-  let little_progress = A.little_progress 3 in
+  let acs, cs = !settings.ac_syms, !settings.only_c_syms in
   let similar n n' =
     (Lit.are_ac_equivalent acs n n') || (Lit.are_c_equivalent cs n n')
-  in*)
+  in
   let rec smallest acc = function
     [] -> acc, []
   | n :: ns ->
-    (*if little_progress && List.exists (similar n) acc then smallest acc ns
-    else*) n :: acc, ns
+    if (*little_progress &&*) List.exists (similar n) acc then smallest acc ns
+    else n :: acc, ns
   in
   let rec select ns acc n =
     (* if ns is empty then there is also no interesting old node*)

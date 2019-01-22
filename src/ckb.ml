@@ -773,7 +773,7 @@ let detect_shape es =
     match shape with
     | Piombo -> [h_piombo h, 1000.]
     | Zolfo -> [h_zolfo h, 200.; h_ossigeno h, 1000.]
-    | Xeno -> [h_xeno0 h, 1000.] 
+    | Xeno -> [h_xeno0 h, 230.; h_xeno1 h, 1000.] 
     | Elio -> [h_elio h, 1000.]
     | Silicio -> [h_silicio h, 1000.]
     | Ossigeno -> [h_ossigeno h, 1000.]
