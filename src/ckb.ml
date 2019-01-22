@@ -20,7 +20,7 @@ open Settings
 
 (*** EXCEPTIONS **************************************************************)
 exception Success of result
-exception Restart of Lit.t list
+exception Restart of Lit.t list * bool
 exception Fail
 
 (*** TYPES *******************************************************************)
@@ -207,7 +207,7 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
     try Lit.rewriter_nf_with ~max_size:max_size n rewriter
     with Rewriter.Max_term_size_exceeded ->
       if unsat_allowed () then heuristic := { !heuristic with mode = OnlyUNSAT }
-      else raise (Restart []);
+      else raise (Restart ([], false));
       None
   in
   let rewrite n (irrdcbl, news) =
@@ -680,7 +680,7 @@ let max_k s =
      else (
        if (n = k && L.length !heuristic.strategy > 1) then (
          if debug 2 then F.printf "restart (no further TRS found)\n%!";
-         raise (Restart (Select.select_for_restart cc)));
+         raise (Restart (Select.select_for_restart cc, false)));
        acc))
    in
    if has_comp () then
@@ -749,14 +749,13 @@ let check_hard_restart s =
   if Unix.gettimeofday () -. !A.hard_restart_time > !time_limit then (
     match !heuristics with
     | (h, t) :: hs ->
+      if debug 1 then
+        Format.printf "hard restart %.2f\n%!" !time_limit;
       set_heuristic h;
       time_limit := t;
       heuristics := hs;
-      if debug 1 then
-        Format.printf "hard restart %.2f\n%!" !time_limit;
-      A.hard_restarts := !A.hard_restarts + 1;
-      A.hard_restart_time := Unix.gettimeofday ();
-      raise (Restart [])
+      A.hard_restart ();
+      raise (Restart ([], true))
     | _ -> failwith "no further heuristic found"
   )
 ;;
@@ -777,7 +776,7 @@ let detect_shape es =
     | Elio -> [h_elio h, 1000.]
     | Silicio -> [h_silicio h, 1000.]
     | Ossigeno -> [h_ossigeno h, 1000.]
-    | Carbonio -> [h_carbonio h, 1000.]
+    | Carbonio -> [h_carbonio1 h, 4.; h_carbonio0 h, 1000.]
     | Calcio -> [h_calcio h, 1000.]
     | Magnesio -> [h_magnesio h, 1000.]
     | NoShape -> [h_no_shape0 h, 120.; h_no_shape1 h, 60.; h_no_shape2 h, 1000.]
@@ -793,8 +792,7 @@ let detect_shape es =
   | (h0, t) :: hs' -> (
     set_heuristic h0;
     time_limit := t;
-    heuristics := hs';
-    try ignore(termination_strategy ()) with _ -> failwith "no strat")
+    heuristics := hs')
   | _ -> failwith "no heuristic found"
 ;;
 
@@ -891,7 +889,7 @@ let extend_theory s phi =
       try phi s'
       with Backtrack -> extend rs
     in
-    try extend exs with Backtrack -> raise (Restart [])
+    try extend exs with Backtrack -> raise (Restart ([], false))
 ;;
 
 let is_extension_iteration i s =
@@ -912,7 +910,8 @@ let inconsistent ee=
 ;;
 
 let rec phi s =
-  if do_restart s then raise (Restart (Select.select_for_restart s.equations));
+  if do_restart s then
+    raise (Restart (Select.select_for_restart s.equations, false));
   check_hard_restart s;
   let redcount, cp_count = ref 0, ref 0 in
   set_iteration_stats s;
@@ -955,11 +954,13 @@ let rec phi s =
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = Select.select (aa,rew) nn in
 
+    let t = Unix.gettimeofday () in
     let go = overlaps_on rr aa_for_ols ovl gs in
     let go = NS.filter (fun g -> Lit.size g < !heuristic.hard_bound_goals) go in
     let gcps, gcps' = reduced_goals rew go in
     let gs' = NS.diff (NS.add_all gs_big (NS.add_all gcps' gcps)) gs in
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
+    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
 
     if !(Settings.track_equations) <> [] then
       A.update_proof_track (sel @ gg) (NS.to_list rest @ (NS.to_list grest));
@@ -995,7 +996,7 @@ let rec phi s =
     phi {s' with new_nodes = aa_new}
     )
   with Success r -> r
-  | Backtrack -> raise (Restart [])
+  | Backtrack -> raise (Restart ([], false))
 ;;
 
 let init_settings (settings_flags, heuristic_flags) axs gs =
@@ -1029,7 +1030,8 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   in
   set_settings s;
   set_heuristic h;
-  if settings_flags.auto && not is_large then detect_shape axs_eqs;
+  if !A.hard_restarts = 0 && settings_flags.auto && not is_large then
+    detect_shape axs_eqs;
   if !(Settings.do_proof) <> None then (
     Trace.add_initials axs_eqs;
     Trace.add_initial_goal gs);
@@ -1058,14 +1060,14 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     raise Fail;
   remember_state (fst input) (snd input);
   let rec ckb (es, gs) =
-      let est =
-        if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
-      in
-      let es' = L.map Lit.normalize est in
-      let es0 = L.sort Pervasives.compare es' in
-      let gs0 = L.map Lit.normalize gs in
-      Select.init es0 gs0;
-      init_settings flags es0 [ Lit.terms g | g <- gs0 ];
+    let est =
+      if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
+    in
+    let es' = L.map Lit.normalize est in
+    let es0 = L.sort Pervasives.compare es' in
+    let gs0 = L.map Lit.normalize gs in
+    Select.init es0 gs0;
+    init_settings flags es0 [ Lit.terms g | g <- gs0 ];
     try
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
       let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
@@ -1085,10 +1087,10 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. start);
       Logic.del_context ctx;
       res
-    with Restart es_new -> (
+    with Restart (es_new, is_hard) -> (
       if debug 1 then
         Format.printf "New lemmas on restart:\n%a\n%!" NS.print_list es_new;
-      pop_strategy ();
+      if not is_hard then pop_strategy ();
       St.clear ();
       Cache.clear ();
       A.restarts := !A.restarts + 1;
@@ -1139,7 +1141,7 @@ let ckb_for_instgen ctx flags lits =
       );
       let ans, proof = phi (make_state ctx es0 (NS.of_list gs0)) in
       ans, Trace.proof_literal_instances input proof
-    with Restart es_new -> (
+    with Restart (es_new, _) -> (
       pop_strategy ();
       St.clear ();
       Cache.clear ();

@@ -133,8 +133,6 @@ let get_old_nodes ?(accept = yes) =
 
 let get_old_goals ?(accept = yes) = (get_old_nodes_from accept all_goals None)
 
-let selections = ref 0
-
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
   let acs, cs = !settings.ac_syms, !settings.only_c_syms in
@@ -151,11 +149,11 @@ let select_size_age aarew ns_sorted all n =
     (* if ns is empty then there is also no interesting old node*)
     if n <= 0 || ns = [] then L.rev acc
     else (
-      selections := !selections + 1;
-      if !selections mod 20 < (!heuristic.size_age_ratio / 5) then
+      A.selections := !A.selections + 1;
+      if !A.selections mod 20 < (!heuristic.size_age_ratio / 5) then
         let acc',ns' = smallest acc ns in
         select ns' acc' (n - 1)
-      else if !selections mod 26 = 0 && all <> [] then
+      else if !A.selections mod 26 = 0 && all <> [] then
         let b = select_goal_similar all in
         select ns (b::acc) (n - 1)
       else (

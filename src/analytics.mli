@@ -23,6 +23,7 @@ val iterations : int ref
 val restarts : int ref
 val hard_restarts : int ref
 val smt_checks : int ref
+val selections : int ref
 val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref
@@ -69,3 +70,5 @@ val restart : unit -> unit
 val add_state : int -> int -> int -> int -> unit
 
 val last_cp_count : unit -> int
+
+val hard_restart : unit -> unit

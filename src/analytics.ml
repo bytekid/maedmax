@@ -67,6 +67,7 @@ let trs_sizes = ref []
 let costs = ref []
 let shape = ref NoShape
 let smt_checks = ref 0
+let selections = ref 0
 
 let acount = ref 0
 let pcount = ref 0
@@ -495,3 +496,10 @@ let restart _ =
 ;;
 
 let last_cp_count _ = match !cp_counts with cps :: _ -> cps | [] -> 0
+
+let hard_restart _ =
+  hard_restarts := !hard_restarts + 1;
+  hard_restart_time := Unix.gettimeofday ();
+  selections := 0;
+  states := [] 
+;;

@@ -173,6 +173,7 @@ type result = answer * proof
 (*** GLOBALS *****************************************************************)
 (* k functions *)
 let k_default = fun i -> if i < 3 then 6 else 2
+let k_limiting = fun i -> if i < 3 then 6 else if i > 15 then 1 else 2
 let k2 _ = 2
 
 (* default settings *)
@@ -310,15 +311,19 @@ let h_ossigeno h = { h with
   restart_carry = (2, 2)
 }
 
-let h_carbonio h = { h with
+let h_carbonio0 h = { h with
   full_CPs_with_axioms = true;
   hard_bound_equations = 360;
   hard_bound_goals = 270;
   n = 10;
   n_goals = 3;
   size_age_ratio = 60;
-  soft_bound_equations = 40;
+  soft_bound_equations = 40; (* 36 for COL006-7 *)
   soft_bound_goals = 100;
+}
+
+let h_carbonio1 h = { h_carbonio0 h with
+  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
 }
 
 let h_calcio h = { h with n = 6 }
