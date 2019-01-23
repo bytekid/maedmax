@@ -284,21 +284,6 @@ let equations_for_overlaps irred all =
     NS.to_list (eqs_for_overlaps irr')
 ;;
 
-let cp_cache : (Lit.t * Lit.t, Lit.t list) Hashtbl.t = Hashtbl.create 256
-
-let cps rew n1 n2 =
-  if !heuristic.pcp > 0 then Lit.pcps rew n1 n2
-  else (
-    try Hashtbl.find cp_cache (n1,n2)
-    with Not_found -> (
-      let cps = Lit.cps !heuristic n1 n2 in
-      if debug 2 && L.length cps > 0 then
-        Format.printf "CPs between %a and %a: %a\n%!" Lit.print n1 Lit.print n2
-          NS.print_list cps;
-      Hashtbl.add cp_cache (n1,n2) cps;
-      cps))
-;;
-
 (* get overlaps for rules rr and equations aa *)
 let overlaps s rr aa =
   let prune_AC = !heuristic.prune_AC || !A.iterations mod 2 <> 0 in
@@ -1042,7 +1027,7 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
 ;;
 
 let remember_state es gs =
- let h = Hashtbl.hash (termination_strategy (), es,gs) in
+ let h = Hashtbl.hash (termination_strategy (), es, gs) in
  if h = !hash_initial then
    set_heuristic {!heuristic with n = Pervasives.max (!heuristic.n + 1) 15};
  hash_initial := h
@@ -1094,7 +1079,6 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       Cache.clear ();
       A.restarts := !A.restarts + 1;
       Hashtbl.reset rewrite_trace;
-      Hashtbl.reset cp_cache;
       NS.reset_age ();
       A.mem_diffs := [];
       A.time_diffs := [];
@@ -1146,7 +1130,6 @@ let ckb_for_instgen ctx flags lits =
       Cache.clear ();
       A.restarts := !A.restarts + 1;
       Hashtbl.reset rewrite_trace;
-      Hashtbl.reset cp_cache;
       NS.reset_age ();
       A.mem_diffs := [];
       A.time_diffs := [];
