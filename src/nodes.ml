@@ -139,18 +139,27 @@ let variant_free ns =
   H.fold (fun n _ hr -> if not (exists (var n) hr) then add n hr else hr) ns h 
 ;;
 
+let subsumes_table : (int * int, bool) Hashtbl.t  = Hashtbl.create 128
+
 let subsumption_free : t -> t =
   let instantiated = R.is_proper_instance in
-  let subsumed_by r r' = instantiated r r' || instantiated (R.flip r) r' in
-  let rec exists_subsumed (n, sz) = function
+  let subsumed_by (r, h) (r', h') =
+    try Hashtbl.find subsumes_table (h,h')
+    with Not_found ->
+      let inst = instantiated r r' || instantiated (R.flip r) r' in
+      Hashtbl.add subsumes_table (h, h') inst;
+      inst
+  in
+  let rec exists_subsumed ((n, sz, h) as x) = function
     | [] -> false
-    | (n', sz') :: _ when sz' > sz -> false
-    | (n', sz') :: ns -> subsumed_by n n' || exists_subsumed (n, sz) ns
+    | (_, sz', _) :: _ when sz' > sz -> false
+    | (n', sz', h') :: ns -> subsumed_by (n, h) (n', h') || exists_subsumed x ns
   in
   let sfree ns =
-    let nsl = [Lit.terms n, Lit.size n | n <- to_list ns] in
-    let nsl = List.sort (fun (n1, s1) (n2, s2) -> s1 - s2) nsl in
-    filter (fun n -> not (exists_subsumed (Lit.terms n, Lit.size n) nsl)) ns
+    let triple n = Lit.terms n, Lit.size n, Hashtbl.hash (Lit.terms n) in
+    let nsl = [triple n | n <- to_list ns] in
+    let nsl = List.sort (fun (_, s1, _) (_, s2, _) -> s1 - s2) nsl in
+    filter (fun n -> not (exists_subsumed (triple n) nsl)) ns
   in
   Analytics.take_time Analytics.t_subsumption sfree
 ;;

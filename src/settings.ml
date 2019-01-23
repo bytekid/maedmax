@@ -349,12 +349,12 @@ let h_no_shape0 h = { h with
   soft_bound_equations = 40;
   soft_bound_goals = 70;
   restart_carry = (2, 2);
-  no_select_nf = 3
 }
 
 let h_no_shape1 h = { h_no_shape0 h with
   restart_carry = (3, 0);
   k = k_limiting;
+  no_select_nf = 3
 }
 
 let h_idrogeno h = { h with
