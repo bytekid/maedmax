@@ -778,11 +778,11 @@ let detect_shape es =
     | Zolfo -> [h_zolfo h, 200.; h_ossigeno h, 1000.]
     | Xeno -> [h_xeno0 h, 230.; h_xeno1 h, 1000.] 
     | Elio -> [h_elio h, 1000.]
-    | Silicio -> [h_silicio h, 1000.]
+    | Silicio -> [h_silicio0 h, 240.; h_silicio1 h, 1000.]
     | Ossigeno -> [h_ossigeno h, 1000.]
     | Carbonio -> [h_carbonio1 h, 4.; h_carbonio0 h, 1000.]
     | Magnesio -> [h_magnesio h, 1000.]
-    | NoShape -> [h_no_shape0 h, 120.; h_no_shape1 h, 60.; h_no_shape2 h, 1000.]
+    | NoShape -> [h_no_shape0 h, 150.; h_no_shape1 h, 1000.]
     | Idrogeno -> [h_idrogeno h, 1000.]
     | Boro -> [h_boro h, 1000.]
   in
@@ -920,10 +920,6 @@ let rec phi s =
   set_iteration_stats s;
   Select.reset ();
   let aa, gs = s.equations, s.goals in
-  let aa =
-    if check_subsumption 2 && nth_iteration 3 then NS.subsumption_free aa
-    else aa
-  in
   (**)
   if debug 2 then (Format.printf "iteration %d %!" !A.iterations;
   Format.printf "(%s)\n%!" (match !heuristic.mode with
@@ -993,15 +989,11 @@ let rec phi s =
   try
     let s = update_state s aa gs in
     let rrs = max_k s in
-    (*if rrs <> [] && !settings.switch_to_okb && !A.iterations > 5 then
-      Okb.run (!settings, !heuristic) (s.equations, s.goals) (match rrs with (_,_,o) :: _ -> o)
-    else*) (
     let _, s', aa_new = L.fold_left process (0, s, []) rrs in
     let sz = match rrs with (trs,c,_) :: _ -> List.length trs,c | _ -> 0,0 in
     let cp_count = if rrs = [] then 0 else !cp_count / (List.length rrs) in
     A.add_state !redcount (fst sz) (snd sz) cp_count;
     phi {s' with new_nodes = aa_new}
-    )
   with Success r -> r
   | Backtrack -> raise (Restart ([], false))
 ;;

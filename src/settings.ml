@@ -151,6 +151,7 @@ type heuristic = {
   prune_AC : bool;
   no_similar_select: bool;
   select_recursion_limit: int;
+  no_select_nf: int;
   mode : mode
 }
 
@@ -218,6 +219,7 @@ let default_heuristic = {
   prune_AC = true;
   no_similar_select = false;
   select_recursion_limit = 5000;
+  no_select_nf = 0;
   mode = SATorUNSAT
 }
 
@@ -290,7 +292,7 @@ let h_elio h = { h with
   restart_carry = (2, 2)
 }
 
-let h_silicio h = { h with
+let h_silicio0 h = { h with
   n = 10;
   n_goals = 1;
   size_age_ratio = 80;
@@ -300,6 +302,10 @@ let h_silicio h = { h with
   soft_bound_equations = 30;
   soft_bound_goals = 30;
   k = (fun i -> if i > 30 then 1 else 2)
+}
+
+let h_silicio1 h = { h_silicio0 h with
+  no_select_nf = 3 (* LAT171-1, LAT143-1 *)
 }
 
 let h_ossigeno h = { h with
@@ -342,16 +348,13 @@ let h_no_shape0 h = { h with
   hard_bound_goals = 90;
   soft_bound_equations = 40;
   soft_bound_goals = 70;
-  restart_carry = (2, 2)
+  restart_carry = (2, 2);
+  no_select_nf = 3
 }
 
 let h_no_shape1 h = { h_no_shape0 h with
   restart_carry = (3, 0);
-  k = k_limiting
-}
-
-let h_no_shape2 h = { h_no_shape0 h with (* LDA002-1 *)
-  restart_carry = (4, 0) (* select limit 1000 also possible*)
+  k = k_limiting;
 }
 
 let h_idrogeno h = { h with

@@ -72,8 +72,9 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
         nodelist := ns;
         (match onodeset with Some nss -> ignore (NS.remove n nss) | None -> ());
         let s,t = Lit.terms n in
+        let no_select_nf = !heuristic.no_select_nf in
         let nfs =
-          if false then
+          if no_select_nf > 0 && !A.selections mod no_select_nf = 0 then
             Some ((s, []),(t, []))
           else
             try Some (rew#nf s, rew#nf t)
