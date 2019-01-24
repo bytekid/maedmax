@@ -270,7 +270,7 @@ let equations_for_overlaps irred all =
   else
     let last3 =
       match !subsumption_ratios with
-      | a :: b :: c :: d :: _ -> a +. b +. c +. d <= 3.6
+      | a :: b :: c :: d :: _ -> a +. b +. c +. d <= 3.
       | _ -> false
     in
     let check = check_subsumption 1 && (!A.iterations < 9 || last3) in
