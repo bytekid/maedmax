@@ -54,33 +54,54 @@ pq_grams = [str(i) for i in range(0,211)]
 
 def get_X_file(filename):
   file = open(filename, "r")
-  X = []
-  target = []
   cnt = 0
   #print(filename)
-  for line in file.readlines():
-    if "goal proofs" in line:
-      line = line[0:line.find("goal")]
-    if line.startswith("-") or ("Timeout" in line) or ("TIMEOUT" in line) or line.strip() == "":
-      continue
+  lines = file.readlines()
+  i = 0
+  data = []
+  while i < len(lines):
+    line = lines[i]
+    if ("Timeout" in line) or ("TIMEOUT" in line) or line.strip() == "" or i + 4 >= len(lines):
+      break
+    if not (line.startswith("--")):
+      print ("%dth line: %s" % (i, line))
+    assert(line.startswith("--"))
+    eqn = line[2:]
+    syntactic_features = lines[i + 1].strip()
+    eqn_features = lines[i + 2][1:].strip()
+    eqn_features_named = lines[i + 3][1:].strip()
+    useful = lines[i + 4]
     cnt = cnt + 1
-    parts = line.strip().split(" ")
-    if len(parts) < 225 or "export" in line:
-      continue # timeout/printing?
-    features = []
-    for p in parts[0:-1]:
-      features.append(float(p.strip()))
-    X.append(features)
-
-    # the target (0=not used or 1=used)
-    t = float(parts[-1].strip())
-    target.append(t)
-  #print(filename + ": " + str(cnt - 1) + " - " + str(len(target)))
-  return [X, target]
+    data.append ([eqn, syntactic_features, eqn_features, "0", useful]) # eqn_features_named
+    i = i + 5
+  
+  X_syn = []
+  X_syn_terms = []
+  X_syn_named_terms = []
+  X_all = []
+  y = []
+  for d in data:
+    s_eqn, s_syn, s_terms, s_named_terms, s_useful = d
+    syn = [float(f) for f in s_syn.split(" ")]
+    terms = [float(f) for f in s_terms.split(" ")]
+    named_terms = [float(f) for f in s_named_terms.split(" ")]
+    useful = float(s_useful)
+    #if len(parts) < 225 or "export" in line:
+    #  continue # timeout/printing?
+    X_syn.append(syn)
+    X_syn_terms.append(syn + terms)
+    X_syn_named_terms.append(syn + named_terms)
+    X_all.append(syn + terms + named_terms) 
+    y.append(useful)
+  #print(filename + ": " + str(cnt))
+  return [X_syn, X_syn_terms, X_syn_named_terms, X_all, y]
 
 def get_X_dir(dir):
-  X = []
-  target = []
+  X_syn = []
+  X_syn_terms = []
+  X_syn_named_terms = []
+  X_all = []
+  y = []
   cnt = 0
   fs = []
   for subdir, dirs, logs in os.walk(dir):
@@ -88,13 +109,16 @@ def get_X_dir(dir):
       if "json" in filename:
         continue
       f = os.path.join(subdir,filename)
-      d,t = get_X_file(f)
-      X = X + d
-      target = target + t
-      if len(t) > 0:
+      Xs, Xst, Xsnt, Xa, u = get_X_file(f)
+      X_syn = X_syn + Xs
+      X_syn_terms = X_syn_terms + Xst
+      X_syn_named_terms = X_syn_named_terms + Xsnt
+      X_all = X_all + Xa
+      y = y + u
+      if len(u) > 0:
         fs.append(subdir[subdir.rfind("/"):])
         cnt = cnt + 1
-  return X, target, cnt
+  return X_syn, X_syn_terms, X_syn_named_terms, X_all, y, cnt
 
 def balanceData(X,y):
   X0 = [ xi for (xi,yi) in zip(X, y) if yi == 0 ]
@@ -294,23 +318,14 @@ def xtrees(X, y):
   #  trees.append(tree2json(t))
   #print(json.dumps(trees))
 
+
 def randomForest(X, y):
   estimators = 100
-  print("random forest (%d est)" % (estimators))
+  print("random forest (%d est) using %d features" % (estimators, len(X[0])))
 
   X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.3, random_state=42)
   clf = RandomForestClassifier(n_estimators=estimators, max_features=1, max_depth=14).fit(X_train, y_train)
   y_pred = clf.predict(X_test)
-  #tp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 1 ])
-  #fp = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 1 ])
-  #fn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 1 and z == 0 ])
-  #tn = len([ (y,z) for (y,z) in zip(y_test, y_pred) if y == 0 and z == 0 ])
-  #print("  true positives: %d, false positives: %d, true negatives: %d, false negatives: %d (from %d)" % (tp, fp, tn, fn, len(y_test)))
-  #prec = float(tp) / (tp + fp) if tp + fp != 0 else -1
-  #recall = float(tp) / (tp + fn) if tp + fn != 0 else -1
-  #my_f1 = 2 * prec * recall / (prec + recall) if prec + recall != 0 else -1
-  #print("  precision: %0.2f, recall: %0.2f, f1: %0.2f" % (prec, recall, my_f1))
-
   from sklearn.preprocessing import LabelBinarizer
 
   lb = LabelBinarizer()
@@ -328,8 +343,10 @@ def randomForest(X, y):
   for i in range(0, estimators):
     t = clf.estimators_[i].tree_
     trees.append(tree2json(t))
-  print(json.dumps(trees))
+  #print(json.dumps(trees))
 
+
+### # # # # # # # # # NEURAL NETS # # # # # # # # # # # # # # # # # # # # # # ##
 def as_keras_metric(method):
     import functools
     from keras import backend as K
@@ -443,7 +460,9 @@ if __name__ == "__main__":
   if len(sys.argv) < 2:
     print("usage: classify_selections.py <results dir>")
   dir = sys.argv[1]
-  X, y, cnt = get_X_dir(dir)
+  X_syn, X_syn_terms, X_syn_named_terms, X_all, y, cnt = get_X_dir(dir)
+
+  X = X_syn_terms
 
   #labels = [
   #  "is_goal",
@@ -481,6 +500,3 @@ if __name__ == "__main__":
 
   #xtrees(X,y)
   randomForest(X,y)
-
-  #pcaClassify("Gaussian",  GaussianProcessClassifier(kernel=1.0 * RBF(1.0), random_state=0), X, y, 3)
-  #pcaClassify("SVC linear",  SVC(kernel="linear", C=0.025), X, y, 2)

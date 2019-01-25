@@ -286,6 +286,7 @@ let equations_for_overlaps irred all =
 
 (* get overlaps for rules rr and equations aa *)
 let overlaps s rr aa =
+  (* by default, do AC pruning *)
   let prune_AC = !heuristic.prune_AC || !A.iterations mod 2 <> 0 in
   let ns =
     if not !settings.unfailing then rr
@@ -1074,7 +1075,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     with Restart (es_new, is_hard) -> (
       if debug 1 then
         Format.printf "New lemmas on restart:\n%a\n%!" NS.print_list es_new;
-      if not is_hard then pop_strategy ();
+      if is_hard then Trace.clear () else pop_strategy ();
       St.clear ();
       Cache.clear ();
       A.restarts := !A.restarts + 1;
