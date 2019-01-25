@@ -2,6 +2,7 @@
 open Format
 open Yojson.Basic
 open Settings
+open PQGrams
 
 (*** MODULES *****************************************************************)
 module L = List
@@ -29,8 +30,6 @@ let extend p q t =
 ;;
 
 type node = Fun of int | Var | Dummy
-
-type node_named = FunN of string | VarN | DummyN
 
 type pq_gram = node list
 
@@ -82,58 +81,24 @@ let pq_grams p q t =
   [g | g <- pqs tx; complete g]
 ;;
 
-let extend_named p q t =
-  let dummies = Listx.copy (q - 1) (T.F (dummy, [])) in
-  let rec ext_q = function
-    | (T.V _ as t) -> t
-    | T.F (f, []) -> T.F (f, [])
-    | T.F (f, ts) -> T.F(f, dummies @ [ext_q ti | ti <- ts] @ dummies)
-  in
-  let rec ext_p i t = if i = 0 then t else T.F(dummy, [ext_p (i - 1) t]) in
-  ext_p (p - 1) (ext_q t)
-;;
-
-let pq_grams_named p q t =
-  let tx = extend_named p q t in
-  let complete g = List.length g = (p + q) in
-  let rec takeq ts =
-    if List.length ts < q then []
-    else Listx.take q ts :: (takeq (List.tl ts))
-  in
-  let node = function
-    | T.V _ -> VarN
-    | T.F (d, _) when d = dummy -> DummyN
-    | T.F (f, _) -> FunN (Signature.get_fun_name f)
-  in
-  let rec pqs = function
-    | T.V _ -> []
-    | T.F (d, []) when d = dummy -> []
-    | T.F (f, ts) as t ->
-      let gs = List.concat [pqs ti | ti <- ts] in
-      let gs_c, gs_i = List.partition complete gs in
-      [ node t :: g | g <- takeq [node ti | ti <- ts]] @
-      [ node t :: g | g <- gs_i ] @ gs_c
-  in
-  [g | g <- pqs tx; complete g]
-;;
-
-let print_named_pq_gram =
-  let nstr = function Dummy -> "*" | Fun i -> string_of_int i | _ -> "X" in
-  let pnode f n = Format.fprintf f "%s" (nstr n) in
-  Formatx.print_list pnode "."
-;;
-
 let count_vector t =
   let p,q = fst !pq, snd !pq in
   let gs = List.sort compare (pq_grams p q t) in
-  let ggs = Listx.group_by (fun x -> x) gs in
+  let ggs = [g, List.length os | g, os <- Listx.group_by (fun x -> x) gs] in
   let rec count = function
     | (_, []) -> []
-    | ((g, os) :: gs, a :: all') when g = a -> L.length os :: (count (gs, all'))
+    | ((g, cnt) :: gs, a :: all') when g = a -> cnt :: (count (gs, all'))
+    | ((g, _) :: gs, a :: all') when g < a -> count (gs, a :: all') (* not counted *)
     | (gs, a :: all') -> 0 :: (count (gs, all'))
   in
   try Hashtbl.find pq_count_table t with
-  Not_found -> let v = count (ggs, all) in Hashtbl.add pq_count_table t v; v
+  Not_found -> let v = count (ggs, all) in Hashtbl.add pq_count_table t v;
+  let check (i, g) =
+    let cnt = List.nth v i in
+    assert (if List.mem_assoc g ggs then cnt = List.assoc g ggs else cnt = 0)
+  in
+  List.iter check (Listx.ix all);
+  v
 ;;
 
 let print_vector =
@@ -253,21 +218,94 @@ let log selected all =
   List.iter add selected
 ;;
 
-let report ancs =
+let report' eq_features ancs =
   let used rl = List.mem rl ancs in
   let show (n, n_fs, st_fs) =
     let rl = Literal.terms n in
     let sn_fs = node_feature_string n_fs in
     let sst_fs = state_feature_string st_fs in
     let u = if used rl then 1 else 0 in
-    let vs, vt = pq_gram_features rl in
+    let vs, vt = eq_features rl in
     Format.printf "-- %a\n%s %s %a %a %d\n"
       Rule.print rl sn_fs sst_fs print_vector vs print_vector vt u; 
   in
   List.iter show !selections
 ;;
 
-let report ancs =
+let report = report' pq_gram_features
+
+(* * * * * * * * * *  named pq grams * * * * * * * * * * * * * * * * * * * * *)
+let print_named_pq_gram =
+  let nstr = function DummyN -> "*" | FunN s -> s | VarN -> "X" in
+  let pnode f n = Format.fprintf f "%s" (nstr n) in
+  Formatx.print_list pnode "."
+;;
+
+let all_named = List.sort compare PQGrams.all
+
+let extend_named p q t =
+  let dummies = Listx.copy (q - 1) (T.F (dummy, [])) in
+  let rec ext_q = function
+    | (T.V _ as t) -> t
+    | T.F (f, []) -> T.F (f, [])
+    | T.F (f, ts) -> T.F(f, dummies @ [ext_q ti | ti <- ts] @ dummies)
+  in
+  let rec ext_p i t = if i = 0 then t else T.F(dummy, [ext_p (i - 1) t]) in
+  ext_p (p - 1) (ext_q t)
+;;
+
+let pq_grams_named p q t =
+  let tx = extend_named p q t in
+  let complete g = List.length g = (p + q) in
+  let rec takeq ts =
+    if List.length ts < q then []
+    else Listx.take q ts :: (takeq (List.tl ts))
+  in
+  let node = function
+    | T.V _ -> VarN
+    | T.F (d, _) when d = dummy -> DummyN
+    | T.F (f, _) -> FunN (Signature.get_fun_name f)
+  in
+  let rec pqs = function
+    | T.V _ -> []
+    | T.F (d, []) when d = dummy -> []
+    | T.F (f, ts) as t ->
+      let gs = List.concat [pqs ti | ti <- ts] in
+      let gs_c, gs_i = List.partition complete gs in
+      [ node t :: g | g <- takeq [node ti | ti <- ts]] @
+      [ node t :: g | g <- gs_i ] @ gs_c
+  in
+  [g | g <- pqs tx; complete g]
+;;
+
+let pq_count_named_table : (Term.t, int list) Hashtbl.t = Hashtbl.create 256
+
+let count_named_vector t =
+  let p,q = fst !pq, snd !pq in
+  let gs = List.sort compare (pq_grams_named p q t) in
+  let ggs = [g, List.length os | g, os <- Listx.group_by (fun x -> x) gs] in
+  let rec count = function
+    | (_, []) -> []
+    | ((g, cnt) :: gs, a :: all') when g = a -> cnt :: (count (gs, all'))
+    | ((g, _) :: gs, a :: all') when g < a -> count (gs, a :: all') (* pqgram not counted *)
+    | (gs, a :: all') -> 0 :: (count (gs, all'))
+  in
+  let v =
+  try Hashtbl.find pq_count_named_table t
+  with Not_found ->
+    let v = count (ggs, all_named) in
+    Hashtbl.add pq_count_named_table t v;
+    v
+    in
+    let check (i, g) =
+      let cnt = List.nth v i in
+      assert (if List.mem_assoc g ggs then cnt = List.assoc g ggs else cnt = 0)
+    in
+    List.iter check (Listx.ix all_named);
+    v
+;;
+
+(*let report_named ancs =
   let ht = Hashtbl.create 256 in
   let collect (n, _, _) =
     let (s, t) = Literal.terms n in
@@ -291,7 +329,28 @@ let report ancs =
   let l = Hashtbl.fold (fun g n l -> if n > 9 then (g, n) :: l else l) ht [] in
   let l = List.sort (fun (_,a) (_,b) -> compare b a) l in
   List.iter (fun (g, n) -> Format.printf "%a  %d\n%!" print g n) l
+;;*)
+
+let pq_gram_features_named (s, t) = count_named_vector s, count_named_vector t
+
+let report_named ancs =
+  let used rl = List.mem rl ancs in
+  let show (n, n_fs, st_fs) =
+    let rl = Literal.terms n in
+    let sn_fs = node_feature_string n_fs in
+    let sst_fs = state_feature_string st_fs in
+    let used = if used rl then 1 else 0 in
+    let vs, vt = pq_gram_features rl in
+    let vsn, vtn = pq_gram_features_named rl in
+    Format.printf "-- %a\n%s %s\n*%a %a\n#%a %a\n%d\n"
+      Rule.print rl sn_fs sst_fs print_vector vs print_vector vt
+        print_vector vsn print_vector vtn used; 
+  in
+  List.iter show !selections;
+  Format.printf "\n%!"
 ;;
+
+let report = report_named
 
 let for_goal_disproof (rr, ee) (rs, rt) =
   let tfst = (fun (rl,_,_,_) -> rl) in
