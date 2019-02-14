@@ -642,7 +642,9 @@ let simulate ee0 steps =
     | z :: steps ->
       match z with
       | OrientL e ->
-        assert(not (mem e ee_i));
+        (*if (mem e ee_i) then
+          Format.printf "problematic %a\n%a\n%!" Rules.print ee_i Rule.print e;
+        assert(not (mem e ee_i));*)
         sim (z :: acc) (drop e ee_i, e <:> rr_i) steps
       | OrientR e ->
         let rr_i' = R.flip e <:> rr_i in
@@ -733,10 +735,11 @@ let reconstruct_run ee0 ee rr =
   let run, res = simulate ee0 steps in
   assert (check ee0 run res);
   if S.do_proof_debug () then (
+    F.printf "initial equations: \n%a\n%!" Rules.print ee0;
     F.printf "FINAL RUN:\n%!";
     show_run run;
-    F.printf "final equations: \n%a\n%!" (Rules.print) (fst res);
-    F.printf "final rules: \n%a\n%!" (Rules.print) (snd res));
+    F.printf "final equations: \n%a\n%!" Rules.print (fst res);
+    F.printf "final rules: \n%a\n%!" Rules.print (snd res));
   run, res
 ;;
 

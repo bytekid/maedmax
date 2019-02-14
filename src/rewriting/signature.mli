@@ -14,4 +14,6 @@ val var_called : string -> var
 
 val fun_called : string -> sym
 
+val fresh_fun_called : string -> sym
+
 val sharp_fun : sym -> sym

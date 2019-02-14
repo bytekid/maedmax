@@ -301,7 +301,7 @@ let overlaps s rr aa =
       rr' @ aa'
   in
   (* only proper overlaps with rules*)
-  let ovl = new Overlapper.overlapper !heuristic ns in
+  let ovl = new Overlapper.overlapper !heuristic ns (L.map Lit.terms rr) in
   ovl#init ();
   let cpl = [cp | n <- ns; cp <- ovl#cps n] in
   let cps = NS.of_list cpl in
@@ -320,7 +320,7 @@ let overlaps_on rr aa _ gs =
   let ns = if goals_ground then aa else rr @ aa in
   let ns' = NS.ac_equivalence_free acs (Listset.diff ns !acx_rules) in
   let ns' = NS.c_equivalence_free cs ns' in
-  let ovl = new Overlapper.overlapper !heuristic [eq | eq <- ns'] in
+  let ovl = new Overlapper.overlapper !heuristic [eq | eq <- ns'] (L.map Lit.terms rr) in
   ovl#init ();
   let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
   cps2
@@ -939,17 +939,11 @@ let rec phi s =
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = Select.select (aa,rew) nn in
 
-    let t = Unix.gettimeofday () in
     let go = overlaps_on rr aa_for_ols ovl gs in
     let go = NS.filter (fun g -> Lit.size g < !heuristic.hard_bound_goals) go in
-    let tt = Unix.gettimeofday () in
     let gcps, gcps' = reduced_goals rew go in
-    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
-    let tt = Unix.gettimeofday () in
     let gs' = NS.diff (NS.add_all gs_big (NS.add_all gcps' gcps)) gs in
-    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. tt);
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
-    A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
 
     if !(Settings.track_equations) <> [] then
       A.update_proof_track (sel @ gg) (NS.to_list rest @ (NS.to_list grest));

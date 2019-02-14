@@ -12,9 +12,6 @@ from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
-import matplotlib
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from treeinterpreter import treeinterpreter as ti
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
@@ -343,7 +340,7 @@ def randomForest(X, y):
   for i in range(0, estimators):
     t = clf.estimators_[i].tree_
     trees.append(tree2json(t))
-  #print(json.dumps(trees))
+  print(json.dumps(trees))
 
 
 ### # # # # # # # # # NEURAL NETS # # # # # # # # # # # # # # # # # # # # # # ##
@@ -462,7 +459,7 @@ if __name__ == "__main__":
   dir = sys.argv[1]
   X_syn, X_syn_terms, X_syn_named_terms, X_all, y, cnt = get_X_dir(dir)
 
-  X = X_syn_terms
+  X = X_syn
 
   #labels = [
   #  "is_goal",
@@ -475,9 +472,9 @@ if __name__ == "__main__":
   #  "state_equations", "state_goals", "state_iterations"
   #]
 
-  #X = np.delete(X, 11, 1) # drop state
-  #X = np.delete(X, 11, 1) 
-  #X = np.delete(X, 11, 1) 
+  X = np.delete(X, 11, 1) # drop state
+  X = np.delete(X, 11, 1) 
+  X = np.delete(X, 11, 1) 
 
   # PCA
   #pca(X,y)
@@ -491,7 +488,7 @@ if __name__ == "__main__":
   X,y = balanceData(X,y)
   pos = sum(y)
   neg = len(y) - pos
-  print("balanced: true: %d, false: %d  (balance %0.2f)" %
+  print("balanced: true: %d, false: %d  (balance %0.3f)" %
     (pos, neg, pos / len(y)))
 
   #classifyWithAll(X,y)

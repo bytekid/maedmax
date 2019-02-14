@@ -26,4 +26,6 @@ val normalize_rule_dir : Rule.t -> Rule.t * bool
 
 val normalize_rule : Rule.t -> Rule.t
 
+val normalize_term : Term.t -> Term.t
+
 val t_normalize : float ref

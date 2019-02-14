@@ -23,6 +23,7 @@ let heuristic = ref Settings.default_heuristic
 let use_ac = ref false
 let analyze = ref false
 let only_termination = ref false
+let only_gcr = ref false
 let timeout = ref None
 
 let strategy = ref []
@@ -85,8 +86,11 @@ let options =
      " produce benchmarks");
    ("--concon", Arg.Unit do_concon,
      " satisfiability-preferring strategy");
-   ("-D", Arg.Int (fun d -> settings := { !settings with debug = d }),
+   ("-D", Arg.Int (fun d -> settings := { !settings with debug = d };
+       Settings.do_debug := d > 0),
      " print debugging output");
+   ("--gcr", Arg.Unit (fun _ -> only_gcr := true),
+       " check ground confluence");
    ("--interactive", Arg.Set Settings.interactive,
      " enter interactive mode once a complete system was found");
    ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
@@ -474,7 +478,7 @@ let () =
       failwith "Input for interactive mode is not supposed to contain goals";
     if !settings.debug > 0 then
       printf "input problem: %s\n%!" f;
-    if not !only_termination && not !analyze then
+    if not !only_termination && not !analyze && not !only_gcr then
       try
         match fst (Timer.run_timed !timeout (run f) (es,gs)) with
         | None -> printf "%s SZS status Timeout\n%!" "%"
@@ -482,7 +486,7 @@ let () =
       with e -> (printf "%s SZS status GaveUp\n%!" "%"; raise e)
     else if !analyze then
       print_analysis es gs
-    else (
+    else if !only_termination then (
       let timer = Timer.start () in
       let yes =
         Termination.check (S.get_termination !strategy) es !settings.json
@@ -496,6 +500,20 @@ let () =
         printf "%s\n" a;
         printf "%s %.2f %s@." "time:" secs "seconds")
       )
+      else (* !only_gcr *) (
+        let timer = Timer.start () in
+        let yes =
+          Gcr.check !settings !heuristic (S.get_termination !strategy) es
+        in
+        Timer.stop timer;
+        let secs = Timer.length ~res:Timer.Seconds timer in
+        if !settings.json then print_json_term yes secs
+        else (
+          printf "@.%a@." print_trs [Literal.terms e | e <- es];
+          let a = if yes then "YES" else "MAYBE" in
+          printf "%s\n" a;
+          printf "%s %.2f %s@." "time:" secs "seconds")
+        )
     )
   | NonUnit (cls, gs) ->
     Format.printf "oh no, it's not unit!\n%!";

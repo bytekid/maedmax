@@ -76,3 +76,8 @@ let normalize_rule_dir (s,t) =
 ;;
 
 let normalize_rule (s,t) = fst (normalize_rule_dir (s,t))
+
+let normalize_term t =
+  let sigma = [ x, V i | i, x <- Listx.ix (Term.variables t) ] in
+  Term.substitute sigma t
+;;

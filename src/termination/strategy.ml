@@ -195,6 +195,15 @@ let get_choice_var j =
   case distinction on the strategy s *)
 let init s j ctx rs =
   let fs = Rules.signature rs in
+  (* ceta requires the signature to contain a constant *)
+  let constant_exists = List.exists (fun (_,a) -> a = 0) fs in
+  let fs =
+    if !Settings.do_proof <> None && not constant_exists then (
+      let dummy = Signature.fresh_fun_called "_constant" in
+      (dummy, 0) :: fs
+    ) else
+      fs
+  in
   let init_ord ?(af=false) fs i = function
     | LPO -> (if af then Lpo.init_af else Lpo.init) (ctx,i) fs
     | KBO -> Kbo.init (ctx,i) fs

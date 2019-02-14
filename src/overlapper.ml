@@ -31,15 +31,64 @@ let mgu s t =
   )
 ;;
 
-class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
+class reducibility_checker (trs : Rules.t) = object (self)
+
+val red_table : (Term.t, bool) H.t = H.create 256
+val red_table_below : (Term.t, bool) H.t = H.create 256
+val mutable index = FingerprintIndex.create [ l, l | l, _ <- trs]
+
+(* Returns whether term [t] is reducible below the root. *)
+method is_reducible_below t =
+let tt = Unix.gettimeofday () in
+let res = 
+let t = Variant.normalize_term t in
+try H.find red_table_below t with
+Not_found -> (
+  let is_reducible = 
+    match t with
+      | Term.V _ -> false
+      | Term.F(_, ts) -> List.exists self#is_reducible ts
+  in 
+  H.add red_table_below t is_reducible;
+  (*if is_reducible then Format.printf "%a is reducible below root\n%!" Term.print t;*)
+  is_reducible)
+  in
+  A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. tt);
+  res
+;;
+
+(* Returns whether term [t] is reducible. *)
+method is_reducible t = 
+  try H.find red_table t with
+  Not_found -> (
+    let is_reducible = 
+      match t with
+        | Term.V _ -> false
+        | Term.F(_, ts) -> self#matches t || List.exists self#is_reducible ts
+    in 
+    H.add red_table t is_reducible;
+    is_reducible)
+;;
+
+(* Finds rules that match at root *)
+method matches t =
+  let rs = FingerprintIndex.get_matches t index in
+  List.exists (fun l -> Subst.is_instance_of t l) rs
+;;
+end
+
+class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
+ = object (self)
 
   val unif_cache : (Term.t, (Literal.t * int) list) H.t = H.create 256
   val mutable index = FingerprintIndex.empty []
+  val rcheck = new reducibility_checker trs
+  val pcp = false
 
   method init () =
     let data l = fst (Lit.terms l), (l, Term.size (snd (Lit.terms l))) in
-    let ixd = [ data l | l <- trs; Lit.not_increasing l ] in
-    index <- FingerprintIndex.create ixd
+    let ixd = [ data l | l <- lits; Lit.not_increasing l ] in
+    index <- FingerprintIndex.create ixd;
   ;;
 
   method add_symm (s,t) =
@@ -52,8 +101,6 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
     let l = Lit.make_axiom (s,t) in
     index <- FingerprintIndex.add [s, (l, Term.size t)] index
   ;;
-
-  method trs = trs
 
   (* Returns terms unifiable with t. Lookup in table, otherwise use index. *)
   method unifiables t = 
@@ -70,11 +117,14 @@ class overlapper (h : Settings.heuristic) (trs : Literal.t list) = object (self)
     List.concat [ self#cps_at rl p | p <- T.function_positions l ]
   ;;
   
-  (* as in Overlap module, but without variant optimization *)
+  (* as in Overlap module, but without variant optimization; rule2 is outer *)
   method overlap_between_at rule1 rule2 p =
     let l1,r1 = rule1 and l2, r2 = Rule.rename_canonical rule2 in
     match mgu (Term.subterm_at p l2) l1 with
-      | Some sigma -> Some ((l1, r1), p, (l2, r2), sigma)
+      | Some sigma ->
+        let t = Term.substitute sigma l1 in
+        if pcp && Term.size t > 5 && rcheck#is_reducible_below t then None
+        else Some ((l1, r1), p, (l2, r2), sigma)
       | None -> None
 
   (* rli is inner, rlo is outer *)

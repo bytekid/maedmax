@@ -308,12 +308,14 @@ let classification_table : (Literal.t, bool) Hashtbl.t = Hashtbl.create 256
 
 let pqgram_table : (Term.t, float array) Hashtbl.t = Hashtbl.create 256
 
+let pq_vec_size = 2182
+
 let pq_grams (s, t) =
   let pqs t = 
   try Hashtbl.find pqgram_table t
   with Not_found -> (
-    let v = SelectionTrace.count_vector t in
-    let a = Array.make 105 0.0 in
+    let v = SelectionTrace.count_named_vector t in
+    let a = Array.make pq_vec_size 0.0 in
     List.iter (fun (i, c) -> a.(i) <- float_of_int c) (Listx.index v);
     Hashtbl.add pqgram_table t a;
     a)
@@ -336,13 +338,15 @@ let classify aa =
         A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
         let bnd =
           if !Settings.tmp > 0.01 then !Settings.tmp 
-          else (*if !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio then 0.15 else*) 0.1
+          else (*if !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio then 0.15 else*) 0.2
         in
         let c = classify ~bound:bnd n s pqs in
         Hashtbl.add classification_table node c;
         c
     )
 ;;
+
+let classify aa = A.take_time A.t_tmp3 (classify aa)
 
 let reset _ = Hashtbl.reset classification_table
 
@@ -402,9 +406,7 @@ let select_by_size aarew k cc thresh =
       | y :: ys -> if classify y then y :: (take (m - 1) ys) else take m ys
   in
   (*let aa = split k size_sorted in*)
-  let tt = Unix.gettimeofday () in
   let aa = take k size_sorted in
-  A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
   let aa' = split (k - (List.length aa)) size_sorted in
   let aa_all = aa @ aa' in (* avoid that nothing is selected *)
   aa_all, NS.diff_list cc aa_all
@@ -506,8 +508,9 @@ let get_classification json_file =
       else if a = "state_goals" then f s.goals
       else if a = "state_iterations" then f s.iterations
       else (
-        try let i = int_of_string a in if i < 105 then pq1.(i) else pq2.(i - 105)
-        with _ -> failwith ("Select.get_classification: unexpected attribute " ^ a))
+        let sz = pq_vec_size in
+        try let i = int_of_string a in if i < sz then pq1.(i) else pq2.(i - sz)
+        with _ -> failwith ("Select.get_classification: no attribute " ^ a))
     | _ -> failwith "Select.get_classification: unexpected attribute type"
   in
   let assoc l =
