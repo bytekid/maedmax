@@ -60,8 +60,14 @@ let set_classification json =
   settings := {!settings with select_classify = Some classify}
 ;;
 
+let split_on_char c = Str.split (Str.regexp (String.make 1 c))
+
+let remove_extension f =
+  try Filename.chop_extension f with Invalid_argument _ -> f
+;;
+
 let set_restart_frequency s =
-  let is = [int_of_string i | i <- String.split_on_char ',' s] in
+  let is = [int_of_string i | i <- split_on_char ',' s] in
   let order i = if i mod 2 = 0 then Strategy.ts_kbo else Strategy.ts_lpo in
   let tuple i = (order i, [], [Oriented], IterationLimit i, Size) in
   let rec build is strat =
@@ -480,7 +486,7 @@ let () =
   let f = L.hd !filenames in
   match Read.file f with
   | Unit (es,gs) -> (
-    Settings.input_file := Filename.remove_extension (Filename.basename f);
+    Settings.input_file := remove_extension (Filename.basename f);
     (match !track_file with | Some f -> track_proof f | _ -> ());
     (match !classify_file with | Some f -> set_classification f | _ -> ());
     if !(Settings.interactive) && gs <> [] then

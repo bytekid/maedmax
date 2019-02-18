@@ -1,5 +1,5 @@
 OCB_FLAGS = -use-ocamlfind \
-  -pkg unix -pkg yojson -pkg ocamlyices -pkg z3 -pkg xml-light \
+  -pkg unix -pkg yojson -pkg ocamlyices -pkg z3 -pkg xml-light -pkg str \
 	-I src -I src/util -I src/input -I src/logic -I src/proof -I src/rewriting \
 	-I src/termination
 

@@ -49,11 +49,13 @@ let transform_input cls gs =
     Settings.Unit(eqs_pos @ gs_pos, eqs_neg @ gs_neg)
 ;;
 
+let getenv_opt v = try Some (Sys.getenv v) with Not_found -> None;;
+
 let read_tptp orig_filename =
   let rec read_tptp filename =
     let fn =
       if Sys.file_exists filename then filename
-      else match Sys.getenv_opt  "TPTP" with
+      else match getenv_opt "TPTP" with
       | Some tptp -> Filename.concat tptp filename
       | None -> (
         let dir = Filename.dirname orig_filename in
