@@ -8,6 +8,8 @@ let ident_or_keyword = function
   | "STRATEGY" -> STRATEGY
   | "INNERMOST" -> INNERMOST
   | "THEORY" -> THEORY
+  | "CONDITION" -> CONDITION
+  | "CONDITIONTYPE" -> COND_TYPE
   | "AC" -> AC
   | s -> IDENT s
 
@@ -32,6 +34,7 @@ rule token = parse
   | ";"    { SEMICOLON }
   | "->="  { ARROWEQ }
   | "->"   { ARROW }
+  | "=="   { EQUALS }
   | "("    { LPAREN }
   | ")"    { RPAREN }
   | ","    { COMMA }

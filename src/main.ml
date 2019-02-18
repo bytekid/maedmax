@@ -24,6 +24,7 @@ let use_ac = ref false
 let analyze = ref false
 let only_termination = ref false
 let only_gcr = ref false
+let infeasibility = ref false
 let timeout = ref None
 
 let strategy = ref []
@@ -93,6 +94,8 @@ let options =
        " check ground confluence");
    ("--interactive", Arg.Set Settings.interactive,
      " enter interactive mode once a complete system was found");
+     ("--infeasible", Arg.Set infeasibility,
+       " answers according to CoCo infeasibility semantics");
    ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
      " output result and stats in JSON format");
    ("-K", Arg.Int (fun k -> heuristic := { !heuristic with k = (fun _ -> k) }),
@@ -239,6 +242,8 @@ let call () =
 
 let success_code = function UNSAT -> "Unsatisfiable" | SAT -> "Satisfiable"
 
+let success_code_inf = function UNSAT -> "NO" | SAT -> "YES"
+
 let json_settings settings s =
  let s = "strategy", `String s in
  let n = "n", `Int !heuristic.n in
@@ -277,17 +282,21 @@ let print_json_term yes f =
 ;;
 
 let print_res answer res =
-  printf "%s SZS status " "%";
-  let answer_str = success_code answer in
-  match res with
-   | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
-   | GroundCompletion (rr,ee,order)
-   | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
-    (printf "%s\n\n%a@." answer_str print_trs rr;
-    if ee <> [] then printf "%a@." print_es ee;
-    order#print ();
-    Format.printf "\n")
-   | Proof _ -> printf "%s\n%!" answer_str
+  if !infeasibility then
+    printf "%s\n%!" (success_code_inf answer)
+  else (
+    printf "%s SZS status " "%";
+    let answer_str = success_code answer in
+    match res with
+    | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
+    | GroundCompletion (rr,ee,order)
+    | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
+      (printf "%s\n\n%a@." answer_str print_trs rr;
+      if ee <> [] then printf "%a@." print_es ee;
+      order#print ();
+      Format.printf "\n")
+    | Proof _ -> printf "%s\n%!" answer_str
+  )
 ;;
 
 let print_analysis es gs =

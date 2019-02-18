@@ -4,7 +4,7 @@ open Z3
 (*** MODULES *****************************************************************)
 module B = Boolean
 module Arith = Arithmetic
-module I = Arithmetic.Integer
+module I = Arith.Integer
 
 (*** TYPES *******************************************************************)
 type context = {
@@ -37,7 +37,14 @@ let is_true x = B.is_true x.expr
 
 let is_false x = B.is_false x.expr
 
-let is_zero x = try I.get_int x.expr == 0 with _ -> false
+let to_int i =
+  try Big_int.int_of_big_int i
+  with _ -> 
+    Format.printf "%s\n%!" (Big_int.string_of_big_int i);
+    failwith "Z3x conversion error"
+;;
+
+let is_zero x = try to_int (I.get_big_int x.expr) == 0 with _ -> false
 
 let mk_context _ =
   let c = mk_context [("timeout", "3000")] in
@@ -170,7 +177,7 @@ let eval m x =
 
 let eval_int_var m x =
   match Model.eval m x.expr true with
-  | Some e -> I.get_int e
+  | Some e -> to_int (I.get_big_int e)
   | _ -> failwith "Z3x.eval_int_var: failed"
 ;;
 

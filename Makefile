@@ -1,5 +1,5 @@
 OCB_FLAGS = -use-ocamlfind \
-  -pkg unix -pkg yojson -pkg z3 -pkg xml-light \
+  -pkg unix -pkg yojson -pkg ocamlyices -pkg z3 -pkg xml-light \
 	-I src -I src/util -I src/input -I src/logic -I src/proof -I src/rewriting \
 	-I src/termination
 
@@ -26,7 +26,8 @@ debug: 		sanity
 sanity:
 			# check that packages can be found
 			ocamlfind query yojson
-			#ocamlfind query ocamlyices
+			ocamlfind query z3
+			ocamlfind query ocamlyices
 
 test: 		native
 			./main.native -h

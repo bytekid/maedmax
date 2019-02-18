@@ -7,7 +7,12 @@ type tt =
   | VV of string
   | FF of string * tt list
 
-let add xs rs ts (xs', rs', ts') = (xs @ xs', rs @ rs', ts @ ts')
+(* variables, rules, theories, conditions *)
+let add xs rs ts (xs', rs', ts', cs) =
+  (xs @ xs', rs @ rs', ts @ ts', cs)
+;;
+
+let add_conditions cs (xs', rs', ts', cs') = (xs', rs', ts', cs @ cs')
 
 let rec convert_term xs = function
   | VV x -> V (Signature.var_called x)
@@ -17,7 +22,23 @@ let rec convert_term xs = function
 let convert_rule xs (l, r) =
  Literal.make_axiom (convert_term xs l, convert_term xs r)
 
-let convert_rules (xs, rs, th) = List.map (convert_rule xs) rs, th
+let convert_goal xs (l, r) =
+ Literal.make_neg_axiom (convert_term xs l, convert_term xs r)
+
+let convert_rules (xs, rs, th, cs) =
+  let rules = List.map (convert_rule xs) rs in
+  let c = match cs with
+    | [] -> None
+    | [e] -> 
+      let f = Signature.fresh_fun_called "_goal" in
+      Some (convert_goal xs e)
+    | _ -> 
+      let f = "_goal" in
+      let ss, ts = List.map fst cs, List.map snd cs in
+      Some (convert_goal xs (FF(f, ss), FF(f, ts)))
+  in
+  rules, c
+;;
 
 let syntax_error msg =
   let p = symbol_start_pos () in
@@ -32,9 +53,10 @@ let syntax_error msg =
 %token ARROW ARROWEQ COMMA SEMICOLON EOF 
 %token VAR RULES OTHER STRATEGY THEORY
 %token AC
+%token COND_TYPE CONDITION EQUALS
 %token INNERMOST CONTEXTSENSITIVE
 
-%type <Literal.t list * string list> toplevel
+%type <Literal.t list * Literal.t option> toplevel
 %start toplevel
 
 %%
@@ -43,12 +65,14 @@ toplevel:
   | decl EOF { convert_rules $1 }
 
 decl:
-  | LPAREN VAR      vars      RPAREN decl { add $3 [] [] $5 }
-  | LPAREN RULES    rules     RPAREN decl { add [] $3 [] $5 }
-  | LPAREN STRATEGY INNERMOST RPAREN decl { $5 }
-  | LPAREN THEORY   theory    RPAREN decl { add [] [] $3 $5 }
-  | LPAREN IDENT    anylist   RPAREN decl { $5 }
-  |                                       { ([], [], []) }
+  | LPAREN VAR       vars       RPAREN decl { add $3 [] [] $5 }
+  | LPAREN RULES     rules      RPAREN decl { add [] $3 [] $5 }
+  | LPAREN STRATEGY  INNERMOST  RPAREN decl { $5 }
+  | LPAREN COND_TYPE IDENT      RPAREN decl { $5 }
+  | LPAREN THEORY    theory     RPAREN decl { add [] [] $3 $5 }
+  | LPAREN CONDITION conditions RPAREN decl { add_conditions $3 $5 }
+  | LPAREN IDENT     anylist    RPAREN decl { $5 }
+  |                                         { ([], [], [], []) }
   | error { syntax_error "Syntax error." }
 
 anylist:
@@ -80,7 +104,18 @@ rules:
 
 rule:
   | term ARROW term { ($1, $3) }
-  | error      { syntax_error "Syntax error." }
+  | error           { syntax_error "Syntax error." }
+
+conditions:
+  | condition conditionsx { $1 :: $2 }
+
+conditionsx:
+  | COMMA condition conditionsx { $2 :: $3 }
+  | { [] }
+
+condition:
+  | term EQUALS term { ($1, $3) }
+  | error            { syntax_error "Syntax error." }
 
 term:
   | IDENT LPAREN terms RPAREN { FF ($1, $3) }

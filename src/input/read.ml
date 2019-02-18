@@ -83,8 +83,10 @@ let read_tptp orig_filename =
 ;;
 
 let file filename = 
-  if Filename.check_suffix filename "trs"  then
-    Settings.Unit(fst (read_trs filename), [])
+  if Filename.check_suffix filename "trs" then
+    match read_trs filename with
+    | eqs, None -> Settings.Unit(eqs, [])
+    | eqs, Some c -> Settings.Unit(eqs, [c])
   else
     read_tptp filename
 ;;
