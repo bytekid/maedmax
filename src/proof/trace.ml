@@ -497,7 +497,7 @@ let goal_proof g_orig (s, t) (rs, rt) sigma =
 (* Given equation l = r, compute SimplifyL inferences that correspond to the
    rewrite sequence rs. The applied rules need not be oriented before, we can
    also do ordered rewriting with equations. *)
-let rec to_simplifyl (l,r) rs =
+let rec to_rewrite_left (l,r) rs keep_origin =
   let steps = rewrite_conv l rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
@@ -507,7 +507,7 @@ let rec to_simplifyl (l,r) rs =
 ;;
 
 (* As above for SimplifyR. *)
-let rec to_simplifyr (l, r) rs =
+let rec to_rewrite_right (l, r) rs =
   let steps = rewrite_conv r rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
@@ -532,8 +532,9 @@ let rec creation_steps acc = function
       let s', t' = R.substitute ren (s, t) in
       creation_steps (Deduce (u, s', t') :: acc) es
     | Rewrite ((s0, t0), (ss, ts)) ->
-      let s, os = to_simplifyl (s0, t0) ss in
-      let _, os' = to_simplifyr (s, t0) ts in
+      let is_last_origin _ = true in
+      let s, os = to_rewrite_left (s0, t0) ss (is_last_origin (s0, t0)) in
+      let _, os' = to_rewrite_right (s, t0) ts in
       creation_steps (os' @ os @ acc) es
   )
 ;;
@@ -545,8 +546,8 @@ let rec simplify_steps acc = function
     match r with
     | Deleted -> simplify_steps (Delete s0 :: acc) es
     | Reduced ((s, t), (ss, ts)) ->
-      let s, os = to_simplifyl (s0, t0) ss in
-      let _, os' = to_simplifyr (s, t0) ts in
+      let s, os = to_rewrite_left (s0, t0) ss true in
+      let _, os' = to_rewrite_right (s, t0) ts in
       simplify_steps (os' @ os @ acc) es
   )
 ;;
@@ -635,35 +636,44 @@ let show_run r =
 (* Simulate the inference steps starting from the initial equations ee0.
    Outcommented lines could serve as fault tolerance. *)
 let simulate ee0 steps =
-  let drop, mem = Listx.remove, List.mem in
   let (<:>) = Listset.add in
-  let rec sim acc (ee_i, rr_i) = function
+  let drop, mem, tp, d = Listx.remove, List.mem, T.print, S.do_proof_debug () in
+  let rec sim acc (ee_i, rr_i) steps =
+    if d then
+      Format.printf "EE:\n %a\nRR:\n %a\n" (Rules.print_with "=") ee_i Rules.print rr_i;
+    match steps with
     | [] -> List.rev acc,(ee_i, rr_i)
     | z :: steps ->
       match z with
       | OrientL e ->
-        (*if (mem e ee_i) then
-          Format.printf "problematic %a\n%a\n%!" Rules.print ee_i Rule.print e;
-        assert(not (mem e ee_i));*)
+        if d then F.printf " orientl %a = %a\n%!" tp (fst e) tp (snd e);
+        assert(mem e ee_i);
         sim (z :: acc) (drop e ee_i, e <:> rr_i) steps
       | OrientR e ->
         let rr_i' = R.flip e <:> rr_i in
+        if d then F.printf " orientr %a = %a\n%!" tp (fst e) tp (snd e);
         assert (mem e ee_i);
         sim (z :: acc) (drop e ee_i, rr_i') steps
       | Delete t ->
+        if d then F.printf " delete %a = %a\n%!" tp t tp t;
         sim (z :: acc) (drop (t, t) ee_i, rr_i) steps
       | Deduce (u, s, t) ->
+        if d then F.printf " deduce %a <- %a -> %a\n%!" tp s tp u tp t;
         sim (z :: acc) ((s, t) <:> ee_i, rr_i) steps
       | SimplifyL ((s,t) as st, u) ->
+        if d then F.printf " simplifyl %a = %a to %a = %a\n%!" tp s tp t tp u tp t;
         assert (mem st ee_i);
         sim (z :: acc) ((u, t) <:> (drop st ee_i), rr_i) steps
       | SimplifyR ((s, t) as st, u) ->
+        if d then F.printf " simplifyr %a = %a to %a = %a\n%!" tp s tp t tp s tp u;
         assert (mem st ee_i);
         sim (z :: acc) ((s, u) <:> (drop st ee_i), rr_i) steps
       | Collapse ((s,t) as st,u) ->
+        if d then F.printf " collapse %a -> %a to %a = %a\n%!" tp s tp t tp u tp t;
         assert (mem st rr_i);
         sim (z :: acc) ((u, t) <:> ee_i, drop st rr_i) steps
       | Compose ((s, t) as st, u) ->
+        if d then F.printf " compose %a -> %a to %a -> %a\n%!" tp s tp t tp s tp u;
         assert (mem st rr_i);
         sim (z :: acc) (ee_i, (s, u) <:> (drop st rr_i)) steps
   in
@@ -716,7 +726,9 @@ let check ee0 steps (ee, rr) =
 let reconstruct_run ee0 ee rr =
   (* 0. collect derivations for computed (ee,rr) *)
   let ee0 = [ Variant.normalize_rule e | e <- ee0 ] in
-  let steps0 = creation_steps [] (ancestors (ee @ rr)) in
+  let ancs = ancestors (ee @ rr) in
+  assert ([a | a ,_ <- ancs] = Listx.unique [a | a ,_ <- ancs]);
+  let steps0 = creation_steps [] ancs in
   (* 1. simulate the run so far, this results in equations ee' and rr' *)
   let steps1, (ee', rr') = simulate ee0 steps0 in
   (* 2. by ground completeness, additional equations are subsumed/joinable;

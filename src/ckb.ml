@@ -401,13 +401,25 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
             Narrow.decide_goals !settings rr ee_sym order !heuristic
           else if not (rr @ ee = [] || gs_ground) then None
           else (
-            if ee = [] && sat_allowed () then Some (SAT, Completion rr)
-            else if ieqs = [] && ee_nonground && sat_allowed () then
+            match !settings.gs with
+            | [] ->
+              if ee = [] && sat_allowed () then
+                Some (SAT, Completion rr)
+              else if ieqs = [] && ee_nonground && sat_allowed () then
+                Some (SAT, GroundCompletion (rr, ee, order))
+              else None 
+            | [s,t] ->
+                let (s', rss), (t', rst) = rewriter#nf s, rewriter#nf t in
+                assert (s' <> t');
+                let steps = rewrite_seq rewriter (s,t) (rss,rst) in
+                Some (SAT, Disproof (rr, ee, order, steps))
+            (* TODO: no more ieqs! transform into goals *)
+            (*else if ieqs = [] && ee_nonground && sat_allowed () then
               Some (SAT, GroundCompletion (rr, ee, order))
             else if L.length ieqs = 1 && NS.is_empty gs &&
               !(Settings.do_proof) = None then
-              Narrow.decide !settings rr ee_sym order ieqs !heuristic
-            else None
+              Narrow.decide !settings rr ee_sym order ieqs !heuristic*)
+            | _ ->  None
           ))
         | _ -> None
 ;;

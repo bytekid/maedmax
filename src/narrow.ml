@@ -128,7 +128,8 @@ let decide settings rr ee ord gs h =
   let ee' = L.filter
     (fun e -> not (L.exists (fun e' -> R.is_proper_instance e e') ee')) ee' in
   if debug settings then (
-    Format.printf "EE:\n%a\n%!" Rules.print ee');
+    Format.printf "EE:\n%a\n%!" Rules.print ee';
+    Format.printf "SAT allowed:%B\n%!" (sat_allowed ()));
   let rr' = rr @ ee' in
   let rec decide_by_narrowing all gs =
     let unifiable ((s,t),_) = Subst.unifiable s t in
@@ -136,7 +137,7 @@ let decide settings rr ee ord gs h =
     if L.exists unifiable gs then (
       if debug settings then
         Format.printf "UNSAT, found unifiable equation\n%!";
-      if  unsat_allowed () then
+      if unsat_allowed () then
         Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[]))
       else raise Backtrack
       )

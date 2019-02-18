@@ -24,18 +24,20 @@ let check settings heuristic s ls =
   let trs_vs = [ r, C.find_rule r | r <- trs] in
   Logic.require (Strategy.bootstrap_constraints 0 ctx trs_vs);
   List.iter (fun (_, v) -> Logic.assert_weighted v 1) trs_vs;
+  (*List.iter (fun (_, v) -> Logic.assert_weighted v 1) trs_vs;*)
   if Logic.check ctx then (
     let m = Logic.get_model ctx in
-    let rls, es = List.partition (fun (_, v) -> Logic.eval m v) trs_vs in
-    let rls, es = List.map fst rls, List.map fst es in
+    (*let rls, es = List.partition (fun (_, v) -> Logic.eval m v) trs_vs in
+    let rls, es = List.map fst rls, List.map fst es in*)
     let order = Strategy.decode 0 m s in
+    order#print ();
     let cps = extended_cps trs order in
-    let rew = new Rewriter.rewriter heuristic rls [] order in
-    rew#add es;
+    let rew = new Rewriter.rewriter heuristic trs [] order in
+    (*rew#add es;*)
     let non_joinable (s,t) = fst (rew#nf s) <> fst (rew#nf t) in
     let cps' = List.filter non_joinable cps in
     Format.printf "%i critical critical pairs: %a\n%!" (List.length cps')
       Rules.print cps';
-    Ground.all_joinable settings ctx s (trs, es, order) cps' <> None
- ) else false
+    Ground.all_joinable settings ctx s (trs, [](* es *), order) cps' <> None
+ ) else (Format.printf "not sat\n%!"; false)
 ;;

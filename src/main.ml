@@ -335,10 +335,12 @@ let cpf_proof_string ?(readable = false) (es, gs) =
   | Completion _ ->
     failwith "Main.show_proof: not yet supported for Completion"
   | GroundCompletion (rr,ee,o) -> (* no goal exists *)
+  Format.printf "gc proof\n%!";
       let es = L.map Literal.terms es in
       let p = Cpf.ground_completion es (rr,ee,o) in
       result_string p
   | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
+      Format.printf "disproof\n%!";
       let g = Literal.terms (L.hd gs) in
       let es = L.map Literal.terms es in
       let p = Cpf.goal_disproof es g (rr,ee,o) rst in
@@ -363,8 +365,8 @@ let selection_trace (es, gs) = function
 ;;
 
 let show_proof filename input res = function
-  | CPF -> Format.printf "%s\n" (cpf_proof_string input res)
-  | TPTP -> Format.printf "%s\n" (Tptp.proof_string filename input res)
+  | CPF -> Format.printf "%s\n%!" (cpf_proof_string input res)
+  | TPTP -> Format.printf "%s\n%!" (Tptp.proof_string filename input res)
   | SelectionTrace -> selection_trace input res
   | _ -> Format.printf "some proof\n%!"
 ;;
