@@ -8,7 +8,6 @@ module Logic = Settings.Logic
 (*** OPENS *******************************************************************)
 open Term
 open Logic
-open Arith
 
 (*** GLOBALS *****************************************************************)
 (* signature *)

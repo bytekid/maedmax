@@ -335,12 +335,10 @@ let cpf_proof_string ?(readable = false) (es, gs) =
   | Completion _ ->
     failwith "Main.show_proof: not yet supported for Completion"
   | GroundCompletion (rr,ee,o) -> (* no goal exists *)
-  Format.printf "gc proof\n%!";
       let es = L.map Literal.terms es in
       let p = Cpf.ground_completion es (rr,ee,o) in
       result_string p
   | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
-      Format.printf "disproof\n%!";
       let g = Literal.terms (L.hd gs) in
       let es = L.map Literal.terms es in
       let p = Cpf.goal_disproof es g (rr,ee,o) rst in
