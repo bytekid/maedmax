@@ -7,7 +7,7 @@ let print ppf (l, r) =
   fprintf ppf "%a -> %a" Term.print l Term.print r
 
 let print_with sep ppf (l, r) =
-  fprintf ppf "@[<2>%a %s %a@]" Term.print l sep Term.print r
+  fprintf ppf "%a %s %a" Term.print l sep Term.print r
 
 let to_string = flush_str_formatter <.> print str_formatter
 

@@ -45,6 +45,7 @@ let trace_table : (R.t, origin * int) H.t = H.create 128
 let children_table : (R.t, result) H.t = H.create 128
 let goal_trace_table : (R.t, origin * int) H.t = H.create 128
 let deleted : R.t list ref = ref []
+
 let count = ref 0
 
 (*** FUNCTIONS ***************************************************************)
@@ -172,24 +173,6 @@ let ancestors eqs =
         failwith "Trace.of_equation: equation unknown")
   in
   ancestors [] eqs
-;;
-
-(* Return descendants in simplification. Since the equations can emerge as
-   intermediate results, they need not be normalized. *)
-let descendants eqs =
-  let rec desc acc = function
-    | [] -> acc
-    | eq :: eqs ->
-      (* already present and final equations can be ignored *)
-      if List.mem eq (List.map fst acc) || not (H.mem children_table eq) then
-        desc acc eqs
-      else
-        let r = H.find children_table eq in
-        let acc' = desc acc (Listset.diff (children r) [eq | eq, _ <- acc]) in
-        let acc'' = (eq,r ) :: acc' in
-        desc acc'' eqs
-  in
-  desc [] eqs
 ;;
 
 (* Get renaming that renames first to second rule *)
@@ -497,59 +480,100 @@ let goal_proof g_orig (s, t) (rs, rt) sigma =
 (* Given equation l = r, compute SimplifyL inferences that correspond to the
    rewrite sequence rs. The applied rules need not be oriented before, we can
    also do ordered rewriting with equations. *)
-let rec to_rewrite_left (l,r) rs keep_origin =
+let to_rewrite_left ((l, r) as lr) rs keep_origin =
   let steps = rewrite_conv l rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
     | (p, _, _, _, v) :: ss -> collect (SimplifyL ((u, r), v) :: acc) v ss
-  in 
-  last (l, steps), collect [] l steps
+  in
+  (* first step needs to be deduce if keep_origin is true *)
+  match steps with
+  | [] -> l, []
+  | (_, _, _, _, l') :: steps' ->
+    let first = if keep_origin then Deduce (l, l', r) else SimplifyL (lr, l') in
+    last (l, steps), collect [first] l' steps'
 ;;
 
 (* As above for SimplifyR. *)
-let rec to_rewrite_right (l, r) rs =
+let rec to_rewrite_right ((l, r) as lr) rs keep_origin =
   let steps = rewrite_conv r rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
     | (p, _, _, _, v) :: ss -> collect (SimplifyR ((l, u), v) :: acc) v ss
   in 
-  last (r, steps), collect [] r steps
+  (* first step needs to be deduce if keep_origin is true *)
+  match steps with
+  | [] -> r, []
+  | (_, _, _, _, r') :: steps' ->
+    let first = if keep_origin then Deduce (r, l, r') else SimplifyR (lr, r') in
+    last (r, steps), collect [first] r' steps'
+;;
+
+let later_use_exists st =
+  let origin_used st = function
+    | CP (r1, _, _, r2) -> r1 = st || r2 = st
+    | Initial -> false
+    | Rewrite (eq', _) -> st = eq'
+  in  
+  let rec check = function
+  | [] -> false
+  | (eq, o) :: es ->
+    if origin_used st o then true
+    else if st = eq then false (* produced again! stop*)
+    else check es
+  in check
 ;;
 
 (* Compute Deduce and Simplify steps that gave rise to the given equations. *)
-let rec creation_steps acc = function
-  | [] -> List.rev acc
-  | ((s, t), o) :: es -> (
-    match o with
-    | Initial -> creation_steps acc es
-    | CP (r1, p, _, r2) ->
-      (* rename *both* (rules not obeying variable condition make problems) *)
-      let r1, r2 = R.rename r1, R.rename r2 in
-      let (r1, p, r2, mgu) as o = the_overlap r1 r2 p in
-      let s', t' = O.cp_of_overlap o in
-      let ren, keep_dir = rename_to (s', t') (s, t) in
-      let u = T.substitute ren (T.substitute mgu (fst r2)) in
-      let s', t' = R.substitute ren (s, t) in
-      creation_steps (Deduce (u, s', t') :: acc) es
-    | Rewrite ((s0, t0), (ss, ts)) ->
-      let is_last_origin _ = true in
-      let s, os = to_rewrite_left (s0, t0) ss (is_last_origin (s0, t0)) in
-      let _, os' = to_rewrite_right (s, t0) ts in
-      creation_steps (os' @ os @ acc) es
-  )
+let creation_steps eqs =
+  let rec steps acc = function
+    | [] -> List.rev acc
+    | ((s, t), o) :: es -> (
+      match o with
+      | Initial -> steps acc es
+      | CP (r1, p, _, r2) ->
+        (* rename *both* (rules not obeying variable condition make problems) *)
+        let r1, r2 = R.rename r1, R.rename r2 in
+        let (r1, p, r2, mgu) as o = the_overlap r1 r2 p in
+        let s', t' = O.cp_of_overlap o in
+        let ren, keep_dir = rename_to (s', t') (s, t) in
+        let u = T.substitute ren (T.substitute mgu (fst r2)) in
+        let s', t' = R.substitute ren (s, t) in
+        steps (Deduce (u, s', t') :: acc) es
+      | Rewrite ((s0, t0), (ss, ts)) ->
+        let later_used = later_use_exists (s0,t0) es in
+        let s, os = to_rewrite_left (s0, t0) ss later_used in
+        let _, os' = to_rewrite_right (s, t0) ts (ss = [] && later_used) in
+        steps (os' @ os @ acc) es
+    )
+  in
+  (* do deduce before rewrite to avoid simplifying away needed equations *)
+  let ds, rs = List.partition (function _, CP _ -> true | _ -> false) eqs in
+  steps [] (ds @ rs)
 ;;
 
 (* Compute Simplify and Delete steps that simplify away the given equations. *)
-let rec simplify_steps acc = function
-  | [] -> List.rev acc
-  | ((s0, t0), r) :: es -> (
-    match r with
-    | Deleted -> simplify_steps (Delete s0 :: acc) es
-    | Reduced ((s, t), (ss, ts)) ->
-      let s, os = to_rewrite_left (s0, t0) ss true in
-      let _, os' = to_rewrite_right (s, t0) ts in
-      simplify_steps (os' @ os @ acc) es
-  )
+let simplify_away_steps rew ee eqs =
+  let rewrite (s, t) =
+    let s', rs = rew#nf s in
+    let t', rt = rew#nf t in
+    let rest = if s' = t' then [(s',t'), Deleted] else [] in
+    ((s,t), Reduced((s', t'), (rs, rt))) :: rest
+  in
+  let rec simplify_steps acc = function
+    | [] -> List.rev acc
+    | ((s0, t0), r) :: es -> (
+      match r with
+      | Deleted -> simplify_steps (Delete s0 :: acc) es
+      | Reduced ((s, t), (ss, ts)) ->
+        (* these equations are not needed later on *)
+        let keep_origin = false in
+        let s, os = to_rewrite_left (s0, t0) ss keep_origin in
+        let _, os' = to_rewrite_right (s, t0) ts keep_origin in
+        simplify_steps (os' @ os @ acc) es
+    )
+  in
+  simplify_steps [] (List.concat (List.map rewrite eqs))
 ;;
 
 (* Orient steps for rules rr out of equation set ee *)
@@ -584,20 +608,18 @@ let rec to_compose (l, r) rs =
 ;;
 
 (* Compose and collapse steps to interreduce the TRS rr. *)
-let interreduce rr =
-  let rec reduce acc ee rr_u rr_p =
-    match rr_u with
-      [] -> (List.rev acc, ee, rr_p)
-    | (l, r) :: rr_u' ->
-      let rr = rr_p @ rr_u' in
-      let rrs, r' = Rewriting.nf_with_at rr r in
-      let lrs, l' = Rewriting.nf_with_at rr l in
+let interreduce rew rls =
+  let rec reduce os_acc rr ee = function
+    | [] -> (List.rev os_acc, rr, ee)
+    | (l, r) :: rls ->
+      let r', rrs = rew#nf r in
+      let l', lrs = rew#nf l in
       let _, os = to_compose (l, r) rrs in
       let _, os' = to_collapse (l, r') lrs in
-      if l = l' then reduce (os' @ os @ acc) ee rr_u' (Listset.add (l, r') rr_p)
-      else reduce (os' @ os @ acc) ((l', r') :: ee) rr_u' rr_p
+      if l = l' then reduce (os' @ os @ os_acc) ee (Listset.add (l, r') rr) rls
+      else reduce (os' @ os @ os_acc) ((l', r') :: ee) rr rls
   in
-  reduce [] [] rr []
+  reduce [] [] [] rls
 ;;
 
 (* Show inference steps of a run. *)
@@ -633,6 +655,10 @@ let show_run r =
   if S.do_proof_debug () then show r
 ;;
 
+let print_system ee rr =
+  Format.printf "EE:\n%a\nRR:\n%a\n" (Rules.print_with "=") ee Rules.print rr
+;;
+
 (* Simulate the inference steps starting from the initial equations ee0.
    Outcommented lines could serve as fault tolerance. *)
 let simulate ee0 steps =
@@ -640,7 +666,7 @@ let simulate ee0 steps =
   let drop, mem, tp, d = Listx.remove, List.mem, T.print, S.do_proof_debug () in
   let rec sim acc (ee_i, rr_i) steps =
     if d then
-      Format.printf "EE:\n %a\nRR:\n %a\n" (Rules.print_with "=") ee_i Rules.print rr_i;
+      print_system ee_i rr_i;
     match steps with
     | [] -> List.rev acc,(ee_i, rr_i)
     | z :: steps ->
@@ -723,25 +749,37 @@ let check ee0 steps (ee, rr) =
 ;;
 
 (* Construct a run from ee0, to obtain (an interreduced version of) (ee,rr). *)
-let reconstruct_run ee0 ee rr =
+let reconstruct_run ee0 (ee, rr, ord) =
+  let rew = new Rewriter.rewriter Settings.default_heuristic rr [] ord in
+  rew#add ee;
   (* 0. collect derivations for computed (ee,rr) *)
   let ee0 = [ Variant.normalize_rule e | e <- ee0 ] in
   let ancs = ancestors (ee @ rr) in
   assert ([a | a ,_ <- ancs] = Listx.unique [a | a ,_ <- ancs]);
-  let steps0 = creation_steps [] ancs in
+  (* 0. create all equations needed by means of deduce and simplify  *)
+  let steps0 = creation_steps ancs in
   (* 1. simulate the run so far, this results in equations ee' and rr' *)
   let steps1, (ee', rr') = simulate ee0 steps0 in
+  if S.do_proof_debug () then (
+    Format.printf "after creation:\n";
+    print_system ee' rr');
   (* 2. by ground completeness, additional equations are subsumed/joinable;
-        so compute these derivations, results in Delete or present equations *)
+        so compute these derivations, results in Delete or already present
+        equations *)
   let ee'' = Listset.diff ee' (Rules.flip (ee @ rr) @ ee @ rr) in
-  let steps_ee = simplify_steps [] (descendants ee'') in
+  if S.do_proof_debug () then
+    Format.printf "%d superfluous: %a\n" (List.length ee'') (Rules.print_with "=") ee'';
+  let steps_ee = simplify_away_steps rew ee ee'' in
   (* 3. rules in rr need to be oriented  *)
   let orient_steps = orient_steps ee' (Listset.diff rr rr') in
   (* 4. interreduce the set of all rules, computing collapse/compose steps *)
-  let rr'' = Listset.union rr rr' in
-  let interred_steps, ee_add, rr_reduced = interreduce rr'' in
+  if S.do_proof_debug () then 
+    Format.printf "before interreduce: \nexpected:%a\nadditional:%a\n%!"
+      Rules.print rr Rules.print rr';
+  let interred_steps, ee_add, rr_reduced = interreduce rew (Listset.diff rr' rr) in
+  assert (Listset.subset rr_reduced rr);
   (* 5.interreduction can produce equations that should be subsumed/joinable *)
-  let ss_ee' = simplify_steps [] (descendants (Listx.unique ee_add)) in
+  let ss_ee' = simplify_away_steps rew ee (Listx.unique ee_add) in
   (* combine all inference steps *)
   let steps = steps1 @ orient_steps @ steps_ee @ interred_steps @ ss_ee' in
   let run, res = simulate ee0 steps in

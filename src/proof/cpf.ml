@@ -19,14 +19,30 @@ let pos_to_xml p =
 ;;
 
 let equation_to_xml (l,r) =
-  X.Element("inequality", [], [Term.to_xml l; Term.to_xml r])
+  X.Element("equation", [], [Term.to_xml l; Term.to_xml r])
 ;;
 
-let input_to_xml es g_opt =
-  let es0 = [Variant.normalize_rule e | e <- es] in
-  let xes = X.Element("equations", [], [Rules.to_xml es0] ) in
-  let xgs = match g_opt with None -> [] | Some g -> [equation_to_xml g] in
-  let input = X.Element("equationalReasoningInput", [], xes :: xgs) in
+let okb_result_to_xml (ee, rr, ord) =
+  let ee' = variant_free ee in
+  let xrs = X.Element("trs", [], [Rules.to_xml rr]) in
+  let xes = X.Element("equations", [], [Rules.to_xml ee']) in
+  let xord = X.Element("reductionOrder", [], [ord#to_xml]) in
+  X.Element("orderedCompletionResult", [], [xrs; xes; xord])
+;;
+
+let er_input_to_xml es g =
+  let ee0 = [Variant.normalize_rule e | e <- es] in
+  let xes = X.Element("equations", [], [Rules.to_xml ee0] ) in
+  let xgs = equation_to_xml g in
+  let input = X.Element("equationalReasoningInput", [], [xes; xgs]) in
+  X.Element("input", [], [input])
+;;
+
+let okb_input_to_xml ee0 res  =
+  let ee0 = [Variant.normalize_rule e | e <- ee0] in
+  let xes = X.Element("equations", [], [Rules.to_xml ee0] ) in
+  let xresult = okb_result_to_xml res in
+  let input = X.Element("orderedCompletionInput", [], [xes; xresult]) in
   X.Element("input", [], [input])
 ;;
 
@@ -70,24 +86,8 @@ let inference_to_xml step =
 
 let run_to_xml steps = X.Element("run", [], [inference_to_xml s | s <- steps])
 
-let ordered_completion_input_to_xml ee0 (rr, ee, ord) =
-  let ee0 = [Variant.normalize_rule e | e <- ee0] in
-  let xes0 = X.Element("equations", [], [Rules.to_xml ee0]) in
-  let xrs = X.Element("trs", [], [Rules.to_xml rr]) in
-  let xes = X.Element("equations", [], [Rules.to_xml ee]) in
-  let xord = X.Element("reductionOrder", [], [ord#to_xml]) in
-  let oxi = X.Element("orderedCompletionInput", [], [xes0; xrs; xes; xord]) in
-  X.Element("input", [], [oxi])
-;;
-
-let eqdisproof_to_xml ee0 (rr, ee, ord) ((s, t), (rs, rt)) =
-  let xconv_s = conversion_to_xml (s, Tc.rewrite_conv' s rs) in
-  let xconv_t = conversion_to_xml (t, Tc.rewrite_conv' t rt) in
-  let xnorm = X.Element("normalization", [], [xconv_s; xconv_t]) in
-  let steps, _ = Tc.reconstruct_run ee0 ee rr in
-  let comps = run_to_xml steps :: [xnorm ] in
-  let xconv = X.Element("groundCompletionAndNormalization", [], comps) in
-  X.Element("equationalDisproof", [], [xconv])
+let okb_proof_to_xml steps =
+  X.Element("orderedCompletionProof", [], [run_to_xml steps])
 ;;
 
 let xml_proof_wrapper xinput xproof =
@@ -101,24 +101,28 @@ let xml_proof_wrapper xinput xproof =
   X.Element("certificationProblem", [a1; a2], [xinput; xversion; xproof; xo])
 ;;
 
-let goal_proof es0 g_orig ((s, t), (rs, rt), sigma) =
+let goal_proof ee0 g_orig ((s, t), (rs, rt), sigma) =
   let g = Variant.normalize_rule g_orig in
   let rulesubs = Tc.goal_proof g (s, t) (rs, rt) sigma in
   let xproof = X.Element("proof", [], [ eqproof_to_xml rulesubs ]) in
-  xml_proof_wrapper (input_to_xml es0 (Some g)) xproof
+  xml_proof_wrapper (er_input_to_xml ee0 g) xproof
 ;;
 
-let goal_disproof es0 g_orig res rst =
+let goal_disproof ee0 g_orig (ee, rr, ord) rst =
   let g = Variant.normalize_rule g_orig in
-  let xproof = X.Element("proof", [], [eqdisproof_to_xml es0 res (g, rst)]) in
-  xml_proof_wrapper (input_to_xml es0 (Some g)) xproof
+  let steps, (ee',rr') = Tc.reconstruct_run ee0 (ee, rr, ord) in
+  let xokb_proof = okb_proof_to_xml steps in
+  let xresult = okb_result_to_xml (ee', rr', ord) in
+  let xoc = X.Element("orderedCompletion", [], [xresult; xokb_proof]) in
+  let xdisproof = X.Element("equationalDisproof", [], [xoc]) in
+  let xproof = X.Element("proof", [], [xdisproof]) in
+  xml_proof_wrapper (er_input_to_xml ee0 g) xproof
 ;;
 
-let ground_completion ee0 (rr, ee, ord) =
-  let steps, (ee', rr') = Tc.reconstruct_run ee0 ee rr in
-  let ee' = variant_free ee' in
-  let xcproof = X.Element("orderedCompletionProof", [], [run_to_xml steps]) in
+let ordered_completion_proof ee0 (ee, rr, ord) =
+  let steps, (ee',rr') = Tc.reconstruct_run ee0 (ee, rr, ord) in
+  let xcproof = okb_proof_to_xml steps in
   let xproof = X.Element("proof", [], [xcproof]) in
-  let xinput = ordered_completion_input_to_xml ee0 (rr', ee', ord) in
+  let xinput = okb_input_to_xml ee0 (ee', rr', ord) in
   xml_proof_wrapper xinput xproof
 ;;

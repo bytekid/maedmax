@@ -5,10 +5,10 @@ open Term
 type t = Rule.t list
 
 let print ppf rs =
-  fprintf ppf "@[<v 0> %a@]" (print_list Rule.print "\n ") rs
+  fprintf ppf "@[%a@]" (print_list Rule.print "\n ") rs
 
 let print_with sep ppf rules =
-  fprintf ppf "@[<v 0> %a@]" (print_list (Rule.print_with sep)  "\n ") rules
+  fprintf ppf "@[%a@]" (print_list (Rule.print_with sep)  "\n ") rules
 
 let variables rules =
   Listx.unique [ x | rule <- rules; x <- Rule.variables rule ]

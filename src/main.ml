@@ -100,7 +100,8 @@ let options =
        " check ground confluence");
    ("--interactive", Arg.Set Settings.interactive,
      " enter interactive mode once a complete system was found");
-     ("--infeasible", Arg.Set infeasibility,
+   ("--infeasible", Arg.Unit (fun _ -> infeasibility := true;
+       heuristic := { !heuristic with strategy = S.strategy_ordered_kbo }),
        " answers according to CoCo infeasibility semantics");
    ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
      " output result and stats in JSON format");
@@ -351,12 +352,12 @@ let cpf_proof_string ?(readable = false) (es, gs) =
     failwith "Main.show_proof: not yet supported for Completion"
   | GroundCompletion (rr,ee,o) -> (* no goal exists *)
       let es = L.map Literal.terms es in
-      let p = Cpf.ground_completion es (rr,ee,o) in
+      let p = Cpf.ordered_completion_proof es (ee, rr, o) in
       result_string p
   | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
       let g = Literal.terms (L.hd gs) in
       let es = L.map Literal.terms es in
-      let p = Cpf.goal_disproof es g (rr,ee,o) rst in
+      let p = Cpf.goal_disproof es g (ee, rr, o) rst in
       result_string p
   | _ -> failwith "Main.show_proof: not yet supported for inequality axioms"
 ;;
@@ -464,7 +465,9 @@ let run file ((es, gs) as input) =
     print_json (es,gs) secs (ans,clean es proof) settings
   else (
     match !(Settings.do_proof) with
-    | Some fmt when not !Settings.benchmark -> show_proof file input proof fmt
+    | Some fmt when not !Settings.benchmark ->
+      if !infeasibility then print_res ans (clean es proof);
+      show_proof file input proof fmt
     | None -> (
       print_res ans (clean es proof);
       if not !Settings.benchmark then (
