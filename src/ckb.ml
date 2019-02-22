@@ -1039,7 +1039,9 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   set_settings s;
   set_heuristic h;
   if !A.hard_restarts = 0 && settings_flags.auto && not is_large then
-    detect_shape axs_eqs;
+    detect_shape axs_eqs
+  else
+    time_limit := 600.;
   if !(Settings.do_proof) <> None then (
     Trace.add_initials axs_eqs;
     Trace.add_initial_goal gs);
@@ -1060,7 +1062,7 @@ let remember_state es gs =
 let ckb ((settings_flags, heuristic_flags) as flags) input =
   set_settings settings_flags;
   set_heuristic heuristic_flags;
-  if debug 2 then Format.printf "%d goal count\n" (List.length (snd input));
+  if debug 2 then Format.printf "strategy %s\n%!" (Strategy.to_string heuristic_flags.strategy);
   A.hard_restart_time := Unix.gettimeofday ();
   
   let eq_ok e = Lit.is_equality e || Lit.is_ground e in
@@ -1076,6 +1078,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     let gs0 = L.map Lit.normalize gs in
     Select.init es0 gs0;
     init_settings flags es0 [ Lit.terms g | g <- gs0 ];
+    if debug 2 then Format.printf "strategy %s\n%!" (Strategy.to_string !heuristic.strategy);
     try
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
       if !(S.do_proof) <> None then
