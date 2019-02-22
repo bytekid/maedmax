@@ -132,8 +132,6 @@ let t_strategies _ = L.map (fun (ts,_,_,_,_) -> ts) !heuristic.strategy
 
 let normalize = Variant.normalize_rule
 
-let ac_eqs () = [ normalize e | e <- Ac.eqs !settings.ac_syms ]
-
 let set_extension s =
   let sign = !settings.signature in
   let cs = [Term.F (c, []) | c, a <- sign; a = 0] in
@@ -188,6 +186,25 @@ let store_remaining_nodes ctx ns gs =
   let gs = NS.smaller_than !heuristic.soft_bound_goals gs in
   let gs_sized = [n, Lit.size n | n <- NS.sort_size gs] in
   Select.all_goals := L.rev_append (L.rev !Select.all_goals) gs_sized
+;;
+
+let add_cassociativity acs =
+  let x = T.V 1 in
+  let y = T.V 2 in
+  let z = T.V 3 in
+  let x', y' = T.V 4, T.V 5 in
+  let add f =
+    let assoc = T.F(f, [T.F(f, [x; y]); z]), T.F(f, [x; T.F(f, [y; z])]) in
+    let comm = (T.F(f, [x'; y']), T.F(f, [y'; x'])) in
+    let st = T.F(f, [T.F(f, [y; x]); z]), T.F(f, [x; T.F(f, [y; z])]) in
+    let mu = [4,y; 5,x] in
+    let st = Variant.normalize_rule st in
+    Trace.add_overlap st (comm, [0], assoc, mu);
+    let ut = T.F(f, [y; T.F(f, [x; z])]), T.F(f, [x; T.F(f, [y; z])]) in
+    let ut = Variant.normalize_rule ut in
+    Trace.add_rewrite ut st ([], [assoc, [], [1, y; 2, x]])
+  in
+  List.iter add acs
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -1061,6 +1078,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     init_settings flags es0 [ Lit.terms g | g <- gs0 ];
     try
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
+      if !(S.do_proof) <> None then
+        add_cassociativity !settings.ac_syms;
       let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
       let ctx = Logic.mk_context () in
       let ss = Listx.unique (t_strategies ()) in

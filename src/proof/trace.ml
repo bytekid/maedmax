@@ -152,27 +152,41 @@ let trace_eq e =
   with Not_found -> failwith "Trace: equation not found"
 ;;
 
-let ancestors eqs = 
+let eq_variants rl (l,r) = Rule.variant rl (l,r) || Rule.variant rl (r,l)
+
+let mem_var eq eqs = List.exists (Rule.variant eq) eqs
+
+let ancestors eqs =
+  if S.do_proof_debug () then Format.printf "ANCESTORS\n%!";
+  let acc_eqs acc = [eq | (eq, _), _ <- acc] in
   let rec ancestors acc = function
     | [] -> acc
     | eq :: eqs ->
       try
         let eq = Variant.normalize_rule eq in
-        if List.mem eq (List.map fst acc) then
+        if S.do_proof_debug () then
+          Format.printf " %i:  %a\n%!" (try snd (trace_eq eq) with _ -> 0) (Rule.print_with "=") eq;
+        if List.mem eq (acc_eqs acc) then
           ancestors acc eqs
         else
-          let o = fst (trace_eq eq) in
+          let o, id = trace_eq eq in
           let ps = List.map fst (parents o) in
-          let acc' = ancestors acc (Listset.diff ps [eq | eq, _ <- acc]) in
-          let xs = List.map fst acc' in
+          let acc' = ancestors acc (Listset.diff ps (acc_eqs acc)) in
+          let xs = acc_eqs acc' in
           assert (List.length xs = List.length (Listx.unique xs));
-          let acc'' = acc' @ [eq, o] in
-          ancestors acc'' (Listset.diff eqs (List.map fst acc''))
+          let acc'' = acc' @ [(eq, o), id] in
+          ancestors acc'' (Listset.diff eqs (acc_eqs acc''))
       with Not_found -> (
         F.printf "no origin found for %a\n%!" R.print eq;
         failwith "Trace.of_equation: equation unknown")
   in
-  ancestors [] eqs
+  let aged_ancestors = ancestors [] eqs in
+  let age_compare (_, a) (_,b) = Pervasives.compare a b in
+  let res = List.map fst (List.sort age_compare aged_ancestors) in
+  if S.do_proof_debug () then (
+    Format.printf "sorted ancestors:\n";
+    List.iter (fun (e,o) -> Format.printf "  %a : %s\n%!" Rule.print e (origin_string o)) res);
+  res
 ;;
 
 (* Get renaming that renames first to second rule *)
@@ -480,40 +494,37 @@ let goal_proof g_orig (s, t) (rs, rt) sigma =
 (* Given equation l = r, compute SimplifyL inferences that correspond to the
    rewrite sequence rs. The applied rules need not be oriented before, we can
    also do ordered rewriting with equations. *)
-let to_rewrite_left ((l, r) as lr) rs keep_origin =
+let to_rewrite_left ((l, r) as lr) rs keep_origin ord =
   let steps = rewrite_conv l rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
-    | (p, _, _, _, v) :: ss -> collect (SimplifyL ((u, r), v) :: acc) v ss
+    | (p, _, _, _, v) :: ss ->
+      let do_deduce = keep_origin (u, r) || not (ord u v) in
+      if do_deduce then collect (Deduce (u, v, r) :: acc) v ss
+      else collect (SimplifyL ((u, r), v) :: acc) v ss
   in
-  (* first step needs to be deduce if keep_origin is true *)
-  match steps with
-  | [] -> l, []
-  | (_, _, _, _, l') :: steps' ->
-    let first = if keep_origin then Deduce (l, l', r) else SimplifyL (lr, l') in
-    last (l, steps), collect [first] l' steps'
+  last (l, steps), collect [] l steps
 ;;
 
 (* As above for SimplifyR. *)
-let rec to_rewrite_right ((l, r) as lr) rs keep_origin =
+let rec to_rewrite_right ((l, r) as lr) rs keep_origin ord =
   let steps = rewrite_conv r rs in
   let rec collect acc u = function
       [] -> acc (* reversal happens in to_origins *)
-    | (p, _, _, _, v) :: ss -> collect (SimplifyR ((l, u), v) :: acc) v ss
+    | (p, _, _, _, v) :: ss ->
+    let do_deduce = keep_origin (l, u) || not (ord u v) in
+      if do_deduce then collect (Deduce (u, l, v) :: acc) v ss
+      else collect (SimplifyR ((l, u), v) :: acc) v ss
   in 
-  (* first step needs to be deduce if keep_origin is true *)
-  match steps with
-  | [] -> r, []
-  | (_, _, _, _, r') :: steps' ->
-    let first = if keep_origin then Deduce (r, l, r') else SimplifyR (lr, r') in
-    last (r, steps), collect [first] r' steps'
+  last (r, steps), collect [] r steps
 ;;
 
-let later_use_exists st =
+let later_use_exists st es (ee, rr) =
   let origin_used st = function
-    | CP (r1, _, _, r2) -> r1 = st || r2 = st
+    | CP (r1, _, _, r2) -> eq_variants r1 st || eq_variants r2 st
     | Initial -> false
-    | Rewrite (eq', _) -> st = eq'
+    | Rewrite (eq', (ls, rs)) -> eq_variants st eq' ||
+      List.exists (eq_variants eq') [rl | (rl, _, _) <- ls @ rs]
   in  
   let rec check = function
   | [] -> false
@@ -521,11 +532,11 @@ let later_use_exists st =
     if origin_used st o then true
     else if st = eq then false (* produced again! stop*)
     else check es
-  in check
+  in check es || List.exists (eq_variants st) (ee @ rr) || true (* FIXME *)
 ;;
 
 (* Compute Deduce and Simplify steps that gave rise to the given equations. *)
-let creation_steps eqs =
+let creation_steps eqs (ee, rr, ord) =
   let rec steps acc = function
     | [] -> List.rev acc
     | ((s, t), o) :: es -> (
@@ -541,23 +552,26 @@ let creation_steps eqs =
         let s', t' = R.substitute ren (s, t) in
         steps (Deduce (u, s', t') :: acc) es
       | Rewrite ((s0, t0), (ss, ts)) ->
-        let later_used = later_use_exists (s0,t0) es in
-        let s, os = to_rewrite_left (s0, t0) ss later_used in
-        let _, os' = to_rewrite_right (s, t0) ts (ss = [] && later_used) in
+        let later_used eq = later_use_exists eq es (ee,rr) in
+        let s, os = to_rewrite_left (s0, t0) ss later_used ord#gt in
+        let _, os' = to_rewrite_right (s, t0) ts later_used ord#gt in
         steps (os' @ os @ acc) es
     )
   in
   (* do deduce before rewrite to avoid simplifying away needed equations *)
-  let ds, rs = List.partition (function _, CP _ -> true | _ -> false) eqs in
-  steps [] (ds @ rs)
+  (*let ds, rs = List.partition (function _, CP _ -> true | _ -> false) eqs in*)
+  steps [] eqs
 ;;
 
-(* Compute Simplify and Delete steps that simplify away the given equations. *)
-let simplify_away_steps rew ee eqs =
+(* Compute Simplify and Delete steps that simplify away the equations. *)
+let simplify_away_steps rew (ee, rr, ord) eqs =
   let rewrite (s, t) =
     let s', rs = rew#nf s in
     let t', rt = rew#nf t in
     let rest = if s' = t' then [(s',t'), Deleted] else [] in
+    (*Format.printf "%a reduced to %a\n using %a\n%!"
+      (Rule.print_with "=") (s,t)  (Rule.print_with "=") (s',t')
+      Rules.print (List.map (fun (rl,_,_) -> rl) (rs @ rt));*)
     ((s,t), Reduced((s', t'), (rs, rt))) :: rest
   in
   let rec simplify_steps acc = function
@@ -567,9 +581,9 @@ let simplify_away_steps rew ee eqs =
       | Deleted -> simplify_steps (Delete s0 :: acc) es
       | Reduced ((s, t), (ss, ts)) ->
         (* these equations are not needed later on *)
-        let keep_origin = false in
-        let s, os = to_rewrite_left (s0, t0) ss keep_origin in
-        let _, os' = to_rewrite_right (s, t0) ts keep_origin in
+        let later_used eq = later_use_exists eq [] (ee,rr) in
+        let s, os = to_rewrite_left (s0, t0) ss later_used ord#gt in
+        let _, os' = to_rewrite_right (s, t0) ts later_used ord#gt in
         simplify_steps (os' @ os @ acc) es
     )
   in
@@ -659,12 +673,30 @@ let print_system ee rr =
   Format.printf "EE:\n%a\nRR:\n%a\n" (Rules.print_with "=") ee Rules.print rr
 ;;
 
-(* Simulate the inference steps starting from the initial equations ee0.
-   Outcommented lines could serve as fault tolerance. *)
-let simulate ee0 steps =
+(* approximation for assertions (extra vars not treated accurately) *)
+let step_exists (ee, rr) src tgt =
+  let ps =  Term.positions src in
+  let step = Rewriting.step_at_with src in
+  let variants s t =
+    Subst.is_instance_of s t && Subst.is_instance_of t s
+  in
+  let rewrite_with rl =
+    List.filter (fun p ->
+      try
+        if variants (fst (step p rl)) tgt then (
+          (*Format.printf "  using %a\n%!" Rule.print rl;*) true)
+          else false
+     with _ -> false) ps <> []
+  in
+  List.exists rewrite_with (rr @ ee @ [r, l | l, r <- ee])
+;;
+
+let simulate_fix ee0 steps =
+  if S.do_proof_debug () then
+    Format.printf "start the fixing run with %a\n%!" (Rules.print_with "=") ee0;
   let (<:>) = Listset.add in
   let drop, mem, tp, d = Listx.remove, List.mem, T.print, S.do_proof_debug () in
-  let rec sim acc (ee_i, rr_i) steps =
+  let rec sim acc (ee_i, rr_i, i) steps =
     if d then
       print_system ee_i rr_i;
     match steps with
@@ -672,38 +704,61 @@ let simulate ee0 steps =
     | z :: steps ->
       match z with
       | OrientL e ->
-        if d then F.printf " orientl %a = %a\n%!" tp (fst e) tp (snd e);
-        assert(mem e ee_i);
-        sim (z :: acc) (drop e ee_i, e <:> rr_i) steps
+        if d then F.printf "%d. orientl %a = %a\n%!" i tp (fst e) tp (snd e);
+        if mem_var e ee_i then
+          sim (z :: acc) (drop e ee_i, e <:> rr_i, i + 1) steps
+        else (
+          let e' = R.flip e in
+          assert (mem_var e' ee_i);
+          let rr_i' = e' <:> rr_i in
+          sim (OrientR e' :: acc) (drop e' ee_i, rr_i', i + 1) steps)
       | OrientR e ->
-        let rr_i' = R.flip e <:> rr_i in
-        if d then F.printf " orientr %a = %a\n%!" tp (fst e) tp (snd e);
-        assert (mem e ee_i);
-        sim (z :: acc) (drop e ee_i, rr_i') steps
+        if d then F.printf "%d. orientr %a = %a\n%!" i tp (fst e) tp (snd e);
+        if mem_var e ee_i then
+          let rr_i' = R.flip e <:> rr_i in
+          sim (z :: acc) (drop e ee_i, rr_i', i + 1) steps
+        else (
+          let e' = R.flip e in
+          assert (mem_var e' ee_i);
+          sim (OrientL e' :: acc) (drop e' ee_i, e <:> rr_i, i + 1) steps)
       | Delete t ->
-        if d then F.printf " delete %a = %a\n%!" tp t tp t;
-        sim (z :: acc) (drop (t, t) ee_i, rr_i) steps
+        if d then F.printf "%d. delete %a = %a\n%!" i tp t tp t;
+        sim (z :: acc) (drop (t, t) ee_i, rr_i, i + 1) steps
       | Deduce (u, s, t) ->
-        if d then F.printf " deduce %a <- %a -> %a\n%!" tp s tp u tp t;
-        sim (z :: acc) ((s, t) <:> ee_i, rr_i) steps
+        if d then F.printf "%d. deduce %a <- %a -> %a\n%!" i tp s tp u tp t;
+        (*assert (step_exists (ee_i, rr_i) u s && step_exists (ee_i, rr_i) u t);*)
+        sim (z :: acc) ((s, t) <:> ee_i, rr_i, i + 1) steps
       | SimplifyL ((s,t) as st, u) ->
-        if d then F.printf " simplifyl %a = %a to %a = %a\n%!" tp s tp t tp u tp t;
-        assert (mem st ee_i);
-        sim (z :: acc) ((u, t) <:> (drop st ee_i), rr_i) steps
+        if d then
+          F.printf " %d. simplifyl %a = %a to %a = %a\n%!"i tp s tp t tp u tp t;
+        if mem_var st ee_i then
+          sim (z :: acc) ((u, t) <:> (drop st ee_i), rr_i, i + 1) steps
+        else (
+          assert (mem_var (t, s) ee_i);
+          let z' = SimplifyR ((t, s), u) in
+          sim (z' :: acc) ((t, u) <:> (drop (t, s) ee_i), rr_i, i + 1) steps
+        )
       | SimplifyR ((s, t) as st, u) ->
-        if d then F.printf " simplifyr %a = %a to %a = %a\n%!" tp s tp t tp s tp u;
-        assert (mem st ee_i);
-        sim (z :: acc) ((s, u) <:> (drop st ee_i), rr_i) steps
+        if d then F.printf "%d. simplifyr %a = %a to %a = %a\n%!" i tp s tp t tp s tp u;
+        if mem_var st ee_i then
+          sim (z :: acc) ((s, u) <:> (drop st ee_i), rr_i, i + 1) steps
+        else (
+          assert (mem_var (t, s) ee_i);
+          let z' = SimplifyL ((t, s), u) in
+          sim (z' :: acc) ((u, s) <:> (drop (t, s) ee_i), rr_i, i + 1) steps
+        )
       | Collapse ((s,t) as st,u) ->
-        if d then F.printf " collapse %a -> %a to %a = %a\n%!" tp s tp t tp u tp t;
-        assert (mem st rr_i);
-        sim (z :: acc) ((u, t) <:> ee_i, drop st rr_i) steps
+        if d then
+          F.printf "%d. collapse %a -> %a to %a = %a\n%!" i tp s tp t tp u tp t;
+        assert (mem_var st rr_i);
+        sim (z :: acc) ((u, t) <:> ee_i, drop st rr_i, i + 1) steps
       | Compose ((s, t) as st, u) ->
-        if d then F.printf " compose %a -> %a to %a -> %a\n%!" tp s tp t tp s tp u;
-        assert (mem st rr_i);
-        sim (z :: acc) (ee_i, (s, u) <:> (drop st rr_i)) steps
+        if d then
+          F.printf "%d. compose %a -> %a to %a -> %a\n%!" i tp s tp t tp s tp u;
+        assert (mem_var st rr_i);
+        sim (z :: acc) (ee_i, (s, u) <:> (drop st rr_i), i + 1) steps
   in
-  sim [] (ee0, []) steps
+  sim [] (ee0, [], 1) steps
 ;;
 
 (* Check whether equations/rules required for inferences are present.
@@ -744,7 +799,7 @@ let check ee0 steps (ee, rr) =
       let in_r = mem (s, t) rr_i in
       in_r && sim (z :: acc) (ee_i, (s, u) <:> (drop (s, t) rr_i)) steps
   in
-  let _, (ee', rr') = simulate ee0 steps in
+  let _, (ee', rr') = simulate_fix ee0 steps in
   sim [] (ee0, []) steps && Listset.equal ee ee' && Listset.equal rr rr'
 ;;
 
@@ -752,38 +807,44 @@ let check ee0 steps (ee, rr) =
 let reconstruct_run ee0 (ee, rr, ord) =
   let rew = new Rewriter.rewriter Settings.default_heuristic rr [] ord in
   rew#add ee;
+  if S.do_proof_debug () then (
+    Format.printf "The rewriter has rules:\n";
+    print_system ee rr);
   (* 0. collect derivations for computed (ee,rr) *)
-  let ee0 = [ Variant.normalize_rule e | e <- ee0 ] in
   let ancs = ancestors (ee @ rr) in
   assert ([a | a ,_ <- ancs] = Listx.unique [a | a ,_ <- ancs]);
   (* 0. create all equations needed by means of deduce and simplify  *)
-  let steps0 = creation_steps ancs in
+  let steps0 = creation_steps ancs (ee, rr, ord) in
   (* 1. simulate the run so far, this results in equations ee' and rr' *)
-  let steps1, (ee', rr') = simulate ee0 steps0 in
+  let steps1, (ee', rr') = simulate_fix ee0 steps0 in
   if S.do_proof_debug () then (
     Format.printf "after creation:\n";
     print_system ee' rr');
   (* 2. by ground completeness, additional equations are subsumed/joinable;
         so compute these derivations, results in Delete or already present
         equations *)
-  let ee'' = Listset.diff ee' (Rules.flip (ee @ rr) @ ee @ rr) in
+  let superfluous e = not (List.exists (eq_variants e) (ee @ rr)) in
+  let ee'' = List.filter superfluous ee' in
   if S.do_proof_debug () then
     Format.printf "%d superfluous: %a\n" (List.length ee'') (Rules.print_with "=") ee'';
-  let steps_ee = simplify_away_steps rew ee ee'' in
+    if S.do_proof_debug () then
+      Format.printf "%d superfluous rules: %a\n" (List.length rr') Rules.print rr';
+  let steps_ee = simplify_away_steps rew (ee, rr, ord) ee'' in
   (* 3. rules in rr need to be oriented  *)
+  (try let r = List.find (fun r -> not (List.exists (eq_variants r) (ee' @ rr'))) rr in
+    Format.printf "no variant: %a\n%!" Rule.print r
+    with _ -> ());
+  assert (List.for_all (fun r -> List.exists (eq_variants r) (ee' @ rr')) rr);
   let orient_steps = orient_steps ee' (Listset.diff rr rr') in
   (* 4. interreduce the set of all rules, computing collapse/compose steps *)
-  if S.do_proof_debug () then 
-    Format.printf "before interreduce: \nexpected:%a\nadditional:%a\n%!"
-      Rules.print rr Rules.print rr';
   let interred_steps, ee_add, rr_reduced = interreduce rew (Listset.diff rr' rr) in
   assert (Listset.subset rr_reduced rr);
   (* 5.interreduction can produce equations that should be subsumed/joinable *)
-  let ss_ee' = simplify_away_steps rew ee (Listx.unique ee_add) in
+  let ss_ee' = simplify_away_steps rew (ee, rr, ord) (Listx.unique ee_add) in
   (* combine all inference steps *)
-  let steps = steps1 @ orient_steps @ steps_ee @ interred_steps @ ss_ee' in
-  let run, res = simulate ee0 steps in
-  assert (check ee0 run res);
+  let steps = steps1 @ steps_ee @ orient_steps @ interred_steps @ ss_ee' in
+  let run, res = simulate_fix ee0 steps in
+  (*assert (check ee0 run res); *)
   if S.do_proof_debug () then (
     F.printf "initial equations: \n%a\n%!" Rules.print ee0;
     F.printf "FINAL RUN:\n%!";

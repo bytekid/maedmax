@@ -126,9 +126,10 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
           [ x, T.F(c,[]) | x <- vs ]
       in
       let lsub = Term.substitute sigma l in
-      let rsub = Term.substitute rho rsub in
+      let rsub = Term.substitute rho rsub in (
+      (*Format.printf "ordered rewrite %a -> %a using %a\n%!" Term.print lsub Term.print rsub Rule.print (l,r);*)
       if order#gt lsub rsub then (l,r), Subst.compose sigma rho, rsub
-      else raise Not_orientable
+      else raise Not_orientable)
   ;;
 
   (* FIXME: so far only for equations with same variables on both sides *)

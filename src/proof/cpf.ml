@@ -30,8 +30,7 @@ let okb_result_to_xml (ee, rr, ord) =
   X.Element("orderedCompletionResult", [], [xrs; xes; xord])
 ;;
 
-let er_input_to_xml es g =
-  let ee0 = [Variant.normalize_rule e | e <- es] in
+let er_input_to_xml ee0 g =
   let xes = X.Element("equations", [], [Rules.to_xml ee0] ) in
   let xgs = equation_to_xml g in
   let input = X.Element("equationalReasoningInput", [], [xes; xgs]) in
@@ -39,7 +38,6 @@ let er_input_to_xml es g =
 ;;
 
 let okb_input_to_xml ee0 res  =
-  let ee0 = [Variant.normalize_rule e | e <- ee0] in
   let xes = X.Element("equations", [], [Rules.to_xml ee0] ) in
   let xresult = okb_result_to_xml res in
   let input = X.Element("orderedCompletionInput", [], [xes; xresult]) in
@@ -110,6 +108,7 @@ let goal_proof ee0 g_orig ((s, t), (rs, rt), sigma) =
 
 let goal_disproof ee0 g_orig (ee, rr, ord) rst =
   let g = Variant.normalize_rule g_orig in
+  let ee = variant_free ee in
   let steps, (ee',rr') = Tc.reconstruct_run ee0 (ee, rr, ord) in
   let xokb_proof = okb_proof_to_xml steps in
   let xresult = okb_result_to_xml (ee', rr', ord) in
@@ -120,6 +119,7 @@ let goal_disproof ee0 g_orig (ee, rr, ord) rst =
 ;;
 
 let ordered_completion_proof ee0 (ee, rr, ord) =
+  let ee = variant_free ee in
   let steps, (ee',rr') = Tc.reconstruct_run ee0 (ee, rr, ord) in
   let xcproof = okb_proof_to_xml steps in
   let xproof = X.Element("proof", [], [xcproof]) in
