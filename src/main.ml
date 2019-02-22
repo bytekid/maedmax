@@ -101,7 +101,8 @@ let options =
    ("--interactive", Arg.Set Settings.interactive,
      " enter interactive mode once a complete system was found");
    ("--infeasible", Arg.Unit (fun _ -> infeasibility := true;
-       heuristic := { !heuristic with strategy = S.strategy_ordered_kbo }),
+       heuristic := { !heuristic with strategy = S.strategy_ordered_kbo };
+       settings := {!settings with auto = false}),
        " answers according to CoCo infeasibility semantics");
    ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
      " output result and stats in JSON format");
