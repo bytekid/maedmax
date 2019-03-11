@@ -144,7 +144,6 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
           else if s = t && is_equality then None
           else (
             let st' = V.normalize_rule (s,t) in
-            Format.printf "Rules %a and %a produce %a at %d\n%!" Lit.print rli Lit.print rlo (Rule.print_with "=") st' (List.length p);
             if !(Settings.do_proof) <> None then
               (if not is_equality then
                 Trc.add_overlap_goal else Trc.add_overlap) st' o;
