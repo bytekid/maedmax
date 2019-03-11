@@ -40,6 +40,8 @@ val flip : t -> t
 
 val variant : t -> t -> bool
 
+val equation_variant : t -> t -> bool
+
 val is_instance : t -> t -> bool
 
 val is_proper_instance : t -> t -> bool

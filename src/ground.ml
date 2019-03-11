@@ -244,6 +244,7 @@ let order_extensible ord (s,t) =
 let rec joinable ctx sys p =
   let p' = {p with s = nf sys.trs p.s; t = nf sys.trs p.t; } in
   if r_joinable ctx sys p || (e_instance ctx sys p) || (e_instance ctx sys p')
+    || (cong_joinable ctx sys p')
     then True
   (*else if !(Settings.do_proof) <> None then False*) (* CeTA does not support more *)
   else if sys.acsyms <> [] then ac_joinable ctx sys p
@@ -256,6 +257,13 @@ let rec joinable ctx sys p =
   if j2 = True then True else
   j1 <||> j2
   (contradictory_constraints ctx sys) <||>*)
+
+and cong_joinable ctx sys p =
+  let join p = r_joinable ctx sys p || (e_instance ctx sys p) in
+  match p.s, p.t with
+  | F (f, ss), F (g, ts) when f = g ->
+    List.for_all (fun (si, ti) -> join {p with s = si; t = ti}) (Listx.zip ss ts)
+  | _ -> false
 
 and r_joinable ctx sys p = 
   nf sys.trs p.s = (nf sys.trs p.t)

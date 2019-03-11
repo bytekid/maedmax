@@ -85,6 +85,8 @@ let variant (l1, r1) (l2, r2) =
   Subst.is_instance_of lr2 lr1
 ;;
 
+let equation_variant rl (l,r) = variant rl (l,r) || variant rl (r,l)
+
 let is_proper_instance (l1, r1) (l2, r2) =
   let (l2, r2) = rename (l2, r2) in
   let lr1 = Term.F (100, [l1; r1]) and lr2 = Term.F (100, [l2; r2]) in

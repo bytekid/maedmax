@@ -387,6 +387,20 @@ let solved_goal rewriter gs =
   NS.fold (fun g -> function None -> try_to_solve g | r -> r) gs None
 ;;
 
+let filter_eqs ee acs =
+  let is_ac e = List.exists (Rule.equation_variant e) (Theory.Ac.eqs acs) in
+  let ee' = List.sort (fun e e' -> compare (Rule.size e) (Rule.size e')) ee in
+  let rec redundant ((s, t) as e) es =
+    s = t || List.exists (Rule.equation_variant e) es ||
+    (match s, t with
+      | F (f, ss), F (g, ts) when f = g ->
+        List.for_all (fun (si, ti) -> redundant (si, ti) es) (Listx.zip ss ts)
+      | _ -> false) ||
+    (Theory.Ac.equivalent acs e && not (is_ac e))
+  in
+  List.fold_left (fun es e -> if redundant e es then es else e :: es) [] ee'
+;;
+
 let succeeds ctx (rr,ee) rewriter cc ieqs gs =
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
@@ -408,6 +422,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       else match saturated ctx (rr,ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
         | Some order -> (
+          let ee = filter_eqs ee !settings.ac_syms in
           let gs_ground = L.for_all Lit.is_ground (NS.to_list gs) in
           let ee_nonground = L.for_all (fun e -> not (Rule.is_ground e)) ee in
           let orientable (s,t) = order#gt s t || order#gt t s in
@@ -421,7 +436,8 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
             match !settings.gs with
             | [] ->
               if ee = [] && sat_allowed () then
-                Some (SAT, Completion rr)
+                if !(Settings.do_proof) = None then Some (SAT, Completion rr)
+                else Some (SAT, GroundCompletion (rr, [], order))
               else if ieqs = [] && ee_nonground && sat_allowed () then
                 Some (SAT, GroundCompletion (rr, ee, order))
               else None 

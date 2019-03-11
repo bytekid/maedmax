@@ -84,6 +84,8 @@ module Ac = struct
   ;;
 
   let is_axiom st = Commutativity.is_axiom st || is_assoc_axiom st
+
+  let axioms acs = [associativity acs; commutativity acs]
 end
 
 module Monoid = struct

@@ -349,8 +349,10 @@ let cpf_proof_string ?(readable = false) (es, gs) =
       let es = L.map Literal.terms es in
       let p = Cpf.goal_proof es goal ((s,t),(rs, rt), sigma) in
       result_string p
-  | Completion _ ->
-    failwith "Main.show_proof: not yet supported for Completion"
+  | Completion rr -> (* FIXME only check ground completion new *)
+      let es = L.map Literal.terms es in
+      let p = Cpf.ordered_completion_proof es ([], rr, Order.default) in
+      result_string p
   | GroundCompletion (rr,ee,o) -> (* no goal exists *)
       let es = L.map Literal.terms es in
       let p = Cpf.ordered_completion_proof es (ee, rr, o) in
