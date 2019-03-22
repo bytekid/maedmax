@@ -26,7 +26,7 @@ let new_line lexbuf =
 let letter = 
   ['a'-'z' 'A'-'Z' '0'-'9' '\''
    '#' '+' '-' '*' '/' '.' '\\' ':' '=' '<' '>' '_' '@' '`' '$'
-   '{' '}' '[' ']' '|' '~' '?' '&' '"' '!' '%']
+   '{' '}' '[' ']' '~' '?' '&' '"' '!' '%']
 
 rule token = parse
   | [' ' '\r' '\t'] {  token lexbuf }
@@ -38,6 +38,7 @@ rule token = parse
   | "("    { LPAREN }
   | ")"    { RPAREN }
   | ","    { COMMA }
+  | "|"    { OR }
   | letter+ as s { ident_or_keyword s }
   | _      { OTHER }
   | eof    { EOF }

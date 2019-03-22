@@ -52,9 +52,8 @@ let syntax_error msg =
 %token LPAREN RPAREN 
 %token ARROW ARROWEQ COMMA SEMICOLON EOF 
 %token VAR RULES OTHER STRATEGY THEORY
-%token AC
-%token COND_TYPE CONDITION EQUALS
-%token INNERMOST CONTEXTSENSITIVE
+%token AC INNERMOST CONTEXTSENSITIVE
+%token COND_TYPE OR CONDITION EQUALS
 
 %type <Literal.t list * Literal.t option> toplevel
 %start toplevel
@@ -103,8 +102,12 @@ rules:
   | { [] }
 
 rule:
-  | term ARROW term { ($1, $3) }
-  | error           { syntax_error "Syntax error." }
+  | term ARROW term rule_condition { ($1, $3) }
+  | error                          { syntax_error "Syntax error." }
+
+rule_condition:
+  | OR conditions {}
+  | {}
 
 conditions:
   | condition conditionsx { $1 :: $2 }
