@@ -20,6 +20,8 @@ val variables : t -> Signature.var list
 
 val functions : t -> Signature.sym list
 
+val args : t -> t list
+
 val count_variable : Signature.var -> t -> int
 
 val signature : t -> Signature.t

@@ -14,6 +14,8 @@ let name_fun : (string,int) Hashtbl.t = Hashtbl.create 32
 let var_name : (int,string) Hashtbl.t = Hashtbl.create 32
 let name_var : (string,int) Hashtbl.t = Hashtbl.create 32
 
+let ac_symbols : (int,bool) Hashtbl.t = Hashtbl.create 32
+
 let get_var_name x =
   try Hashtbl.find var_name x
   with Not_found -> "X" ^ (string_of_int x)
@@ -25,6 +27,15 @@ let get_fun_name x =
 let fresh_fun_called name =
  let i = !fun_count in
  incr fun_count;
+ Hashtbl.add fun_name i name;
+ Hashtbl.add name_fun name i;
+ i
+;;
+
+let fresh_fun _ =
+ let i = !fun_count in
+ incr fun_count;
+ let name = "x" ^ (string_of_int i) in
  Hashtbl.add fun_name i name;
  Hashtbl.add name_fun name i;
  i
@@ -61,3 +72,8 @@ let sharp_fun f =
  let n = get_fun_name f in fun_called (n ^ "#")
 ;;
 
+let add_ac_symbol f = Hashtbl.add ac_symbols f true
+
+let is_ac_symbol f = Hashtbl.mem ac_symbols f
+
+let ac_symbols _ = Hashtbl.fold (fun f _ l -> f :: l) ac_symbols [] 
