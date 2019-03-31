@@ -7,6 +7,8 @@ type t = Rule.t list
 let print ppf rs =
   fprintf ppf "@[%a@]" (print_list Rule.print "\n ") rs
 
+let to_string rs = print str_formatter rs; flush_str_formatter ()
+
 let print_with sep ppf rules =
   fprintf ppf "@[%a@]" (print_list (Rule.print_with sep)  "\n ") rules
 

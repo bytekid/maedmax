@@ -162,3 +162,5 @@ let substitute_uniform t l =
 ;;
 
 let variables l = Rule.variables l.terms
+
+let compare_size l l' = compare (size l) (size l')

@@ -81,8 +81,8 @@ let set_restart_frequency s =
 
 let options =
   Arg.align 
-  [(*("-ac", Arg.Unit (fun _ -> use_ac := true),
-    " use AC-completion");*)
+  [("-ac", Arg.Unit (fun _ -> settings := { !settings with modulo_ac = true}),
+    " use AC-completion");
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
      " print problem characteristics");
    ("--casc", Arg.Unit (fun _ ->
@@ -456,6 +456,8 @@ let run file ((es, gs) as input) =
   let ans, proof =
     if gs = [] && !settings.unfailing && not !settings.complete_if_no_goal then
       (SAT, GroundCompletion ([], [Term.V 0, Term.V 1], Order.default))
+    else if !settings.modulo_ac then
+      Ckb_AC.complete (!settings, !heuristic) (fst input)
     else
       Ckb.ckb (!settings, !heuristic) input
   in

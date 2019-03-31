@@ -127,7 +127,8 @@ type t = {
   selection: selection_mode;
   select_classify: classifier option;
   complete_if_no_goal : bool;
-  switch_to_okb : bool
+  switch_to_okb : bool;
+  modulo_ac : bool;
 }
 
 type mode = OnlySAT | OnlyUNSAT | SATorUNSAT
@@ -197,7 +198,8 @@ let default = {
   selection = MixedSelect;
   select_classify = None;
   complete_if_no_goal = true;
-  switch_to_okb = false
+  switch_to_okb = false;
+  modulo_ac = false
 }
 
 (* default settings *)

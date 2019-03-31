@@ -4,6 +4,8 @@ val print : Format.formatter -> t -> unit
 
 val print_with : string -> Format.formatter -> t -> unit
 
+val to_string : t -> string
+
 val variables : t -> Signature.var list
 
 val functions : t -> Signature.sym list
