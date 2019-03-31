@@ -454,6 +454,7 @@ let test () =
   assert_some (gx,ga);
   assert_some (faa, y);
   assert_some (gx,gfaa);
+  assert_some (T.F(f, [T.F(g, [y]); y]), fax);
   assert_none (a_, gx);
   assert_none (x, gx);
   assert_some (y, gx);

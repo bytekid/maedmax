@@ -7,3 +7,5 @@ val init : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
 
 val decode: int -> Settings.Logic.model -> Order.t
 
+val decode_print: int -> Settings.Logic.model -> unit
+

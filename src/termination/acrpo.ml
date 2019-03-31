@@ -21,7 +21,7 @@ let var_count = ref 0
 (*** FUNCTIONS ***************************************************************)
 let name = Sig.get_fun_name
 
-let prec i f = 
+let prec f i = 
   try Hashtbl.find precedence (i,f) with
   Not_found ->
     failwith ("Acrpo.prec: unknown " ^ (name f) ^ ", " ^ (string_of_int i))
@@ -40,6 +40,8 @@ let index = Listx.index
 let zip = List.map2 (fun x y -> x,y)
 
 let forall2 f xs ys = List.fold_left (fun b (x,y) -> f x y && b) true (zip xs ys)
+
+let diff xs ys = List.fold_left (fun xs y -> Listx.remove y xs) xs ys
 
 (* approximation ... not complete for ac terms *)
 let rec embac_ge s t = match (s,t) with
@@ -64,49 +66,53 @@ let rec lex ctx gt eq ts ss = match ts,ss with
 
 let mk_fresh_int_var ctx =
   var_count := !var_count + 1;
-  mk_int_var ctx (string_of_int !var_count)
+  mk_int_var ctx ("cov"^ (string_of_int !var_count))
 ;;
 
 (* multiset cover *)
 let mul_cover ctx ss ts =
  let cs = [ mk_fresh_int_var ctx | j,tj <- index ts ] in
  let m = List.length ss in
- big_and ctx [(mk_num ctx m) <>> ci | ci <- cs], cs
+ let zero = mk_num ctx 0 in
+ big_and ctx [(mk_num ctx m <>> ci) <&> (ci <>=> zero) | ci <- cs], cs
 ;;
 
 (* expresses multiset cover for arguments in ss and ts satisfying p *)
 let mul_p ctx p gt eq ss ts =
  let cover, cs = mul_cover ctx ss ts in
  let is cj i = cj <=> (mk_num ctx i) in
- let gtp si tj = gt si tj <&> p si in
+ let gtp si tj = (gt si tj <|> eq si tj) <&> p si in
  let y cj tj = big_and ctx [ (is cj i) <=>> (gtp si tj) | i,si <- index ss] in
- let tcs = index (List.map2 (fun x y -> x,y) ts cs) in
+ let tcs = index (Listx.zip ts cs) in
  big_and ctx (cover :: [p tj <=>> y cj tj | j, (tj, cj) <- tcs])
 ;;
 
-(* expresses multiset cover for all args in ss and ts *)
-let mul ctx gt eq ss ts = mul_p ctx (fun _ -> mk_true ctx) gt eq ss ts
- (*let cover, cs = mul_cover ctx ss ts in
- let is cj i = mk_eq ctx cj (mk_num ctx i) in
- let y cj tj = big_and ctx [mk_imp ctx (is cj i) (gt si tj) | i,si <- index ss] in
- let tcs = index (List.map2 (fun x y -> x,y) ts cs) in
- big_and ctx (cover :: [y cj tj | j,(tj,cj) <- tcs])*)
-;;
-
-let mul_gt ctx gt eq ss ts =
- let ss,ts = Listset.diff ss ts, Listset.diff ts ss in
- if ss = [] then mk_false ctx else mul ctx gt eq ss ts
-;;
-
 let mul_ge_p ctx p gt eq ss ts =
- let ss,ts = Listset.diff ss ts, Listset.diff ts ss in
+ let ss,ts = diff ss ts, diff ts ss in
  mul_p ctx p gt eq ss ts
 ;;
 
+let str = List.fold_left (fun s t -> s ^ ", " ^ (Term.to_string t)) ""
+
 let mul_gt_p ctx p gt eq ss ts =
- let strict = big_or ctx [ p si | si <- Listset.diff ss ts] in
- mul_ge_p ctx p gt eq ss ts <&> strict
+  let ss, ts = diff ss ts, diff ts ss in
+  match ss, ts with
+  | [], _ ->  mk_false ctx
+  | [s], [t] -> gt s t
+  | _ ->
+    let cover, cs = mul_cover ctx ss ts in
+    let is cj i = cj <=> (mk_num ctx i) in
+    let gep si tj = (gt si tj <|> eq si tj) <&> p si in
+    let gtp si tj = gt si tj <&> p si in
+    let yge cj tj = big_and ctx [ (is cj i) <=>> (gep si tj) | i,si <- index ss] in
+    let ygt cj tj = big_and ctx [ (is cj i) <=>> (gtp si tj) | i,si <- index ss] in
+    let tcs = index (Listx.zip ts cs) in
+    let ge = [p tj <=>> yge cj tj | j, (tj, cj) <- tcs] in
+    let strict = big_or ctx [p tj <&> ygt cj tj | j, (tj, cj) <- tcs] in
+    big_and ctx (cover :: strict :: ge)
 ;;
+
+let mul_gt ctx gt eq ss ts = mul_gt_p ctx (fun _ -> mk_true ctx) gt eq ss ts
 
 (* emb_small candidates *)
 let emb_sm f ts =
@@ -114,7 +120,7 @@ let emb_sm f ts =
  let rec emb hd =  function
   | [] -> []
   | ((V _) as t)::ts -> emb (hd @ [t]) ts
-  | (F(h, hs) as t)::ts when f = h -> emb (hd @ [t]) ts
+  | (F(h, hs) as t)::ts when f = h -> failwith ("emb_sm: not flat?!") (*emb (hd @ [t]) ts*)
   | (F(h, hs) as t)::ts -> [hd @ (tf hi) @ ts,h | hi <- hs ] @ (emb (hd@[t]) ts)
  in [F(f, ts), h | ts, h <- emb [] ts ]
 ;;
@@ -133,13 +139,14 @@ let size_ge = size_cmp (>=)
 
 let is_ac f = List.mem f (Signature.ac_symbols ())
 
+let flatten t = flatten (Signature.ac_symbols ()) t
+
 let acrpo_gt (ctx,i) s t =
   let prec f g = (prec f i) <>> (prec g i) in
   let is_mul f a = if a < 2 then mk_false ctx else status_is_mul i f in 
   let is_lex f a = if a < 2 then mk_true ctx else !! (status_is_mul i f) in
-  let ac = Signature.ac_symbols () in
   let rec yrpo_gt s t =
-    let (s,t) = (flatten ac s, flatten ac t) in
+    let (s,t) = (flatten s, flatten t) in
     if embac_ge t s || not (Rule.variable_condition (s,t)) then mk_false ctx
     else if embac_gt s t then mk_true ctx
     else
@@ -160,17 +167,19 @@ let acrpo_gt (ctx,i) s t =
           let four = big_and ctx [is_mul f a; mul_gt ctx yrpo_gt yrpo_eq ss ts] in(* (4) *)
           one <|> three <|> four
         else 
-         (try
+         (
           let cover h s' = prec f h <&> yrpo_ge s' t in
-          let five = big_or ctx [ cover h (flatten ac s') | s',h <- emb_sm f ss ] in (* (5) *)
+          let five = big_or ctx [ cover h (flatten s') | s',h <- emb_sm f ss ] in (* (5) *)
           let embs = [ prec f h <=>> yrpo_gt s t' | t',h <- emb_sm f ts ] in
-          let six' = big_and ctx ((no_small_head f ss ts)::embs) in            (* (6) *)
+          try
+          let six1 = big_and ctx ((no_small_head f ss ts) :: embs) in            (* (6) *)
+          let six2 = big_head_eq f ss ts in
           let case = 
             if size_gt ss ts then mk_true ctx                                  (* (6b) *)
             else if not (size_ge ss ts) then big_head f ss ts                  (* (6a) *)
             else big_or ctx [big_head f ss ts; mul_gt ctx yrpo_gt yrpo_eq ss ts](* (6c) *)
           in
-          five <|> (six' <&> case) 
+          five <|> (six1 <&> six2 <&> case) 
           with _ -> failwith "Acrpo: here")
 
 and no_small_head f ss ts =
@@ -183,9 +192,16 @@ and big_head f ss ts =
     let p = function V _ -> mk_false ctx | F (h,_) -> prec h f in
     mul_gt_p ctx p yrpo_gt yrpo_eq ss ts
 
-and yrpo_ge s t = if s = t then mk_true ctx else yrpo_gt s t
+and big_head_eq f ss ts =
+  if ss = ts then mk_true ctx 
+  else if ss = [] then mk_false ctx
+  else
+    let p = function V _ -> mk_false ctx | F (h,_) -> prec h f in
+    mul_ge_p ctx p yrpo_gt yrpo_eq ss ts
+
+and yrpo_ge s t = if flatten s = flatten t then mk_true ctx else yrpo_gt s t
  
-and yrpo_eq s t = if s = t then mk_true ctx else mk_false ctx 
+and yrpo_eq s t = if flatten s = flatten t then mk_true ctx else mk_false ctx 
   (* ok if all terms sorted + flat *)
   in
   yrpo_gt s t
@@ -208,12 +224,12 @@ let init (ctx,k) fs =
     if List.length fs > 400 then mk_true ctx
     else
       let ps = [ f,g | f,_ <- fs; g,_ <- fs; f <> g ] in
-      let p = prec k in
+      let p f = prec f k in
       big_and ctx [ p f <!=> p g | f, g <- ps ]
   in
   let num_0 = mk_zero ctx in
   let num_n = mk_num ctx (L.length fs) in
-  let bounds f = let p = prec k f in (p <>=> num_0) <&> (num_n <>=> p) in
+  let bounds f = let p = prec f k in (p <>=> num_0) <&> (num_n <>=> p) in
   let total = big_and1 (total_prec :: [ bounds f | f,_ <- fs ]) in
   let ac = big_and ctx [ status_is_mul k f | f,_ <- fs; is_ac f ] in
   ac <&> total
@@ -267,7 +283,7 @@ let decode_prec_aux k m =
  ;;
 
  let encode i preclist ctx =
-  let add ((f,_), p) = (prec i f <=> (Logic.mk_num ctx p)) in
+  let add ((f,_), p) = (prec f i <=> (Logic.mk_num ctx p)) in
   Logic.big_and ctx (List.map add preclist)
  ;;
 

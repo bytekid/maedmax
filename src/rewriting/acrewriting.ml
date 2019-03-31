@@ -19,10 +19,22 @@ type overlap = {
 (*** GLOBALS *****************************************************************)
 let match_cache : (T.t * T.t, Sub.t list) H.t = H.create 256
 let unify_cache : (T.t * T.t, Sub.t list) H.t = H.create 256
+let cp_cache : (R.t * T.pos * R.t, overlap list) H.t = H.create 256
 let reducts_cache : (T.t, T.t list) H.t = H.create 256
+let reducible_cache : (T.t * Rule.t, bool) H.t = H.create 256
 
 (*** FUNCTIONS ***************************************************************)
-let overlap_make i p o s = {
+let pos_string = function
+  | [] -> "e"
+  | i :: p ->
+    let si = string_of_int in
+    List.fold_left (fun s i -> s ^ "." ^ (si i)) (si i) p
+;;
+
+let mk_overlap i p o s =
+  (*Format.printf "  make overlap <%a, %s, %a>\n%!"
+    Rule.print i (pos_string p) Rule.print o;*)
+  {
   inner = i; 
   pos = p; 
   outer = o;
@@ -252,11 +264,25 @@ let find_normalform ?(n = ~-1) term trs =
   | Some u -> u
 ;;
 
+let is_reducible_rule term rl =
+  let compute (term, (l,r)) =
+    List.exists (fun (_,u) -> match_term u l <> []) (ac_funs_pos term)
+  in
+  cache reducible_cache (term, rl) compute
+;;
+
  (* check whether <inner, p, outer> allows for an AC overlap, where p is a
 position in the lhs of outer *)
 let overlaps_of inner p outer =
-  let s = T.subterm_at p (fst outer) in
-  [overlap_make inner p outer sigma | sigma <- unify s (fst inner)]
+  let compute (inner, p, outer) =
+    let m = List.fold_left max 0 (Rule.variables inner) in
+    let outer = Rule.rename_canonical ~from:(m+1) outer in
+    let s = T.subterm_at p (fst outer) in
+    (*Format.printf "test overlap <%a, %s, %a>? %d\n%!"
+      Rule.print inner (pos_string p) Rule.print outer
+      (List.length (unify s (fst inner)));*)
+    [mk_overlap inner p outer sigma | sigma <- unify s (fst inner)]
+  in cache cp_cache (inner, p, outer) compute
 ;;
     
 let has_linear_var_as_flat_arg (l, r) =
@@ -300,8 +326,7 @@ let overlaps trs =
   let rxs = [ rlx, xpos (fst rlx) | rl <- trs; rlx <- extend rl ] in
   let ros = [ rl, ac_funs_pos (fst rl) | rl <- trs ] in
   let roxs = [r, ps | (_,r),ps <- ros @ rxs] in
-  let rtrs = [ Rule.rename rl | rl <- trs ] in
-  let os = [ overlaps_of ri p (u, r) | ri <- rtrs; r, ps <- roxs; p,u <- ps] in
+  let os = [ overlaps_of ri p (u, r) | ri <- trs; r, ps <- roxs; p,u <- ps] in
   Lx.unique (L.concat os)
 (*
 M.map (fun r -> fpos r >>= fun p -> return (r,p)) ro >>= fun rop ->
@@ -348,6 +373,7 @@ let is_wcr ?(n = ~-1) trs =
 ;;
 
 let test () =
+  Aclogic.test ();
   let x = Sig.var_called "x" in
   let y = Sig.var_called "y" in
   let z = Sig.var_called "z" in
@@ -382,6 +408,7 @@ let test () =
   let ga = T.F(g, [a_]) in
   let gu = T.F(g, [u]) in
   let gx = T.F(g, [x]) in
+  let gzero = T.F(g, [zero]) in
   let faaa = T.F(f, [a_;faa]) in
   let gfaa = T.F(g, [faa]) in
   let faaaa = T.F(f, [faa;faa]) in
@@ -486,6 +513,7 @@ let test () =
   let rl8 = mk_rule (T.F(f, [x;a_])) (T.F(m, [x;a_])) in
   let fce, fbd = T.F(f, [c_;e_]), T.F(f, [b_;d_]) in
   check_cps ([rl3; rl4]) [fce,fbd; fbd, fce];
+  check_cps ([g0; g1]) [zero, gzero];
   let check_wcr trs res = (
     let trss = Rules.to_string trs in
     let b = is_wcr trs in
