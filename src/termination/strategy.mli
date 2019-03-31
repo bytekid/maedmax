@@ -26,6 +26,7 @@ val strategy_ordered_lpokbo : t
 val strategy_ordered_sat : t
 val strategy_aql : t
 val strategy_order_generation : t
+val strategy_ac : t
 
 val get_termination : t -> Settings.t_term
 val term_to_string : Settings.t_term -> string

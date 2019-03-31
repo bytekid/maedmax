@@ -11,6 +11,7 @@ type order =
   | Cfs
   | Cfsn
   | MPol
+  | ACRPO
 
 (* Constructors connecting different reduction orders *)
 type orders = Choice of (order * order) | Seq of order list

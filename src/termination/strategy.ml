@@ -19,6 +19,7 @@ let ts_cfsn = Orders (Seq [Cfsn])
 let ts_kbo = Settings.ts_kbo
 let ts_lpokbo = Orders (Choice (LPO, KBO))
 let ts_mpol = Orders (Seq [MPol])
+let ts_ac = Orders (Seq [ACRPO])
 
 (* overall strategies *)
 let max = IterationLimit 10000
@@ -54,6 +55,7 @@ let strategy_aql = [(*ts_lpo, [RedSize],[Oriented; CPsRed], max, Size;*)
                     ts_cfsn, [RedSize],[Oriented; CPsRed], max, Size;
                     ts_cfsn, [],[Oriented; CPsRed], max, Size]
 let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max, Size]
+let strategy_ac = [ts_ac, [],[Oriented], max, Size]
 
 let strategy_order_generation =
   [ (ts_lpokbo, [], [MaxRed], IterationLimit 5, Size); ]
@@ -73,7 +75,7 @@ let strategy_auto2 = [
 (*** FUNCTIONS ****************************************************************)
 let term_to_string = 
   let ostr = function
-    LPO -> "LPO" | KBO -> "KBO" | Matrix -> "matrix" |
+    LPO -> "LPO" | KBO -> "KBO" | Matrix -> "matrix" | ACRPO -> "AC-RPO" |
     Cfs -> "cfs" | Cfsn -> "cfsn" | MPol -> "mpol"
   in
   let osstr = function
@@ -209,6 +211,7 @@ let init s j ctx rs =
     | Cfs -> Cfs.init (ctx,i) fs
     | Cfsn -> Cfsn.init (ctx,i) fs
     | MPol -> MPol.init (ctx,i) fs
+    | ACRPO -> Acrpo.init (ctx,i) fs
     | _ -> failwith "Strategy.init_ord: not implemented"
   in
   let fs' = Dp.sharp_signature fs in
@@ -247,6 +250,7 @@ let gt i (l,r) = function
   | Cfs -> Cfs.gt (ctx, i) l r
   | Cfsn -> Cfsn.gt (ctx, i) l r
   | MPol -> MPol.gt (ctx, i) l r
+  | ACRPO -> Acrpo.gt (ctx, i) l r
   | _ -> failwith "orient: not implemented"
 in
 let ge i (l,r) = function
@@ -255,6 +259,7 @@ let ge i (l,r) = function
   | Cfs -> Cfs.ge (ctx, i) l r
   | Cfsn -> Cfsn.ge (ctx, i) l r
   | MPol -> MPol.ge (ctx, i) l r
+  | ACRPO -> Acrpo.ge (ctx, i) l r
   | _ -> failwith "orient: not implemented"
 in
 let constr ((l,r) as lr) =

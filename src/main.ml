@@ -81,7 +81,9 @@ let set_restart_frequency s =
 
 let options =
   Arg.align 
-  [("-ac", Arg.Unit (fun _ -> settings := { !settings with modulo_ac = true}),
+  [("-ac", Arg.Unit (fun _ ->
+      settings := { !settings with modulo_ac = true};
+      heuristic := { !heuristic with strategy = S.strategy_ac }),
     " use AC-completion");
    ("--analyze", Arg.Unit (fun _ -> analyze := true),
      " print problem characteristics");

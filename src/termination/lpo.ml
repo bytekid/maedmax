@@ -60,8 +60,9 @@ let emb_gt s t = s <> t && emb_geq s t
 (* lpo for yices *)
 
 let prec i f = 
- try Hashtbl.find precedence (i,f) with
- Not_found -> failwith ("Lpo.prec: unknown symbol " ^ (name f) ^ ", " ^ (string_of_int i))
+  try Hashtbl.find precedence (i,f) with
+  Not_found ->
+    failwith ("Lpo.prec: unknown symbol " ^ (name f) ^ ", " ^ (string_of_int i))
 ;;
 
 let gt (ctx,i) s t =
