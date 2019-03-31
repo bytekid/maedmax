@@ -24,7 +24,6 @@ let use_ac = ref false
 let analyze = ref false
 let only_termination = ref false
 let only_gcr = ref false
-let infeasibility = ref false
 let timeout = ref None
 
 let strategy = ref []
@@ -100,9 +99,9 @@ let options =
        " check ground confluence");
    ("--interactive", Arg.Set Settings.interactive,
      " enter interactive mode once a complete system was found");
-   ("--infeasible", Arg.Unit (fun _ -> infeasibility := true;
+   ("--infeasible", Arg.Unit ( fun _ ->
        heuristic := { !heuristic with strategy = S.strategy_ordered_kbo };
-       settings := {!settings with auto = false}),
+       settings := {!settings with auto = false; infeasible = true}),
        " answers according to CoCo infeasibility semantics");
    ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
      " output result and stats in JSON format");
@@ -250,7 +249,7 @@ let call () =
 
 let success_code = function UNSAT -> "Unsatisfiable" | SAT -> "Satisfiable"
 
-let success_code_inf = function UNSAT -> "NO" | SAT -> "YES"
+let success_code_inf = function UNSAT -> "MAYBE" | SAT -> "YES"
 
 let json_settings settings s =
  let s = "strategy", `String s in
@@ -290,7 +289,7 @@ let print_json_term yes f =
 ;;
 
 let print_res answer res =
-  if !infeasibility then
+  if !settings.infeasible then
     printf "%s\n%!" (success_code_inf answer)
   else (
     printf "%s SZS status " "%";
@@ -469,7 +468,7 @@ let run file ((es, gs) as input) =
   else (
     match !(Settings.do_proof) with
     | Some fmt when not !Settings.benchmark ->
-      if !infeasibility then print_res ans (clean es proof);
+      if !settings.infeasible then print_res ans (clean es proof);
       show_proof file input proof fmt
     | None -> (
       print_res ans (clean es proof);

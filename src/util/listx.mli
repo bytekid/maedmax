@@ -2,7 +2,7 @@ val init : int -> (int -> 'a) -> 'a list
 
 val ix : ?i:int -> 'a list -> (int * 'a) list
 
-val unique : 'a list -> 'a list
+val unique : ?c:('a -> 'a -> int) -> 'a list -> 'a list
 
 val copy : int -> 'a -> 'a list
 

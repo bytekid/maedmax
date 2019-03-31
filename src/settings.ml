@@ -115,6 +115,7 @@ type t = {
   signature : (Signature.sym * int) list;
   debug : int; (* debug level *)
   axioms : literal list;
+  infeasible : bool;
   instgen : bool;
   json : bool; (* output json result and statistics *)
   gs : Rules.t; (* initial goals *)
@@ -184,6 +185,7 @@ let default = {
   signature = [];
   debug = 0;
   axioms = [];
+  infeasible = false;
   instgen = false;
   json = false;
   gs = [];

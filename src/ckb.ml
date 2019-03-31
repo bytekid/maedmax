@@ -1029,7 +1029,8 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   let axs_eqs = [ Lit.terms a | a <- axs ] in
   let acs = Ac.symbols axs_eqs in
   let cs = Commutativity.symbols axs_eqs in
-  let is_large = L.length axs_eqs >= 90 in
+  let is_large = L.length axs_eqs >= 90 &&
+    L.length (L.filter Rule.is_ground axs_eqs) > 45 (* AQL systems *) in
   let s =
     { !settings with
       ac_syms = acs;
@@ -1073,6 +1074,23 @@ let remember_state es gs =
  if h = !hash_initial then
    set_heuristic {!heuristic with n = Pervasives.max (!heuristic.n + 1) 15};
  hash_initial := h
+;;
+
+let pre_check (es, gs) =
+  let fs = List.map fst (Rules.signature (List.map Lit.terms es)) in
+  let rec disj_funs = function
+  | []
+  | (Term.V _, _) :: _
+  | (_, Term.V _) :: _ -> false
+  | (Term.F(f, ss), Term.F(g, ts)) :: gs ->
+    if f = g && Signature.get_fun_name f = "_goal" then
+      disj_funs (Listx.zip ss ts)
+    else
+      if not (List.mem f fs) && not (List.mem g fs) && f <> g then true
+      else disj_funs gs
+  in
+  let disj_funs = match gs with g :: gs -> disj_funs [Lit.terms g] | _ -> false in
+  disj_funs
 ;;
 
 let ckb ((settings_flags, heuristic_flags) as flags) input =
@@ -1136,6 +1154,21 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       ckb (es' @ es, gs))
   in
   ckb input
+;;
+
+let ckb ((settings_flags, heuristic_flags) as flags) ((es,gs) as input) =
+  let fs = Rules.signature (List.map Lit.terms es) in
+  if pre_check input && settings_flags.infeasible then (
+    (*Format.printf "suspicious %d\n%!" (List.length [f | f,a <- fs; a = 1]);*)
+    try
+      let u = List.hd [f | f,a <- fs; a = 1] in
+      let es' = Lit.make_axiom (T.F(u, [T.V 0]), T.F(1001, [])) :: es in
+      match ckb flags (es', gs) with
+      | (UNSAT, _) -> ckb flags input
+      | (SAT, r) -> (SAT,r)
+    with _ -> ckb flags input
+  ) else
+    ckb flags input
 ;;
 
 let ckb_for_instgen ctx flags lits =

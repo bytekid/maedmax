@@ -7,9 +7,9 @@ let rec ix ?(i = 0) = function
   | [] -> []
   | x :: xs -> (i, x) :: ix ~i:(i + 1) xs
 
-let rec unique = function
+let rec unique ?(c = compare) = function
   | [] -> []
-  | x :: xs -> x :: unique (List.filter (fun y -> x <> y) xs)
+  | x :: xs -> x :: unique (~c:c) (List.filter (fun y -> c x y <> 0) xs)
 
 let rec copy n x =
   if n > 0 then x :: copy (n - 1) x else []
