@@ -130,6 +130,7 @@ type t = {
   complete_if_no_goal : bool;
   switch_to_okb : bool;
   modulo_ac : bool;
+  norm : literal list
 }
 
 type mode = OnlySAT | OnlyUNSAT | SATorUNSAT
@@ -200,7 +201,8 @@ let default = {
   select_classify = None;
   complete_if_no_goal = true;
   switch_to_okb = false;
-  modulo_ac = false
+  modulo_ac = false;
+  norm = []
 }
 
 (* default settings *)

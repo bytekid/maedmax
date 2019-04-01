@@ -55,7 +55,7 @@ let strategy_aql = [(*ts_lpo, [RedSize],[Oriented; CPsRed], max, Size;*)
                     ts_cfsn, [RedSize],[Oriented; CPsRed], max, Size;
                     ts_cfsn, [],[Oriented; CPsRed], max, Size]
 let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max, Size]
-let strategy_ac = [ts_ac, [],[Oriented], max, Size]
+let strategy_ac = [ts_ac, [],[MaxRed], max, Size]
 
 let strategy_order_generation =
   [ (ts_lpokbo, [], [MaxRed], IterationLimit 5, Size); ]
@@ -281,6 +281,7 @@ let order_choice_constraints ctx j rs (o1, o2) =
     | Cfs -> Cfs.gt (ctx, i) l r
     | Cfsn -> Cfsn.gt (ctx, i) l r
     | MPol -> MPol.gt (ctx, i) l r
+    | ACRPO -> Acrpo.gt (ctx, i) l r
     | _ -> failwith "orient: not implemented"
   in
   let constr lr =
@@ -494,6 +495,7 @@ let dec_ord ?(af=false) (i,o) =
   | Cfs -> Cfs.decode_print i m
   | Cfsn -> Cfsn.decode_print i m
   | MPol -> MPol.decode_print i m
+  | ACRPO -> Acrpo.decode_print i m
   | _ -> failwith "Strategy.decode_print: order not implemented"
 in
 Format.printf "Problem:\n"; Cache.decode_print m 0;
@@ -532,6 +534,7 @@ let dec_ord ?(af=false) i = function
   | KBO -> Kbo.decode i m
   | Cfs -> Cfs.decode i m
   | Cfsn -> Cfsn.decode i m
+  | ACRPO -> Acrpo.decode i m
   | _ -> failwith "Strategy.decode: order not implemented"
 in
 match s with

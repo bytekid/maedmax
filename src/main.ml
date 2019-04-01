@@ -48,6 +48,12 @@ let do_unordered _ =
   heuristic := { !heuristic with k = (fun _ -> 2); strategy = S.strategy_auto }
 ;;
 
+let set_normalized th =
+  match Read.file th with
+  | Unit (es, [])-> settings := { !settings with norm = es }
+  | _ -> failwith "Main.set_normalized: theory not found"
+;;
+
 let track_proof file =
   match Read.file file with
   | Unit (es,gs) -> Settings.track_equations := es @ gs;
@@ -162,6 +168,8 @@ let options =
       else if s = "unsat" then heuristic := { !heuristic with mode = OnlyUNSAT }
       else failwith "unsupported mode type"),
     "<m> exclusive proof mode (sat, unsat)");
+   ("--norm", Arg.String (fun t -> set_normalized t),
+      "<theory> normalized completion with respect to <theory>");
    ("-P", Arg.String (fun s ->
       if s = "cpf" then Settings.do_proof := Some CPF
       else if s = "tstp" then Settings.do_proof := Some TPTP

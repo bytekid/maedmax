@@ -37,6 +37,7 @@ let convert_rules (xs, rs, th, cs) =
       let ss, ts = List.map fst cs, List.map snd cs in
       Some (convert_goal xs (FF(f, ss), FF(f, ts)))
   in
+  List.iter (fun f -> Signature.add_ac_symbol (Signature.fun_called f)) th;
   rules, c
 ;;
 

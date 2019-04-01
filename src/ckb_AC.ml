@@ -119,7 +119,8 @@ let reduced rr aa =
 let overlaps s rr =
   let cps = [(s,t) | s,t <- ACR.cps rr; not (ACR.ac_equivalent s t)] in
   let cps = [Lit.make_axiom (normalize (s,t)) | s,t <- cps] in
-  Format.printf "CPs:\n%a\n" NS.print (NS.of_list cps);
+  if debug s 2 then
+    Format.printf "CPs:\n%a\n" NS.print (NS.of_list cps);
   cps
 ;;
 
@@ -131,7 +132,7 @@ let filter_small s cps =
 let succeeds s rr aa b =
   let wcr = ACR.is_wcr rr in
   let e0 = s.settings.axioms in
-  if wcr then Format.printf "WCR\n%!";
+  if debug s 2 && wcr then Format.printf "WCR\n%!";
   wcr && b &&
   L.for_all (fun l -> let s,t = Lit.terms l in ACR.are_joinable rr s t) e0
 ;;
@@ -149,12 +150,15 @@ let rlred state st ccsym_vs =
   let enc s l = try Subst.enc s l with _ -> false in
   let reducible rl s = ACR.is_reducible_rule s rl || enc s (fst rl) in (* FIXME *)
   let reduces rl (s, t) = reducible rl s || reducible rl t in
-  Format.printf "rule %a is reducible by %a\n%!" Rule.print st Rules.print [ rl | rl,v <- ccsym_vs; reduces rl st];
+  if debug state 2 then
+    Format.printf "rule %a is reducible by %a\n%!"
+      Rule.print st Rules.print [ rl | rl,v <- ccsym_vs; reduces rl st];
   Logic.big_or state.context [ v | rl,v <- ccsym_vs; reduces rl st]
 ;;
 
 let c_max_red s ccl ccsym_vs =
-  let not_inc (l,r) = not (Term.is_subterm l r) && not (Term.is_embedded l r) in
+  let emb l r = try Term.is_embedded l r with _ -> false in
+  let not_inc (l,r) = not (Term.is_subterm l r) && not (emb l r) in
   let ccsym_vs = [rl,v | rl,v <- ccsym_vs; Rule.is_rule rl && not_inc rl] in
   L.iter (fun rl -> Logic.assert_weighted (rlred s rl ccsym_vs) 2) ccl
 ;;
@@ -231,18 +235,10 @@ let rec phi s =
     let cps = overlaps s rr in
     let cps, cps_large = filter_small s cps in
     let cps = reduced rr cps in
-    Format.printf "%d reduced CPs:\n%a" (NS.size cps) NS.print cps;
+    if debug s 2 then
+      Format.printf "%d reduced CPs:\n%a" (NS.size cps) NS.print cps;
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select s aa nn in
-    (*let rec reduce acc = function
-      | [] -> acc
-      | (l,r) :: rr ->
-        if ACR.are_joinable (rr @ acc) l r then
-          reduce acc rr
-        else
-          reduce ((l,r) :: acc) rr
-    in
-    let rr' = reduce [] rr in*)
     if succeeds s rr aa (NS.is_empty cps) then
       raise (Success rr)
     else

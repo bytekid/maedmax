@@ -37,9 +37,10 @@ let pair_map f (s,t) = (f s, f t)
 
 let index = Listx.index
 
-let zip = List.map2 (fun x y -> x,y)
-
-let forall2 f xs ys = List.fold_left (fun b (x,y) -> f x y && b) true (zip xs ys)
+let forall2 f xs ys =
+  assert (List.length xs = List.length ys);
+  List.fold_left (fun b (x,y) -> f x y && b) true (Listx.zip xs ys)
+;;
 
 let diff xs ys = List.fold_left (fun xs y -> Listx.remove y xs) xs ys
 
