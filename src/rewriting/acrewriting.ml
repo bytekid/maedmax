@@ -344,18 +344,22 @@ M.flat_map of_rls rpairs >>=
 (return @.@ L.unique_hash)*)
 ;;
 
+let overlaps2' trsi trso =
+  let rxs = [ rlx, xpos (fst rlx) | rl <- trso; rlx <- extend rl ] in
+  let ros = [ rl, ac_funs_pos (fst rl) | rl <- trso ] in
+  let roxs = [r, ps | (_,r),ps <- ros @ rxs] in
+  let os = [ overlaps_of ri p (u, r) | ri <- trsi; r, ps <- roxs; p,u <- ps] in
+  Lx.unique (L.concat os)
+;;
+
+let overlaps2 trs1 trs2 = overlaps2' trs1 trs2 @ (overlaps2' trs2 trs1)
+
 (* make AC critical peak from AC overlap *)
 let cpeak_from_overlap o =
   let sub = T.substitute o.sub in
   let u = sub (T.replace (fst o.outer) (snd o.inner) o.pos) in
   let w = sub (snd o.outer) in
   let v = sub (fst o.outer) in
-(*
-  let c = C.of_term o.pos (R.lhs o.outer) in
-  let sub = Sub.apply_term o.sub in
-  let u = C.apply (sub (R.rhs o.inner)) (Sub.apply_context o.sub c) in
-  let w = sub (R.rhs o.outer) in
-  let v = sub (R.lhs o.outer) in*)
   (u,v,w)
 ;;
 
@@ -365,6 +369,8 @@ let cp_from_overlap o =
 ;;
 
 let cps trs = [cp_from_overlap o | o <- overlaps trs]
+
+let cps2 trs1 trs2 = [cp_from_overlap o | o <- overlaps2 trs1 trs2]
 
 let is_wcr ?(n = ~-1) trs =
   let cps = cps trs in

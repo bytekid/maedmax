@@ -308,6 +308,7 @@ let overlaps s rr aa =
   let ns =
     if not !settings.unfailing then rr
     else
+      let rr = Listset.diff rr !settings.norm in (* normalized *)
       let acs, cs = !settings.ac_syms, !settings.only_c_syms in
       let aa' = Listset.diff aa !acx_rules in
       let aa' = if prune_AC then NS.ac_equivalence_free acs aa' else aa' in
@@ -318,9 +319,10 @@ let overlaps s rr aa =
       rr' @ aa'
   in
   (* only proper overlaps with rules*)
-  let ovl = new Overlapper.overlapper !heuristic ns (L.map Lit.terms rr) in
+  let ns' = !settings.norm @ ns in (* normalized rules only on one side of CP *)
+  let ovl = new Overlapper.overlapper !heuristic ns' (L.map Lit.terms rr) in
   ovl#init ();
-  let cpl = [cp | n <- ns; cp <- ovl#cps n] in
+  let cpl = [cp | n <- ns'; cp <- ovl#cps n] in
   let cps = NS.of_list cpl in
   cps, ovl
 ;;
@@ -393,7 +395,7 @@ let filter_eqs ee acs =
   let rec redundant ((s, t) as e) es =
     s = t || List.exists (Rule.equation_variant e) es ||
     (match s, t with
-      | F (f, ss), F (g, ts) when f = g ->
+      | T.F (f, ss), T.F (g, ts) when f = g ->
         List.for_all (fun (si, ti) -> redundant (si, ti) es) (Listx.zip ss ts)
       | _ -> false) ||
     (Theory.Ac.equivalent acs e && not (is_ac e))
@@ -1093,6 +1095,14 @@ let pre_check (es, gs) =
   disj_funs
 ;;
 
+let preorient s es =
+  let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
+  let es' = [ if d then e else R.flip e | e,d <- es ] in
+  let oriented = [ C.rule_var s.context r | r <- es' ] in
+  let keep = Logic.big_and s.context oriented in
+  Logic.require keep
+;;
+
 let ckb ((settings_flags, heuristic_flags) as flags) input =
   set_settings settings_flags;
   set_heuristic heuristic_flags;
@@ -1120,17 +1130,15 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
       let ctx = Logic.mk_context () in
       let ss = Listx.unique (t_strategies ()) in
-      L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- gs0 @ es0 ]) ss;
-      if !settings.keep_orientation then (
-        let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
-        let es' = [ if d then e else R.flip e | e,d <- es ] in
-        let oriented = [ !!(C.rule_var ctx (R.flip r)) | r <- es' ] in
-        let keep = Logic.big_and ctx oriented in
-        Logic.require keep;
-        L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
-      );
+      let all_lits = !settings.norm @ gs0 @ es0 in
+      L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- all_lits ]) ss;
+      let state = make_state ctx (!settings.norm @ es0) (NS.of_list gs0) in
+      if !settings.keep_orientation then
+        preorient state es;
+      if !settings.norm <> [] then
+        preorient state !settings.norm;
       let start = Unix.gettimeofday () in
-      let res = phi (make_state ctx es0 (NS.of_list gs0)) in
+      let res = phi state in
       A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. start);
       Logic.del_context ctx;
       res

@@ -156,10 +156,10 @@ let acrpo_gt (ctx,i) s t =
       | F _, V x -> if List.mem x (variables s) then mk_true ctx else mk_false ctx
       | F (f,ss), F (g,ts) when f <> g ->
         let one = big_or ctx [yrpo_ge si t | si <- ss] in              (* (1) *)
-        (try 
+        (
           let two = big_and ctx ((prec f g) :: [yrpo_gt s tj | tj <- ts]) in (*(2) *)
           one <|> two
-        with _ -> failwith "f <> g")
+        )
       | F (f,ss), F (_,ts)  ->
         if not (is_ac f) then
           let a = List.length ss in
@@ -172,7 +172,7 @@ let acrpo_gt (ctx,i) s t =
           let cover h s' = prec f h <&> yrpo_ge s' t in
           let five = big_or ctx [ cover h (flatten s') | s',h <- emb_sm f ss ] in (* (5) *)
           let embs = [ prec f h <=>> yrpo_gt s t' | t',h <- emb_sm f ts ] in
-          try
+          
           let six1 = big_and ctx ((no_small_head f ss ts) :: embs) in            (* (6) *)
           let six2 = big_head_eq f ss ts in
           let case = 
@@ -181,7 +181,7 @@ let acrpo_gt (ctx,i) s t =
             else big_or ctx [big_head f ss ts; mul_gt ctx yrpo_gt yrpo_eq ss ts](* (6c) *)
           in
           five <|> (six1 <&> six2 <&> case) 
-          with _ -> failwith "Acrpo: here")
+         )
 
 and no_small_head f ss ts =
   let p = function V _ -> mk_true ctx | F (h,_) -> !! (prec f h) in

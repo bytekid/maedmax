@@ -117,24 +117,36 @@ let reduced rr aa =
 ;;
 
 let overlaps s rr =
+  let ss = List.map Lit.terms s.settings.norm in (* normalized *)
+  let rr = Listset.diff rr [Lit.terms l | l <- s.settings.norm] in
   let cps = [(s,t) | s,t <- ACR.cps rr; not (ACR.ac_equivalent s t)] in
-  let cps = [Lit.make_axiom (normalize (s,t)) | s,t <- cps] in
+  let cps_ss = [(s,t) | s,t <- ACR.cps2 rr ss; not (ACR.ac_equivalent s t)] in
+  let cps = [Lit.make_axiom (normalize (s,t)) | s,t <- cps_ss @ cps] in
   if debug s 2 then
     Format.printf "CPs:\n%a\n" NS.print (NS.of_list cps);
   cps
 ;;
+
+let overlaps s = A.take_time A.t_overlap (overlaps s)
 
 let filter_small s cps =
   let eq_bound = s.heuristic.hard_bound_equations in
   L.partition (fun cp -> Lit.size cp < eq_bound) cps
 ;;
 
-let succeeds s rr aa b =
-  let wcr = ACR.is_wcr rr in
+let succeeds s rr cps =
+  let all_joinable ee =
+    L.for_all (fun l -> let s,t = Lit.terms l in ACR.are_joinable rr s t) ee
+  in
+  (*let wcr = ACR.is_wcr rr in*)
+  let wcr = all_joinable cps in
   let e0 = s.settings.axioms in
   if debug s 2 && wcr then Format.printf "WCR\n%!";
-  wcr && b &&
-  L.for_all (fun l -> let s,t = Lit.terms l in ACR.are_joinable rr s t) e0
+  wcr && all_joinable e0
+;;
+
+let succeeds s rr =
+  A.take_time A.t_success_check (succeeds s rr)
 ;;
 
 let (<|>) = Logic.(<|>)
@@ -232,14 +244,14 @@ let rec phi s =
       Format.printf "process TRS %i-%i: %a\n%!" i j Rules.print rr; order#print ());
     let aa = s.equations in
     let irred, red = rewrite rr aa in (* rewrite eqs wrt new TRS *)
-    let cps = overlaps s rr in
-    let cps, cps_large = filter_small s cps in
+    let cps_all = overlaps s rr in
+    let cps, cps_large = filter_small s cps_all in
     let cps = reduced rr cps in
     if debug s 2 then
       Format.printf "%d reduced CPs:\n%a" (NS.size cps) NS.print cps;
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = select s aa nn in
-    if succeeds s rr aa (NS.is_empty cps) then
+    if succeeds s rr cps_all then
       raise (Success rr)
     else
        let s' = update_state s (NS.add_list sel aa) in
@@ -252,13 +264,25 @@ let rec phi s =
   with Success rr -> (SAT, Completion rr)
 ;;
 
-let complete (settings_flags, heuristic_flags) es =
+let preorient state es =
+  let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
+  let es' = [ if d then e else R.flip e | e,d <- es ] in
+  let oriented = [ C.rule_var state.context r | r <- es' ] in
+  let keep = Logic.big_and state.context oriented in
+  Logic.require keep
+;;
+
+let complete (settings, heuristic) es =
   let es = [Lit.make_axiom (normalize (Lit.terms e)) | e <- es] in
   let ctx = Logic.mk_context () in
-  let ss = L.map (fun (ts,_,_,_,_) -> ts) heuristic_flags.strategy in
-  L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- es ]) ss;
+  let ss = L.map (fun (ts,_,_,_,_) -> ts) heuristic.strategy in
+  let es_all = settings.norm @ es in
+  L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- es_all ]) ss;
   let start = Unix.gettimeofday () in
-  let res = phi (make_state ctx es {settings_flags with axioms = es} heuristic_flags) in
+  let s = make_state ctx es_all {settings with axioms = es} heuristic in
+  if settings.norm <> [] then
+    preorient s settings.norm;
+  let res = phi s in
   A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. start);
   Logic.del_context ctx;
   res
