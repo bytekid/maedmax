@@ -171,7 +171,10 @@ let options =
    ("--norm", Arg.String (fun t -> set_normalized t),
       "<theory> normalized completion with respect to <theory>");
    ("-P", Arg.String (fun s ->
-      if s = "cpf" then Settings.do_proof := Some CPF
+      if s = "cpf" then (
+        Settings.do_proof := Some CPF;
+        heuristic := { !heuristic with hard_bound_equations = 1000};
+        heuristic := { !heuristic with soft_bound_equations = 1000})
       else if s = "tstp" then Settings.do_proof := Some TPTP
       else failwith "unsupported proof type"),
      "<format> output proof (cpf, tstp)");

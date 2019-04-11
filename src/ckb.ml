@@ -13,6 +13,7 @@ module Lit = Literal
 module NS = Nodes
 module Logic = Settings.Logic
 module T = Term
+module Sig = Signature
 
 (*** OPENS *******************************************************************)
 open Prelude
@@ -346,11 +347,12 @@ let overlaps_on rr aa _ gs =
 ;;
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let saturated ctx (rr, ee) rew (axs, cps, cps') =
+let saturated state (rr, ee) rew (axs, cps, cps') =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
   let sys = rr, ee', rew#order in
-  let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
+  let cps, _ = overlaps state (L.map Lit.make_axiom rr) (L.map Lit.make_axiom ee) in
+  let cc = axs @ (NS.to_list cps (*@ (NS.to_list cps')*)) in
   let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
   let eqs = L.filter (fun e -> not (L.mem e rr)) eqs in
   let j =
@@ -359,7 +361,7 @@ let saturated ctx (rr, ee) rew (axs, cps, cps') =
     else
       let joinable (s,t) = try fst (rew#nf s) =fst (rew#nf t) with _ -> false in
       let eqs = L.filter (fun e -> not (joinable e)) eqs in
-      Ground.all_joinable !settings ctx str sys eqs
+      Ground.all_joinable !settings state.context str sys eqs
   in
   if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
   j
@@ -403,7 +405,7 @@ let filter_eqs ee acs =
   List.fold_left (fun es e -> if redundant e es then es else e :: es) [] ee'
 ;;
 
-let succeeds ctx (rr,ee) rewriter cc ieqs gs =
+let succeeds state (rr,ee) rewriter cc ieqs gs =
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
   if debug 2 then 
@@ -421,7 +423,7 @@ let succeeds ctx (rr,ee) rewriter cc ieqs gs =
       Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
       else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
-      else match saturated ctx (rr,ee) rewriter cc with
+      else match saturated state (rr,ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
         | Some order -> (
           let ee = filter_eqs ee !settings.ac_syms in
@@ -1002,7 +1004,7 @@ let rec phi s =
     if not (unsat_allowed ()) && inconsistent irr && not (NS.is_empty gs) then
       (if debug 2 then Format.printf "inconsistent branch\n%!";
         raise (if s.extension <> None then Backtrack else Fail));
-    match succeeds s.context (rr, irr) rew cc ieqs gs with
+    match succeeds s (rr, irr) rew cc ieqs gs with
        Some r ->
        if !(Settings.generate_benchmarks) then
          Smtlib.benchmark "final";
@@ -1103,7 +1105,27 @@ let preorient s es =
   Logic.require keep
 ;;
 
+let ext (es,gs) settings =
+  if L.length gs != 1 || Lit.is_ground (List.hd gs) then (es,gs), settings
+  else
+    let s,t = Lit.terms (List.hd gs) in
+    let eq = Sig.fun_called "_equals" in
+    let tr = Sig.fun_called "_true" in
+    let fa = Sig.fun_called "_false" in
+    let x = Sig.var_called "x" in
+    let l1 = Lit.make_axiom (T.F(eq,[T.V x; T.V x]), T.F(tr,[])) in
+    let l2 = Lit.make_axiom (T.F(eq,[s; t]), T.F(fa,[])) in
+    let es' = l1 :: l2 :: es in
+    let gs' = [Lit.make_neg_axiom (T.F(fa,[]), T.F(tr,[]))] in
+    let s = {settings with axioms = es'; gs = L.map Lit.terms gs'} in
+    (es', gs'), s
+;;
+
 let ckb ((settings_flags, heuristic_flags) as flags) input =
+  let input,settings_flags =
+    if !(S.do_proof) <> None then ext input settings_flags
+    else input,settings_flags
+  in
   set_settings settings_flags;
   set_heuristic heuristic_flags;
   if debug 2 then Format.printf "strategy %s\n%!" (Strategy.to_string heuristic_flags.strategy);
