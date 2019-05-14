@@ -173,8 +173,11 @@ type answer =
 
 type result = answer * proof
 
+(*** EXCEPTIONS ***************************************************************)
+exception Success of result
+exception Fail
 
-(*** GLOBALS *****************************************************************)
+(*** GLOBALS ******************************************************************)
 (* k functions *)
 let k_default i = if i < 3 then 6 else 2
 let k_limiting i = if i > 15 then 1 else 2

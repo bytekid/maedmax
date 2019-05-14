@@ -199,10 +199,11 @@ let rec run i ctx cls =
     if debug 1 then
       Format.printf "C. check_sat:\n%a\n%!" print_literals sel;
     let flags = !settings, !heuristic in
-    match Ckb.ckb_for_instgen ctx flags sel with
-    | SAT, _ -> SAT
+    match Instgen_eq.check ctx flags sel with
+    | SAT, _ -> Format.printf "equation set SAT\n%!"; SAT
     | UNSAT, ls ->
       if debug 1 then (
+        Format.printf "equation set UNSAT\n%!";
         Format.printf "new literals:\n%!";
         List.iter (fun (r , sigma) -> Format.printf " %a (substituted %a)\n%!"
           Lit.print r Lit.print (Lit.substitute sigma r)) ls);

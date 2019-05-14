@@ -657,34 +657,36 @@ let interreduce rew rls =
 (* Show inference steps of a run. *)
 let show_run r =
   let tp = T.print in
-  let rec show = function
+  let rec show i s =
+    F.printf "%d. " i;
+    match s with
     | [] -> ()
     | OrientL e :: steps ->
       F.printf " orientl %a = %a\n%!" tp (fst e) tp (snd e);
-      show steps
+      show (i + 1) steps
     | OrientR e :: steps ->
       F.printf " orientr %a = %a\n%!" tp (fst e) tp (snd e);
-      show steps
+      show (i + 1) steps
     | Delete t :: steps ->
       F.printf " delete %a = %a\n%!" tp t tp t;
-      show steps
+      show (i + 1) steps
     | Deduce (u, s, t) :: steps ->
       F.printf " deduce %a <- %a -> %a\n" tp s tp u tp t;
-      show steps
+      show (i + 1) steps
     | SimplifyL ((s, t), u) :: steps ->
       F.printf " simplifyl %a = %a to %a = %a\n%!" tp s tp t tp u tp t;
-      show steps
+      show (i + 1) steps
     | SimplifyR ((s, t), u) :: steps ->
       F.printf " simplifyr %a = %a to %a = %a\n%!" tp s tp t tp s tp u;
-      show steps
+      show (i + 1) steps
     | Compose ((s, t), u) :: steps ->
       F.printf " compose %a -> %a to %a -> %a\n%!" tp s tp t tp s tp u;
-      show steps
+      show (i + 1) steps
     | Collapse ((s, t), u) :: steps ->
       F.printf " collapse %a -> %a to %a = %a\n%!" tp s tp t tp u tp t;
-      show steps
+      show (i + 1) steps
   in
-  if S.do_proof_debug () then show r
+  if S.do_proof_debug () then show 0 r
 ;;
 
 let print_system ee rr =
@@ -786,7 +788,9 @@ let reconstruct_run ee0 (ee, rr, ord) =
   let rew = new Rewriter.rewriter Settings.default_heuristic rr [] ord in
   rew#add ee;
   if S.do_proof_debug () then (
-    Format.printf "The rewriter has rules:\n";
+    Format.printf "Initial system:\n";
+    print_system ee0 [];
+    Format.printf "\nThe rewriter has rules:\n";
     print_system ee rr);
   (* 0. collect derivations for computed (ee,rr) *)
   let ancs = ancestors (ee @ rr) in
@@ -894,5 +898,5 @@ let proof_literal_instances (es, gs) = function
     if (s',t') <> (s,t) then
       add_rewrite_goal (s', t') (s, t) (rl_pos_sub rs, rl_pos_sub rt);
     goal_ancestors_with_subst ((s', t'), sigma);
-  | _ -> []
+  | _ -> Format.printf "Trace.proof_literal_instances: no proof\n"; []
 ;;

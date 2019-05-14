@@ -20,13 +20,13 @@ open Prelude
 open Settings
 
 (*** EXCEPTIONS **************************************************************)
-exception Success of result
 exception Restart of Lit.t list * bool
-exception Fail
 
 (*** TYPES *******************************************************************)
+type lit = Lit.t
+
 type theory_extension_state = {
-  theory_extensions : Lit.t list list list;
+  theory_extensions : lit list list list;
   iterations : int
 }
 
@@ -34,7 +34,7 @@ type state = {
   context : Logic.context;
   equations : NS.t;
   goals : NS.t;
-  new_nodes : Lit.t list;
+  new_nodes : lit list;
   extension : theory_extension_state option
 }
 
@@ -171,10 +171,6 @@ let update_state s es gs = { s with
   equations = es;
   goals = gs
 }
-
-
-(* TODO: there might be inequalities *)
-let axs _ = !settings.axioms
 
 let store_remaining_nodes ctx ns gs =
   if has_comp () then
@@ -333,7 +329,7 @@ let overlaps s rr = A.take_time A.t_overlap (overlaps s rr)
 (* Goal only as outer rule, compute CPs with equations.
    Use rr only if the goals are not ground (otherwise, goals with rr are
    covered by rewriting). *)
-let overlaps_on rr aa _ gs =
+let overlaps_on rr aa gs =
   let gs_for_ols = NS.to_list (eqs_for_overlaps gs) in
   let goals_ground = List.for_all Rule.is_ground !settings.gs in
   let acs, cs = !settings.ac_syms, !settings.only_c_syms in
@@ -351,8 +347,8 @@ let saturated state (rr, ee) rew (axs, cps, cps') =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
   let sys = rr, ee', rew#order in
-  let cps, _ = overlaps state (L.map Lit.make_axiom rr) (L.map Lit.make_axiom ee) in
-  let cc = axs @ (NS.to_list cps (*@ (NS.to_list cps')*)) in
+  (*let cps, _ = overlaps state (L.map Lit.make_axiom rr) (L.map Lit.make_axiom ee) in*)
+  let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
   let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
   let eqs = L.filter (fun e -> not (L.mem e rr)) eqs in
   let j =
@@ -409,7 +405,8 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
   if debug 2 then 
-    Format.printf "success check R:%a\nE:\n%a\n" Rules.print rr Rules.print ee;
+    Format.printf "success check R:\n%a\nE:\n%a\nG:\n%a\n"
+      Rules.print rr Rules.print ee NS.print gs;
   rewriter#add_more ee;
   match solved_goal rewriter gs with
     | Some (st, rseq, sigma) ->
@@ -852,7 +849,7 @@ let set_iteration_stats s =
      let gnd = Rules.is_ground [ Lit.terms g | g <- NS.to_list gs ] in
      F.printf "\nand %i goals:\n%a %i%!\n" !A.goals NS.print gs
        (if gnd then 1 else 0));
-  if debug 1 then (
+  if debug 3 then (
     A.print ();
     A.show_proof_track !settings Select.all_nodes);
   (* re-evaluate symbols status not every iteration, too expensive *)
@@ -988,7 +985,7 @@ let rec phi s =
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = Select.select (aa,rew) nn in
 
-    let go = overlaps_on rr aa_for_ols ovl gs in
+    let go = overlaps_on rr aa_for_ols gs in
     let go = NS.filter (fun g -> Lit.size g < !heuristic.hard_bound_goals) go in
     let gcps, gcps' = reduced_goals rew go in
     let gs' = NS.diff (NS.add_all gs_big (NS.add_all gcps' gcps)) gs in
@@ -998,13 +995,14 @@ let rec phi s =
       A.update_proof_track (sel @ gg) (NS.to_list rest @ (NS.to_list grest));
     store_remaining_nodes s.context rest grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
-    let cc = (axs (), cps, cps_large) in
+    let cc = (!settings.axioms, cps, cps_large) in
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
 
     if not (unsat_allowed ()) && inconsistent irr && not (NS.is_empty gs) then
       (if debug 2 then Format.printf "inconsistent branch\n%!";
         raise (if s.extension <> None then Backtrack else Fail));
-    match succeeds s (rr, irr) rew cc ieqs gs with
+    let gs' = NS.add_list gg gs in
+    match succeeds s (rr, irr) rew cc ieqs gs' with
        Some r ->
        if !(Settings.generate_benchmarks) then
          Smtlib.benchmark "final";
@@ -1012,7 +1010,7 @@ let rec phi s =
          (check_order_generation true order; failwith "order generated")
        else raise (Success r)
      | None ->
-       let s' = update_state s (NS.add_list sel aa) (NS.add_list gg gs) in
+       let s' = update_state s (NS.add_list sel aa) gs' in
        (j+1, s', sel @ aa_new)
   in
   try
@@ -1124,7 +1122,7 @@ let ext (es,gs) settings =
 let ckb ((settings_flags, heuristic_flags) as flags) input =
   let input,settings_flags =
     if !(S.do_proof) <> None then ext input settings_flags
-    else input,settings_flags
+    else input, settings_flags
   in
   set_settings settings_flags;
   set_heuristic heuristic_flags;
@@ -1201,47 +1199,3 @@ let ckb ((settings_flags, heuristic_flags) as flags) ((es,gs) as input) =
     ckb flags input
 ;;
 
-let ckb_for_instgen ctx flags lits =
-  set_settings (fst flags);
-  set_heuristic (snd flags);
-  Trace.clear ();
-  let input = L.partition Lit.is_equality lits in
-  let rec ckb (es, gs) =
-    let eq_ok e = Lit.is_equality e || Lit.is_ground e in
-    if not (L.for_all eq_ok es) then
-      raise Fail;
-    let est =
-      if !(S.do_proof) <> None then [e | e <- es;not (Lit.is_trivial e)] else es
-    in
-    let es' = L.map Lit.normalize est in
-    let es0 = L.sort Pervasives.compare es' in
-    let gs0 = L.map Lit.normalize gs in
-    Select.init es0 gs0;
-    init_settings flags es0 [ Lit.terms g | g <- gs0 ];
-    remember_state es gs;
-    try
-      let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
-      let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
-      if !settings.keep_orientation then (
-        let es = [ Variant.normalize_rule_dir (Lit.terms e) | e <- es ] in
-        let es' = [ if d then e else R.flip e | e,d <- es ] in
-        let oriented = [ !!(C.rule_var ctx (R.flip r)) | r <- es' ] in
-        let keep = Logic.big_and ctx oriented in
-        Logic.require keep;
-        L.iter (fun r -> Logic.assert_weighted (C.rule_var ctx r) 27) es'
-      );
-      let ans, proof = phi (make_state ctx es0 (NS.of_list gs0)) in
-      ans, Trace.proof_literal_instances input proof
-    with Restart (es_new, _) -> (
-      pop_strategy ();
-      St.clear ();
-      Cache.clear ();
-      A.restarts := !A.restarts + 1;
-      Hashtbl.reset rewrite_trace;
-      NS.reset_age ();
-      A.mem_diffs := [];
-      A.time_diffs := [];
-      ckb ((if gs = [] then es0 else es_new @ es0), gs))
-  in
-  ckb input
-;; 

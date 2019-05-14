@@ -120,6 +120,7 @@ let goal_disproof ee0 g_orig (ee, rr, ord) rst =
 
 let ordered_completion_proof ee0 (ee, rr, ord) =
   let ee = variant_free ee in
+  let ee0 = Listx.unique ee0 in (* duplicates:  reconstruction may be invalid *)
   let steps, (ee',rr') = Tc.reconstruct_run ee0 (ee, rr, ord) in
   let xcproof = okb_proof_to_xml steps in
   let xproof = X.Element("proof", [], [xcproof]) in
