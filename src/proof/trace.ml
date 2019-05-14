@@ -843,7 +843,7 @@ let reconstruct_run ee0 (ee, rr, ord) =
   run, res
 ;;
 
-let mk_lit ts is_eq = { S.terms = ts; S.is_equality = is_eq; dconstr = None }
+let mk_lit ts is_eq = { S.terms = ts; S.is_equality = is_eq }
 
 let ancestors_with_subst eqs = 
   let mk eq = mk_lit eq true in
