@@ -67,12 +67,12 @@ type shape =
   | Zolfo
   | NoShape
 
-type dismatching_constraints = (Term.t list * Term.t list) list list
+type dismatching_constraints = (Term.t list * Term.t list) list
 
 type literal = {
   terms: Rule.t;
   is_equality: bool;
-  dconstr : dismatching_constraints option
+  dconstr : dismatching_constraints
 }
 
 type clause = literal list
