@@ -22,7 +22,7 @@ let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
 
 let killed = ref 0
 
-let make ts e = {terms = ts; is_equality = e }
+let make ts e = {terms = ts; is_equality = e; dconstr = None }
 
 let terms l = l.terms
 

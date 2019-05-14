@@ -843,9 +843,10 @@ let reconstruct_run ee0 (ee, rr, ord) =
   run, res
 ;;
 
+let mk_lit ts is_eq = { S.terms = ts; S.is_equality = is_eq; dconstr = None }
 
 let ancestors_with_subst eqs = 
-  let mk eq = { S.terms = eq; S.is_equality = true } in
+  let mk eq = mk_lit eq true in
   let rec ancestors (eq, sigma) =
     let eq = Variant.normalize_rule eq in
     let o = fst (trace_eq eq) in
@@ -858,7 +859,7 @@ let ancestors_with_subst eqs =
 ;;
 
 let goal_ancestors_with_subst (g, sigma) =
-  let mk eq = { S.terms = eq; S.is_equality = false } in
+  let mk eq = mk_lit eq false in
   let restr subst rl = [x,t | x,t <- subst; List.mem x (Rule.variables rl)] in
   let rec goal_ancestors (g', sigma) =
     (*Format.printf "looking for ancestors of %a (substituted: %a)\n%!"
