@@ -17,6 +17,8 @@ val pattern_match : Term.t -> Term.t -> t
 
 val is_instance_of : Term.t -> Term.t -> bool
 
+val are_instances_of : Term.t list -> Term.t list -> bool
+
 val enc : Term.t -> Term.t -> bool
 
 val after: t -> t -> t

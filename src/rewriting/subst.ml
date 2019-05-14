@@ -70,6 +70,11 @@ let is_instance_of t1 t2 =
   with Not_matched -> false
 ;;
 
+let are_instances_of ss ts =
+  try ignore (pattern_match' [] (Listx.zip ss ts)); true
+  with Not_matched -> false
+;;
+
 let enc t1 t2 = List.exists (fun t -> is_instance_of t t2) (Term.subterms t1)
 
 let is_renaming subst =
