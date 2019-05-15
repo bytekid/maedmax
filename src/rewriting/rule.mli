@@ -34,7 +34,7 @@ val variable_condition : t -> bool
 
 val rename : t -> t
 
-val rename_canonical : ?from:int -> t -> t
+val rename_canonical : ?from:int -> t -> t * Term.subst
 
 val flip : t -> t
 

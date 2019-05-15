@@ -12,6 +12,7 @@ module Lit = Literal
 module A = Analytics
 module Trc = Trace
 module Logic = Settings.Logic
+module DC = DismatchingConstraints
 
 (*** TYPES ********************************************************************)
 type term_cmp = Term.t -> Term.t -> bool
@@ -118,13 +119,24 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
   ;;
   
   (* as in Overlap module, but without variant optimization; rule2 is outer *)
-  method overlap_between_at rule1 rule2 p =
-    let l1,r1 = rule1 and l2, r2 = Rule.rename_canonical rule2 in
+  method overlap_between_at rli rlo p =
+    let l1,r1 = Lit.terms rli in
+    let (l2, r2), rho = Rule.rename_canonical (Lit.terms rlo) in
     match mgu (Term.subterm_at p l2) l1 with
       | Some sigma ->
-        let t = Term.substitute sigma l1 in
-        if pcp && Term.size t > 5 && rcheck#is_reducible_below t then None
-        else Some ((l1, r1), p, (l2, r2), sigma)
+        let dci = Lit.dconstr rli and dco = Lit.dconstr rlo in
+        let dco = [ss, [Term.substitute rho ti | ti <- ts] | ss, ts <- dco] in
+        if not (DC.is_ok_for sigma (dci @ dco)) then
+          (Format.printf "Overlap between %a and %a is prohibited by DC %a\n"
+            Rule.print (l1,r1) Rule.print (l2,r2) DC.print (dci @ dco);
+            None
+          )
+        else
+        (Format.printf "Overlap between %a and %a is NOT prohibited by DC %a\n"
+          Rule.print (l1,r1) Rule.print (l2,r2) DC.print (dci @ dco);
+          let t = Term.substitute sigma l1 in
+          if pcp && Term.size t > 5 && rcheck#is_reducible_below t then None
+          else Some ((l1, r1), p, (l2, r2), sigma))
       | None -> None
 
   (* rli is inner, rlo is outer *)
@@ -135,13 +147,12 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
       let bd =
         if Lit.is_inequality rlo then h.hard_bound_goals else h.hard_bound_equations
       in
-      let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
+      let o = self#overlap_between_at rli rlo p  in
       match o with
         | None -> None
         | Some o -> (
           let s,t = O.cp_of_overlap o in
-          if Rule.size (s, t) > bd then None
-          else if s = t && is_equality then None
+          if Rule.size (s, t) > bd || s = t && is_equality then None
           else (
             let st' = V.normalize_rule (s,t) in
             if !(Settings.do_proof) <> None then
@@ -160,7 +171,8 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
     let max_size = bd - (Lit.size rl - (Term.size l')) in
     let add os = function None -> os | Some o -> o :: os in
     let rl_cands = [rl' | rl', s <- rs; s <= max_size] in
-    let res = List.fold_left add [] [ self#cp_at rl' rl p | rl' <- rl_cands ] in
+    let cp_opts = [ self#cp_at rl' rl p | rl' <- rl_cands] in
+    let res = List.fold_left add [] cp_opts in
     res
   ;;
 end

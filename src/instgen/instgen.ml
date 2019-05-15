@@ -32,8 +32,9 @@ module Clause = struct
 
   let ground : (t -> t) = substitute_uniform bot
 
-  let print ppf (c, _) =
-    F.fprintf ppf "@[%a@]" (Formatx.print_list Literal.print " | ") c
+  let print ppf (c, dc) =
+    F.fprintf ppf "(%a) %a" (Formatx.print_list Literal.print " | ") c
+      DismatchingConstraints.print dc
   ;;
 
   let normalize c =
@@ -48,6 +49,8 @@ module Clause = struct
   let norm_subst sigma c = normalize (substitute sigma c)
 
   let simplify c = [l | l <- c; not (Lit.is_inequality l && Lit.is_trivial l)]
+
+  let add_dconstr (ls, dc) dc' = (ls, dc @ dc')
 
 end
 
@@ -74,8 +77,10 @@ module Clauses = struct
 
   let to_list ns = (H.fold (fun n _ l -> n :: l) ns [])
 
+  let map f cs = H.fold (fun c _ cs -> add (f c) cs) cs (empty ())
+
   let print ppf ns =
-    F.fprintf ppf "@[(%a)@]\n" (Formatx.print_list Clause.print ", ")
+    F.fprintf ppf " %a\n" (Formatx.print_list Clause.print "\n  ")
       (to_list ns)
 end
 
@@ -189,12 +194,26 @@ let check_sat ctx cls_vars =
       (* smap maps selected literals (first true literal in clause for now) to
          list of clauses in which they were selected *)
       let smap = L.fold_left add (H.create 128) cls_vars in
-      let sel = H.fold (fun l _ sel -> l :: sel) smap [] in
+      let constrain l cs =  Lit.add_dconstr l (L.concat [d | _, d <- cs]) in
+      let sel = H.fold (fun l cs sel -> constrain l cs :: sel) smap [] in
       Some (sel, smap)
     )
   in
   Logic.pop ctx;
   res
+;;
+
+let restrict_dconstr cs_subs c =
+  let subs = [sub | c', sub <- cs_subs; c = c'] in
+  let xs = Listx.unique [T.V x | x <- Clause.variables c] in
+  let constr_sub sub =
+    let add (ls,ys) x =
+      let t = T.substitute sub x in if t = x then (ls,ys) else (t :: ls,x :: ys)
+    in
+    L.fold_left add ([],[]) xs
+  in 
+  let dc_new = [ constr_sub sub | sub <- subs] in
+  if xs != [] then Clause.add_dconstr c dc_new else c
 ;;
 
 let rec run i ctx (cls : Clauses.t) =
@@ -207,10 +226,10 @@ let rec run i ctx (cls : Clauses.t) =
   match check_sat ctx (to_smt ctx cls_gcls) with
   | None -> UNSAT
   | Some (sel, smap) -> (
-    if debug 1 then (
+    (*if debug 1 then (
     F.printf "smap:\n";
     H.iter (fun l cs ->
-      F.printf "  %a -> %a\n" Literal.print l print_clause_list cs) smap);
+      F.printf "  %a -> %a\n" Lit.print l print_clause_list cs) smap);*)
     if debug 1 then
       F.printf "C. check_sat:\n%a\n%!" print_literals sel;
     let flags = !settings, !heuristic in
@@ -227,10 +246,12 @@ let rec run i ctx (cls : Clauses.t) =
         with _ -> F.printf "%a not found\n%!" Literal.print l;
         failwith "smap fail"
       in
-      let cs = [ Clause.norm_subst sub c | l, sub <- ls; c <- find l] in
-      let cs = Lx.unique cs in
-      F.printf "new clauses:\n  %a\n%!" print_clause_list cs;
-      run (i + 1) ctx (Clauses.add_list cs cls)
+      let cs_subs = [c, sub | l, sub <- ls; c <- find l] in
+      let cs = [ Clause.norm_subst sub c | c, sub <- cs_subs] in
+      let cs_new = Lx.unique cs in
+      F.printf "new clauses:\n  %a\n%!" print_clause_list cs_new;
+      let cls' = Clauses.map (restrict_dconstr cs_subs) cls in
+      run (i + 1) ctx (Clauses.add_list cs_new cls')
   )
 ;;
 

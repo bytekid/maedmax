@@ -32,6 +32,8 @@ let is_equality l = l.is_equality
 
 let is_inequality l = not l.is_equality
 
+let dconstr l = l.dconstr
+
 let is_equal l l' = compare l l' = 0
 
 let negate l = { l with is_equality = not l.is_equality }
@@ -48,6 +50,8 @@ let is_trivial l = fst l.terms = snd l.terms
 let normalize l = { l with terms = Variant.normalize_rule l.terms }
 
 let rename l = { l with terms = Rule.rename l.terms }
+
+let add_dconstr l dc = { l with dconstr = dc @ l.dconstr}
 
 let not_increasing l = not (Term.is_subterm (fst l.terms) (snd l.terms))
 

@@ -57,7 +57,7 @@ let rename_canonical ?(from=100) (l, r) =
   let u = Term.F(0,[l;r]) in
   let var i = Term.V (from + i) in
   let s = [ x, var i | i, x <- Listx.ix (Term.variables u) ] in
-  (Term.substitute s l, Term.substitute s r)
+  (Term.substitute s l, Term.substitute s r), s
 ;;
 
 let left_linear (l, r) = Term.linear l 
