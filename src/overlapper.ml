@@ -88,7 +88,8 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
 
   method init () =
     let data l = fst (Lit.terms l), (l, Term.size (snd (Lit.terms l))) in
-    let ixd = [ data l | l <- lits; Lit.not_increasing l ] in
+    let relevant l = Lit.not_increasing l && not (Term.is_variable (fst (Lit.terms l))) in
+    let ixd = [ data l | l <- lits; relevant l ] in
     index <- FingerprintIndex.create ixd;
   ;;
 
@@ -132,8 +133,8 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
             None
           )
         else
-        (Format.printf "Overlap between %a and %a is NOT prohibited by DC %a\n"
-          Rule.print (l1,r1) Rule.print (l2,r2) DC.print (dci @ dco);
+        ((*Format.printf "Overlap between %a and %a is NOT prohibited by DC %a\n"
+          Rule.print (l1,r1) Rule.print (l2,r2) DC.print (dci @ dco);*)
           let t = Term.substitute sigma l1 in
           if pcp && Term.size t > 5 && rcheck#is_reducible_below t then None
           else Some ((l1, r1), p, (l2, r2), sigma))
@@ -142,6 +143,8 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
   (* rli is inner, rlo is outer *)
   method cp_at rli rlo p =
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
+    else if Lit.is_equality rli && rli = rlo &&
+            Rule.is_rule (Lit.terms rli) then None
     else (
       let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
       let bd =
@@ -152,13 +155,19 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
         | None -> None
         | Some o -> (
           let s,t = O.cp_of_overlap o in
+          (*Format.printf "  CP %a = %a\n%!" Term.print s Term.print t;*)
           if Rule.size (s, t) > bd || s = t && is_equality then None
           else (
             let st' = V.normalize_rule (s,t) in
             if !(Settings.do_proof) <> None then
               (if not is_equality then
                 Trc.add_overlap_goal else Trc.add_overlap) st' o;
-            Some (Lit.make st' is_equality))))
+            let dc = DC.substitute (O.subst o) (DC.add rli.dconstr rlo.dconstr) in
+            Format.printf "Overlap between %a and %a creates %a\n%!"
+              Lit.print_with_dconstr rli
+              Lit.print_with_dconstr rlo
+              Lit.print_with_dconstr (Lit.make_dc st' is_equality dc);
+            Some (Lit.make_dc st' is_equality dc))))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)

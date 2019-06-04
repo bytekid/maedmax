@@ -105,8 +105,6 @@ let options =
      " print debugging output");
    ("--gcr", Arg.Unit (fun _ -> only_gcr := true),
        " check ground confluence");
-   ("--interactive", Arg.Set Settings.interactive,
-     " enter interactive mode once a complete system was found");
    ("--infeasible", Arg.Unit ( fun _ ->
        heuristic := { !heuristic with strategy = S.strategy_ordered_kbo };
        settings := {!settings with auto = false; infeasible = true}),
@@ -400,42 +398,6 @@ let show_proof filename input res = function
   | _ -> Format.printf "some proof\n%!"
 ;;
 
-let interactive_mode proof =
-  let acs = !settings.ac_syms in
-  let rewriter = match proof with
-    | Completion rr ->
-      Format.printf "Deciding equational theory.\n%!";
-      let rew = new Rewriter.rewriter !heuristic rr acs Order.default in
-      rew#init ();
-      rew
-    | GroundCompletion (rr,ee,o) ->
-      Format.printf "Deciding ground theory over given signature.\n%!";
-      let rew = new Rewriter.rewriter !heuristic rr acs o in
-      rew#init ();
-      rew#add ee;
-      rew
-    | _ -> failwith "No decision procedure, interactive mode not possible."
-  in
-  let decision_proc l =
-    let s,t = Literal.terms l in
-    let joined = fst (rewriter#nf s) = fst (rewriter#nf t) in
-    (joined && Literal.is_equality l) || not (joined || Literal.is_equality l)
-  in
-  Format.printf "OK\n%!";
-  let check_eq s =
-    let l = Read.equation_or_inequality s in
-    Format.printf "%s\n%!" (if decision_proc l then "YES" else "NO")
-  in
-  let rec check _ =
-    try
-      Format.printf "Enter equation or 'exit' to stop:\n%!";
-      let s = read_line () in
-      if s = "exit" then exit 0
-      else (check_eq s; check ())
-    with _ -> check ()
-  in check ()
-;;
-
 let print_waldmeister es =
   let es = [Lit.terms e | e <- es ] in
   F.printf "NAME        Example\n%!";
@@ -476,9 +438,7 @@ let run file ((es, gs) as input) =
   in
   Timer.stop timer;
   let secs = Timer.length ~res:Timer.Seconds timer in
-  if !(Settings.interactive) then
-    interactive_mode proof
-  else if !settings.json then
+  if !settings.json then
     print_json (es,gs) secs (ans,clean es proof) settings
   else (
     match !(Settings.do_proof) with
@@ -509,8 +469,6 @@ let () =
     Settings.input_file := remove_extension (Filename.basename f);
     (match !track_file with | Some f -> track_proof f | _ -> ());
     (match !classify_file with | Some f -> set_classification f | _ -> ());
-    if !(Settings.interactive) && gs <> [] then
-      failwith "Input for interactive mode is not supposed to contain goals";
     if !settings.debug > 0 then
       printf "input problem: %s\n%!" f;
     if not !only_termination && not !analyze && not !only_gcr then

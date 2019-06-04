@@ -32,7 +32,7 @@ let check settings heuristic s ls =
     let order = Strategy.decode 0 m s in
     order#print ();
     let cps = extended_cps trs order in
-    let rew = new Rewriter.rewriter heuristic trs [] order in
+    let rew = new Rewriter.rewriter heuristic [rl, [] | rl <- trs] [] order in
     (*rew#add es;*)
     let non_joinable (s,t) = fst (rew#nf s) <> fst (rew#nf t) in
     let cps' = List.filter non_joinable cps in

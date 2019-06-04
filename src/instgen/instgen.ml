@@ -8,6 +8,7 @@ module Lit = Literal
 module Logic = Settings.Logic
 module Sig = Signature
 module T = Term
+module DC = DismatchingConstraints
 
 module Clause = struct
 
@@ -33,7 +34,7 @@ module Clause = struct
   let ground : (t -> t) = substitute_uniform bot
 
   let print ppf (c, dc) =
-    F.fprintf ppf "(%a) %a" (Formatx.print_list Literal.print " | ") c
+    F.fprintf ppf "(%a) %a" (Formatx.print_list Lit.print " | ") c
       DismatchingConstraints.print dc
   ;;
 
@@ -48,9 +49,14 @@ module Clause = struct
 
   let norm_subst sigma c = normalize (substitute sigma c)
 
-  let simplify c = [l | l <- c; not (Lit.is_inequality l && Lit.is_trivial l)]
+  let simplify (ls, dc) =
+    let ls' = [l | l <- ls; not (Lit.is_inequality l && Lit.is_trivial l)] in
+    ls', DC.simplify dc
+  ;;
 
   let add_dconstr (ls, dc) dc' = (ls, dc @ dc')
+
+  let is_unsat (_, dc) = DC.is_unsat dc
 
 end
 
@@ -79,6 +85,8 @@ module Clauses = struct
 
   let map f cs = H.fold (fun c _ cs -> add (f c) cs) cs (empty ())
 
+  let simplify = map Clause.simplify
+
   let print ppf ns =
     F.fprintf ppf " %a\n" (Formatx.print_list Clause.print "\n  ")
       (to_list ns)
@@ -99,7 +107,7 @@ let print_clause_list ppf cs =
 ;;
 
 let print_literals ppf ls =
-  F.fprintf ppf "@[%a@]" (Formatx.print_list Literal.print "\n ") ls
+  F.fprintf ppf "@[%a@]" (Formatx.print_list Lit.print_with_dconstr "\n ") ls
 ;;
 
 (* various shorthands *)
@@ -213,7 +221,7 @@ let restrict_dconstr cs_subs c =
     L.fold_left add ([],[]) xs
   in 
   let dc_new = [ constr_sub sub | sub <- subs] in
-  if xs != [] then Clause.add_dconstr c dc_new else c
+  Clause.add_dconstr c [ dc | dc <- dc_new; dc <> ([],[])]
 ;;
 
 let rec run i ctx (cls : Clauses.t) =
@@ -243,15 +251,19 @@ let rec run i ctx (cls : Clauses.t) =
           Lit.print r Lit.print (Lit.substitute sigma r)) ls);
       let find l =
         try H.find smap l
-        with _ -> F.printf "%a not found\n%!" Literal.print l;
-        failwith "smap fail"
+        with _ -> (
+          try H.find smap (Lit.flip l)
+          with _ ->
+          F.printf "%a not found\n%!" Lit.print l;
+          failwith "smap fail")
       in
       let cs_subs = [c, sub | l, sub <- ls; c <- find l] in
       let cs = [ Clause.norm_subst sub c | c, sub <- cs_subs] in
       let cs_new = Lx.unique cs in
       F.printf "new clauses:\n  %a\n%!" print_clause_list cs_new;
       let cls' = Clauses.map (restrict_dconstr cs_subs) cls in
-      run (i + 1) ctx (Clauses.add_list cs_new cls')
+      let cls'' = Clauses.add_list cs_new cls' in
+      run (i + 1) ctx (Clauses.simplify cls'')
   )
 ;;
 

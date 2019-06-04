@@ -14,6 +14,7 @@ module NS = Nodes
 module Logic = Settings.Logic
 module T = Term
 module Sig = Signature
+module DC = DismatchingConstraints
 
 (*** OPENS *******************************************************************)
 open Prelude
@@ -253,8 +254,9 @@ let reduced_goals rew gs =
   res
 ;;
 
+(* not if proof, ie also not for instgen! so ignore dcs *)
 let interreduce rr =
- let rew = new Rewriter.rewriter !heuristic rr [] Order.default in
+ let rew = new Rewriter.rewriter !heuristic [r,[] | r <- rr] [] Order.default in
  let right_reduce (l,r) =
    let r', rs = rew#nf r in
    if r <> r' then (
@@ -376,11 +378,16 @@ let rewrite_seq rew (s,t) (rss,rst) =
 let solved_goal rewriter gs =
   let try_to_solve g =
     try
-      let s,t = Lit.terms g in
+      let s,t = Lit.terms g and dc = Lit.dconstr g in
       let s',rss = rewriter#nf s in
       let t',rst = rewriter#nf t in
-      if s' = t' then Some ((s,t), rewrite_seq rewriter (s,t) (rss,rst), [])
-      else if Subst.unifiable s t then Some ((s,t), ([],[]), Subst.mgu s t)
+      if s' = t' then (
+        Format.printf "joinable: %a = %a (%a = %a)\n%!"
+              Term.print s Term.print t
+              Term.print s' Term.print t';
+        Some ((s,t), rewrite_seq rewriter (s,t) (rss,rst), []))
+      else if Subst.unifiable s t && DC.is_ok_for (Subst.mgu s t) dc then
+        Some ((s,t), ([],[]), Subst.mgu s t)
       else None
     with Rewriter.Max_term_size_exceeded -> None
   in
@@ -402,12 +409,13 @@ let filter_eqs ee acs =
 ;;
 
 let succeeds state (rr,ee) rewriter cc ieqs gs =
-  let rr = [ Lit.terms r | r <- rr] in
-  let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
+  let rr = [Lit.terms r | r <- rr] in
+  let ee = [Lit.terms e,Lit.dconstr e | e <- NS.to_list ee; Lit.is_equality e] in
+  rewriter#add_more ee;
+  let ee = L.map fst ee in
   if debug 2 then 
     Format.printf "success check R:\n%a\nE:\n%a\nG:\n%a\n"
       Rules.print rr Rules.print ee NS.print gs;
-  rewriter#add_more ee;
   match solved_goal rewriter gs with
     | Some (st, rseq, sigma) ->
       if unsat_allowed () then Some (UNSAT, Proof (st, rseq, sigma)) else None
@@ -420,7 +428,7 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
       Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
       else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
-      else match saturated state (rr,ee) rewriter cc with
+      else match saturated state (rr, ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
         | Some order -> (
           let ee = filter_eqs ee !settings.ac_syms in
@@ -741,10 +749,11 @@ let max_k = A.take_time A.t_maxk max_k
 
 (* some logging functions *)
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@."
-   !A.iterations j c
-   Rules.print (Variant.rename_rules rr)
-   Rules.print (Variant.rename_rules rr')
+  let pdc ppf l = F.fprintf ppf "%a %a" Rule.print l.terms DC.print l.dconstr in
+  F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@."
+    !A.iterations j c
+    (Formatx.print_list pdc "\n") rr
+    Rules.print (Variant.rename_rules rr')
 ;;
 
 let limit_reached t =
@@ -866,8 +875,8 @@ let set_iteration_stats s =
 
 let last_trss = ref []
 
-let store_trs ctx j rr cost =
-  let rr = [ Lit.terms r | r <- rr ] in
+let store_trs ctx j rr0 cost =
+  let rr = [ Lit.terms r | r <- rr0 ] in
   let rr_index = C.store_trs rr in
   (* for rewriting actually reduced TRS may be used; have to store *)
   let rr_reduced =
@@ -881,7 +890,7 @@ let store_trs ctx j rr cost =
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;
-  if debug 2 then log_max_trs j rr rr_reduced cost;
+  if debug 2 then log_max_trs j rr0 rr_reduced cost;
   rr_index
 ;;
 
@@ -896,8 +905,8 @@ let last_rewriters = ref []
 
 let get_rewriter ctx j (rr, c, order) =
   let n = store_trs ctx j rr c in
-  let rr_red = C.redtrs_of_index n in (* interreduce *)
-  let rew = new Rewriter.rewriter !heuristic rr_red !settings.ac_syms order in
+  let rr_dc = [Lit.terms l, Lit.dconstr l | l <- rr] in
+  let rew = new Rewriter.rewriter !heuristic rr_dc !settings.ac_syms order in
   check_order_generation false order;
   rew#init ();
   last_rewriters := (if j = 0 then [rew] else !last_rewriters @ [rew]);

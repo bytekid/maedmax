@@ -242,7 +242,6 @@ let default_heuristic = {
 let do_assertions = ref false
 let do_debug = ref false
 let do_proof : proof_format option ref = ref None
-let interactive = ref false
 let generate_order = ref false
 let inst_depth : int ref = ref 2
 let input_file = ref ""

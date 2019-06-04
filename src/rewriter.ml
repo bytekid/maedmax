@@ -8,18 +8,21 @@ module H = Hashtbl
 module Sig = Signature
 module Ac = Theory.Ac
 module Logic = Settings.Logic
+module DC = DismatchingConstraints
 
 (*** TYPES ********************************************************************)
 type term_cmp = Term.t -> Term.t -> bool
 
 type step = Rule.t * Term.pos * Subst.t
 
+(*** EXCEPTIONS ***************************************************************)
 exception Not_orientable
 exception Max_term_size_exceeded
+exception Dismatching_constraint of DC.t
 
 (*** FUNCTIONS ****************************************************************)
-class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
-  (ord : Order.t) =
+class rewriter (h : Settings.heuristic) (trs : (Rule.t * DC.t) list)
+  (acs : Sig.sym list) (ord : Order.t) =
   object (self)
 
   val mutable nf_table: (Term.t, Term.t * (step list)) H.t = H.create 256
@@ -30,8 +33,9 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   method init () =
     let cs = [ Ac.commutativity f | f <- acs] in
     let cas = [ Ac.cassociativity f | f <- acs] in
-    let eqs = [ l, ((l,r), false)| l,r <- cs @ cas ] in
-    let rules = [ l,((l,r), true) | l,r <- trs ] in
+    (* FIXME: DCs of ACs? *)
+    let eqs = [ l, ((l,r), [], false)| l,r <- cs @ cas ] in
+    let rules = [ l,((l,r), dc, true) | (l,r), dc <- trs ] in
     index <- FingerprintIndex.create (eqs @ rules)
 
   method copy_from (r : rewriter) =
@@ -57,27 +61,30 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   method add es =
     let cs = [ Ac.commutativity f | f <- acs] in
     let cas = [ Ac.cassociativity f | f <- acs] in
-    let es' = es @ [r,l | l,r <- es ] in
-    let es' = [ l,r | l,r <- es'; not (Term.is_subterm l r) ] in
-    let eqs = [ l, ((l,r), false)| l,r <- cs @ cas @ es' ] in
-    let rules = [ l,((l,r), true) | l,r <- trs ] in
+    let es' = es @ [(r,l), dc | (l,r), dc <- es ] in
+    let es' = [ (l,r), dc | (l,r), dc <- es'; not (Term.is_subterm l r) ] in
+    let cas' = [rl, [] | rl <- cs @ cas] in
+    let eqs = [ l, ((l,r), dc, false)| (l,r), dc <- cas' @ es' ] in
+    let rules = [ l,((l,r), dc, true) | (l,r), dc <- trs ] in
     index <- FingerprintIndex.create (eqs @ rules)
 
   method add_more es =
     (* es is already symmetric *)
-    let eqs = [ l, ((l,r), false)| l,r <- es; not (Term.is_subterm l r) ] in
+    let peq l r dc = ((l,r), dc, false) in
+    let eqs = [ l, peq l r dc | (l,r), dc <- es; not (Term.is_subterm l r) ] in
     index <- L.fold_left FingerprintIndex.insert index eqs;
     Hashtbl.clear nf_table;
     Hashtbl.clear step_table
     
-  method add_eq (s,t) =
-    index <- FingerprintIndex.add [s, ((s,t), false); t, ((t,s), false)] index;
+  method add_eq (s,t) = (* only used for okb *)
+    let ee = [s, ((s,t), [], false); t, ((t,s), [], false)] in
+    index <- FingerprintIndex.add ee index;
     Hashtbl.clear nf_table;
     Hashtbl.clear step_table
   ;;
   
-  method add_rule (s,t) =
-    index <- FingerprintIndex.add [s, ((s,t), true)] index;
+  method add_rule (s,t) = (* only used for okb *)
+    index <- FingerprintIndex.add [s, ((s,t), [], true)] index;
     Hashtbl.clear nf_table;
     Hashtbl.clear step_table
   ;;
@@ -107,17 +114,22 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   ;;
 
   method check t =
-   let eqs = Ac.eqs acs in
-   let rs = L.filter (fun (l,_) -> Subst.is_instance_of t l) (trs @ eqs) in
-   let rs' = L.map fst (FingerprintIndex.get_matches t index) in
-   assert (Listset.subset rs rs')
+   let eqs = [eq, [] | eq <- Ac.eqs acs] in
+   let rs = L.filter (fun ((l,_), _) -> Subst.is_instance_of t l) (trs @ eqs) in
+   let rs' = L.map (fun (r,_,_) -> r) (FingerprintIndex.get_matches t index) in
+   assert (Listset.subset (List.map fst rs) rs')
   ;;
 
-  method rewrite_at_root_with t ((l, r), only_unordered) =
+  method rewrite_at_root_with t ((l, r), dc, only_unordered) =
+    let sigma0 = Subst.pattern_match l t in (* before rename, for DC *)
     let (l, r) = if only_unordered then (l,r) else Rule.rename (l, r) in
     let sigma = Subst.pattern_match l t in
     let rsub = Term.substitute sigma r in
-    if only_unordered then (l,r), sigma, rsub
+    if not (DC.is_ok_for sigma0 dc) then raise (Dismatching_constraint dc)
+    else if only_unordered then (
+      Format.printf "Rewriting %a with %a is ok for %a%!\n"
+        Term.print t Rule.print (l,r) DC.print dc;
+      (l,r), sigma, rsub)
     else
       (* renamed rule: avoid capture of Var(r) - Var(l) *)
       let rho = match order#bot with
@@ -135,10 +147,10 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   (* FIXME: so far only for equations with same variables on both sides *)
   method rewrite_at_root t = function
     | [] -> None, t
-    | (st, b) :: rules -> (
+    | (st, dc, b) :: rules -> (
       if !(Settings.do_assertions) then
         assert (Rule.is_rule st);
-      try let rl, s, u = self#rewrite_at_root_with t (st, b) in Some (rl,s), u
+      try let rl, s, u = self#rewrite_at_root_with t (st,dc,b) in Some (rl,s), u
       with _ -> self#rewrite_at_root t rules)
   ;;
 
@@ -177,7 +189,7 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   (* only to reconstruct rewrite sequences *)
   method rewrite_at_with t rl p =
     let t' = Term.subterm_at p t in
-    let _, sub, ti' = self#rewrite_at_root_with t' (rl, false) in
+    let _, sub, ti' = self#rewrite_at_root_with t' (rl, [], false) in
     Term.replace t ti' p, sub
   ;;
 
