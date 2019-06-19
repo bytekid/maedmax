@@ -135,6 +135,7 @@ type t = {
   complete_if_no_goal : bool;
   switch_to_okb : bool;
   modulo_ac : bool;
+  modulo_constraints : bool;
   norm : literal list
 }
 
@@ -210,6 +211,7 @@ let default = {
   complete_if_no_goal = true;
   switch_to_okb = false;
   modulo_ac = false;
+  modulo_constraints = false;
   norm = []
 }
 
