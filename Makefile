@@ -13,6 +13,7 @@ clean:
 
 native:  	sanity
 			$(OCB) main.native
+			cp main.native maedmax
 
 byte: 		sanity
 			$(OCB) main.byte

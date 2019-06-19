@@ -5,6 +5,7 @@ open Z3
 module B = Boolean
 module Arith = Arithmetic
 module I = Arith.Integer
+module Real = Arith.Real
 
 (*** TYPES *******************************************************************)
 type context = {
@@ -175,9 +176,18 @@ let eval m x =
     | _ -> failwith "Z3x.eval: failed"
 ;;
 
+let get_big_int x e =
+  try I.get_big_int e
+  with _ ->
+    (* FIXME: Z3 sometimes returns  *)
+    show x;
+    if String.equal (Expr.to_string e) "0.0" then Big_int.zero_big_int
+    else failwith ("Z3x.get_big_int: conversion error " ^ (Expr.to_string e))
+;;
+
 let eval_int_var m x =
   match Model.eval m x.expr true with
-  | Some e -> to_int (I.get_big_int e)
+  | Some e -> to_int (get_big_int x e)
   | _ -> failwith "Z3x.eval_int_var: failed"
 ;;
 
