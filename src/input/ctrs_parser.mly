@@ -1,7 +1,9 @@
 %{
+module Sig = Signature
+open ConstrEq
+
 open Lexing
 open Parsing
-open Term
 
 type preterm =
   | Node of string * preterm list
@@ -12,7 +14,7 @@ type input = {
   theory: string;
   logic: string;
   signature: string list;
-  rules: (preterm * preterm) list;
+  rules: ((preterm * preterm) * ConstrEq.bool_expr) list;
   attributes: attribute list;
   query: string
 }
@@ -26,21 +28,12 @@ let empty = {
   query = ""
 }
 
-(* variables, rules, theories, conditions *)
-let add xs rs ts (xs', rs', ts', cs) =
-  (xs @ xs', rs @ rs', ts @ ts', cs)
-;;
-
-let add_conditions cs (xs', rs', ts', cs') = (xs', rs', ts', cs @ cs')
-
 let rec convert_term fs = function
-  | Node (x, []) when not (List.mem x fs) -> V (Signature.var_called x)
-  | Node (f, ts) -> F (Signature.fun_called f, List.map (convert_term fs) ts)
+  | Node (x, []) when not (List.mem x fs) -> Term.V (Sig.var_called x)
+  | Node (f, ts) -> Term.F (Sig.fun_called f, List.map (convert_term fs) ts)
 ;;
 
-let convert_rule fs (l, r) =
-  Literal.make_axiom (convert_term fs l, convert_term fs r)
-;;
+let convert_rule fs ((l, r), c) = (convert_term fs l, convert_term fs r), c
 
 let convert_rules d = List.map (convert_rule d.signature) d.rules
 
@@ -70,14 +63,25 @@ let add_attr a d = {d with attributes = a :: d.attributes}
 %token LBRACKET RBRACKET
 %token ARROW COMMA SEMICOLON DOT QUOTE HASH
 %token SIGNATURE RULES LOGIC SOLVER THEORY
-%token OP_BIT_OR OP_BIT_AND OP_BIT_XOR
-%token OP_PLUS OP_MINUS OP_MULT OP_DIV
-%token OP_EQUAL OP_LT OP_GT OP_LE OP_GE
-%token OP_AND OP_OR
+%token <int> OP_BV_OR
+%token <int> OP_BV_AND
+%token <int> OP_BV_XOR
+%token <int> OP_BV_ADD
+%token <int> OP_BV_SUB
+%token <int> OP_BV_MULT
+%token <int> OP_BV_DIV
+%token <int> OP_BV_EQ
+%token <int> OP_BV_LT
+%token <int> OP_BV_GT
+%token <int> OP_BV_LE
+%token <int> OP_BV_GE
+%token OP_AND OP_OR OP_EQUAL
+%token <string * int> CONST
+%token <string * int> IDENT_BITS
 %token NON_STANDARD IRREGULAR QUERY
 %token OTHER EOF
 
-%type <Literal.t list> toplevel
+%type <ConstrEq.t list> toplevel
 %start toplevel
 
 %%
@@ -101,7 +105,7 @@ funs:
 
 more_funs:
   | COMMA funs { $2 }
-  |            {[]}
+  |            { [] }
 
 attribute:
   | NON_STANDARD { Non_standard }
@@ -112,11 +116,42 @@ rules:
   |                      { [] }
 
 rule:
-  | term ARROW term rule_condition { ($1, $3) }
+  | term ARROW term { (($1, $3), Top) }
+  | term ARROW term log_constraint { (($1, $3), $4) }
   | error                          { syntax_error "Syntax error." }
 
-rule_condition:
-  | {}
+log_constraint:
+  | LBRACKET bool_expr RBRACKET { $2 }
+  |                             { Top }
+
+bool_expr:
+  | LPAREN bool_expr RPAREN {$2}
+  | bool_expr OP_AND bool_expr { And($1, $3) }
+  | bool_expr OP_OR bool_expr { Or($1, $3) }
+  | bv_expr OP_BV_EQ bv_expr { Equal($1, $3) }
+  | bv_expr OP_BV_LE bv_expr { Le($1, $3) }
+  | bv_expr OP_BV_LT bv_expr { Lt($1, $3) }
+  | bv_expr OP_BV_GE bv_expr { Ge($1, $3) }
+  | bv_expr OP_BV_GT bv_expr { Gt($1, $3) }
+  | IDENT_BITS LPAREN bv_exprs RPAREN {Pred(fst $1, snd $1, $3)}
+
+bv_expr:
+  | LPAREN bv_expr RPAREN {$2}
+  | bv_expr OP_BV_AND bv_expr { Bv_and($1, $3) }
+  | bv_expr OP_BV_OR bv_expr { Bv_or($1, $3) }
+  | bv_expr OP_BV_XOR bv_expr { Bv_xor($1, $3) }
+  | bv_expr OP_BV_ADD bv_expr { Bv_add($1, $3) }
+  | bv_expr OP_BV_SUB bv_expr { Bv_sub($1, $3) }
+  | CONST { Const (fst $1, snd $1) }
+  | IDENT_BITS LPAREN bv_exprs RPAREN {Fun(fst $1, snd $1, $3)}
+  | IDENT { Var $1 }
+
+bv_exprs:
+  | bv_expr more_bv_exprs {$1 :: $2}
+
+more_bv_exprs:
+  | COMMA bv_exprs { $2 }
+  |                { [] }
 
 term:
   | IDENT LPAREN terms RPAREN { Node ($1, $3) }

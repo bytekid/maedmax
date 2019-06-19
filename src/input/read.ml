@@ -104,7 +104,7 @@ let read_tptp orig_filename =
 
 let file filename =
   if Filename.check_suffix filename "ctrs" then
-    Settings.Unit(read_ctrs filename,[])
+    Settings.Constrained (read_ctrs filename)
   else if Filename.check_suffix filename "trs" then
     match read_trs filename with
     | eqs, None -> Settings.Unit(eqs, [])

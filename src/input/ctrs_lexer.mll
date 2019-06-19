@@ -13,6 +13,21 @@ let ident_or_keyword = function
   | "QUERY" -> QUERY
   | s -> IDENT s
 
+let bv_op op ws =
+  let w = int_of_string ws in
+  match op with
+  | "+" -> OP_BV_ADD w
+  | "-" -> OP_BV_SUB w
+  | "|" -> OP_BV_OR w
+  | "&" -> OP_BV_AND w
+  | "^" -> OP_BV_XOR w
+  | "=" -> OP_BV_EQ w
+  | "<=" -> OP_BV_LE w
+  | "<" -> OP_BV_LT w
+  | ">=" -> OP_BV_LE w
+  | ">" -> OP_BV_LT w
+;;
+
 exception Lexing_error of string
 
 let new_line lexbuf =
@@ -23,9 +38,16 @@ let new_line lexbuf =
 
 }
 
+let bv_op_sym = ['&' '|' '=' '<' '>' '^' '~' '-' '+' '*']
+
 let letter = 
   ['a'-'z' 'A'-'Z' '0'-'9' ':' '<' '>' '_' '@' '`' '$'
    '{' '}' '-' '~' '?' '"' '!' '%']
+
+let num = ['0' - '9']+
+
+let hex = ['0' - '9' 'a'-'f']+
+
 
 rule token = parse
   | [' ' '\r' '\t'] {  token lexbuf }
@@ -37,20 +59,15 @@ rule token = parse
   | "["    { LBRACKET }
   | "]"    { RBRACKET }
   | ","    { COMMA }
-  | "."    { DOT }
   | '"'    { QUOTE }
   | "#"    { HASH }
   | "\\/"  { OP_OR }
   | "/\\"  { OP_AND }
-  | "|"    { OP_BIT_OR }
-  | "&"    { OP_BIT_AND }
-  | "^"    { OP_BIT_XOR }
-  | "+"    { OP_PLUS }
-  | "-"    { OP_MINUS }
-  | "*"    { OP_MULT }
-  | "/"    { OP_DIV }
   | "="    { OP_EQUAL }
   | "END OF FILE"    { EOF }
+  | (bv_op_sym+ as op) "." (num as n) { bv_op op n }
+  | "bv" (num as n) "\"#x" (hex as v) "\"" { CONST (v, int_of_string n) }
+  | (letter+ as id) "." (num as n) { IDENT_BITS (id, int_of_string n) }
   | letter+ as s { ident_or_keyword s }
   | _      { OTHER }
   | eof    { EOF }

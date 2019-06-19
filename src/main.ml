@@ -550,11 +550,13 @@ let () =
           printf "%s %.2f %s@." "time:" secs "seconds")
         )
     )
-  | NonUnit (cls, gs) ->
+  | NonUnit (cls, gs) -> (
     Format.printf "oh no, it's not unit!\n%!";
     settings := {!settings with instgen = true};
     Settings.do_proof := Some TraceForInstgen;
     match Instgen.start (!settings, !heuristic) (cls @ gs) with
     | SAT -> Format.printf "Satisfiable\n%!"
-    | UNSAT -> Format.printf "Unsatisfiable\n%!"
+    | UNSAT -> Format.printf "Unsatisfiable\n%!")
+  | Constrained ces ->
+    List.iter (fun ce -> Format.printf "%a\n" ConstrEq.print ce) ces
 ;;

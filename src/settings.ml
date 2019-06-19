@@ -79,6 +79,7 @@ type clause = literal list
 type input =
   | Unit of literal list * literal list
   | NonUnit of literal list list * literal list list
+  | Constrained of ConstrEq.t list
 
 type proof_format = CPF | TPTP | SelectionTrace | TraceForInstgen
 
