@@ -29,8 +29,7 @@ let convert_rules (xs, rs, th, cs) =
   let rules = List.map (convert_rule xs) rs in
   let c = match cs with
     | [] -> None
-    | [e] -> 
-      let f = Signature.fresh_fun_called "_goal" in
+    | [e] ->
       Some (convert_goal xs e)
     | _ -> 
       let f = "_goal" in
