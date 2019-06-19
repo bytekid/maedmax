@@ -14,7 +14,7 @@ let open_in_do ?path f =
 
 
 let syntax_error p =
-  eprintf "File %S at line %d, character %d:@.Syntax error.@." 
+  eprintf "File %s at line %d, character %d:@.Syntax error.@." 
     p.pos_fname p.pos_lnum (p.pos_cnum - p.pos_bol)
 
 let read_trs filename =
@@ -32,6 +32,24 @@ let read_trs filename =
     open_in_do ~path:filename f
   with Sys_error s -> 
     (eprintf "Error:@.%s@." s; exit 1)
+;;
+
+let read_ctrs filename =
+  let f ch = 
+    let lexbuf = from_channel ch in
+    let lex_curr_p = 
+      { lexbuf.lex_curr_p with pos_fname = filename } in
+    try
+      let buf = { lexbuf with lex_curr_p = lex_curr_p } in
+      Ctrs_parser.toplevel Ctrs_lexer.token buf
+    with Parsing.Parse_error -> 
+      (syntax_error lexbuf.lex_curr_p; exit 1)
+  in
+  try
+    open_in_do ~path:filename f
+  with Sys_error s -> 
+    (eprintf "Error:@.%s@." s; exit 1)
+;;
 
 let union2 (xs, ys) (xs', ys') = (xs @ xs', ys @ ys')
 
@@ -84,8 +102,10 @@ let read_tptp orig_filename =
   transform_input cls gs
 ;;
 
-let file filename = 
-  if Filename.check_suffix filename "trs" then
+let file filename =
+  if Filename.check_suffix filename "ctrs" then
+    Settings.Unit(read_ctrs filename,[])
+  else if Filename.check_suffix filename "trs" then
     match read_trs filename with
     | eqs, None -> Settings.Unit(eqs, [])
     | eqs, Some c -> Settings.Unit(eqs, [c])
