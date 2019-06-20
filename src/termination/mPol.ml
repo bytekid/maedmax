@@ -36,6 +36,12 @@ let gt_encodings : (int * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 512
 let w_encodings : (int * Term.t, poly list) Hashtbl.t = Hashtbl.create 512
 
 (*** FUNCTIONS ***************************************************************)
+let (<>>) = Int.(<>>)
+
+let (<>=>) = Int.(<>=>)
+
+let (<+>) = Int.(<+>)
+
 let cache ht f k =
  try Hashtbl.find ht k with Not_found ->
  let v = f k in Hashtbl.add ht k v; v
@@ -65,11 +71,11 @@ let stat k f =
  try Hashtbl.find status (k,f) 
  with Not_found -> failwith "MPol.stat: Not_found"
 
-let assoc ctx x xs = try List.assoc x xs with Not_found -> mk_num ctx 0
+let assoc ctx x xs = try List.assoc x xs with Not_found -> Int.mk_num ctx 0
 
 (* ENCODINGS: SIDE CONDITIONS *)
 let wmin (ctx,k) =
- let zero = mk_zero ctx in
+ let zero = Int.mk_zero ctx in
  let nat = big_and ctx [w k c <>=> zero | c,a <- !funs] in
  let w0n = (w0 ()) <>=> zero in
  big_and1 (w0n :: nat :: [(w k c) <>=> (w0 ()) | c,a <- !funs; a = 0 ])
@@ -79,8 +85,8 @@ let wmin (ctx,k) =
 let coeff (ctx,k) =
  let coeff f a i = 
   let c = sc k f i in
-  [(mk_num ctx 2) <>=> c; c <>=> (mk_num ctx 0); 
-   (stat k f) <=>> (c <>=> (mk_num ctx 1))]
+  [(Int.mk_num ctx 2) <>=> c; c <>=> (Int.mk_num ctx 0); 
+   (stat k f) <=>> (c <>=> (Int.mk_num ctx 1))]
  in
  big_and ctx [ c | f,a <- !funs; i <- Listx.interval 0 (a-1); c <- coeff f a i]
 ;;
@@ -98,7 +104,7 @@ let wadd ctx (w,xs) (w',xs') =
 let map_cs f ws = [ f w,[x, f v | x,v <- xs] | w,xs <- ws ]
 
 let ite_weights ctx b (w,xs) =
- let add0 x = ite b (mk_num ctx 0) x in
+ let add0 x = ite b (Int.mk_num ctx 0) x in
  let ite_all xs ys =
   [z, ite b (assoc ctx z xs) (assoc ctx z ys) | z <- vars xs ys]
  in function
@@ -107,13 +113,13 @@ let ite_weights ctx b (w,xs) =
 ;;
 
 let mul ctx c x =
- let zero, one = mk_num ctx 0, mk_num ctx 1 in
+ let zero, one = Int.mk_num ctx 0, Int.mk_num ctx 1 in
  ite (c <=> zero) zero (ite (c <=> one) x (x <+> x))
 ;;
 
 let weight (ctx,k) t =
  let rec wt = function
-  | V x -> [w0 (),[x,mk_num ctx 1]]
+  | V x -> [w0 (),[x,Int.mk_num ctx 1]]
   | F(f,ts) -> 
    let wf = w k f,[] in
    let wts = [ wti | ti <- ts; wti <- wt ti] in
@@ -176,16 +182,16 @@ let ge (ctx,k) s t =
 let init (ctx,k) fs =
   let add (f,a) =
    let s = (name f) ^ (string_of_int k) in
-   Hashtbl.add precedence (k,f) (mk_int_var ctx (s^"p"));
-   Hashtbl.add weights (k,f) (mk_int_var ctx s);
+   Hashtbl.add precedence (k,f) (Int.mk_var ctx (s^"p"));
+   Hashtbl.add weights (k,f) (Int.mk_var ctx s);
    Hashtbl.add status (k,f) (mk_fresh_bool_var ctx);
    let init_sc i =
     let s = "sc" ^ s ^ "_" ^ (string_of_int i) in
-    Hashtbl.add scs (k,f,i) (mk_int_var ctx s);
+    Hashtbl.add scs (k,f,i) (Int.mk_var ctx s);
    in List.iter init_sc (Listx.interval 0 (a-1))
   in List.iter add fs;
   funs := fs;
-  w0_var := Some (mk_int_var ctx ("w0" ^ (string_of_int k)));  
+  w0_var := Some (Int.mk_var ctx ("w0" ^ (string_of_int k)));  
   (wmin (ctx,k)) <&> (coeff (ctx,k))
 ;;
 
@@ -203,8 +209,8 @@ let decode_prec k m fs =
  in
  let add (k',f) v fv = if (k = k') then (f,v):: fv else fv in
  let fv = Hashtbl.fold add precedence [] in
- let has_val d = try let _ = eval_int_var m d in true with _ -> false in
- let prec = [f, eval_int_var m x | f,x <- fv; has_val x] in
+ let has_val d = try let _ = Int.eval m d in true with _ -> false in
+ let prec = [f, Int.eval m x | f,x <- fv; has_val x] in
  let fs' = [ f | f <- fs; List.mem_assoc f prec ] in
  let pg = Listx.group_by (fun x -> List.assoc x prec) fs' in
  let pg = List.sort ( fun (a,_) (b,_) -> Pervasives.compare b a) pg in
@@ -213,13 +219,13 @@ let decode_prec k m fs =
 
 let decode_weights k m fs =
  Format.printf "weights: @\n ";
- let dec_var d = try eval_int_var m d with _ -> 0 in
+ let dec_var d = try Int.eval m d with _ -> 0 in
  Format.printf " w0 = %i\n%!" 
   (dec_var (match !w0_var with Some v -> v | _ -> failwith "no w0"));
  let dec (f, a) =
   let v = Hashtbl.find weights (k,f) in  
   let s = stat k f in
-  let w = eval_int_var m v in
+  let w = Int.eval m v in
   let fn = Signature.get_fun_name f in
   let sc i = Hashtbl.find scs (k,f,i) in
   let si = string_of_int in

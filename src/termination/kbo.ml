@@ -26,6 +26,10 @@ let af_is_list : (int * Sig.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
 let af_arg : ((int * Sig.sym) * int, Logic.t) Hashtbl.t = Hashtbl.create 64
 
 (*** FUNCTIONS ***************************************************************)
+let (<>>) = Int.(<>>)
+
+let (<>=>) = Int.(<>=>)
+
 let name = Sig.get_fun_name
 
 let w k f = Hashtbl.find weights (k,f)
@@ -34,7 +38,7 @@ let prec k f = Hashtbl.find precedence (k,f)
 
 let adm_smt (ctx,k) =
   let p = prec k in
-  let zero, one = mk_zero ctx, mk_one ctx in
+  let zero, one = Int.mk_zero ctx, Int.mk_one ctx in
   let nat_f f = (w k f <>=> zero) <&> (p f <>=> zero) in
   let ensure_nat = big_and ctx [ nat_f f | f,_ <- !funs] in
   (* constants *)
@@ -54,8 +58,8 @@ let adm_smt (ctx,k) =
     
 let weight (ctx,k) t =
   let rec weight = function
-    | V _ -> mk_one ctx (* w0 = 1 *)
-    | F(f,ss) -> sum1 ((w k f) :: [weight si | si <- ss ])
+    | V _ -> Int.mk_one ctx (* w0 = 1 *)
+    | F(f,ss) -> Int.sum1 ((w k f) :: [weight si | si <- ss ])
   in weight t
 ;;
 
@@ -89,8 +93,8 @@ let init_kbo (ctx,k) fs =
   Hashtbl.clear weights;
   let add (f,_) =
     let s = "kbo" ^ (name f) ^ (string_of_int k) in
-    Hashtbl.add precedence (k,f) (mk_int_var ctx (s^"p"));
-    Hashtbl.add weights (k,f) (mk_int_var ctx s)
+    Hashtbl.add precedence (k,f) (Int.mk_var ctx (s^"p"));
+    Hashtbl.add weights (k,f) (Int.mk_var ctx s)
   in List.iter add fs;
   funs := fs;
   adm_smt (ctx,k)
@@ -121,7 +125,7 @@ let eval_table k m h =
     if k <> k' then p
     else (
       try
-        let v = eval_int_var m x in
+        let v = Int.eval m x in
         Hashtbl.add p f v; p
       with _ -> p)
   in Hashtbl.fold add h (Hashtbl.create 16)
@@ -203,7 +207,7 @@ let decode_xml fpws =
 ;;
 
 let encode k fpw ctx =
-  let num = Logic.mk_num ctx in
+  let num = Int.mk_num ctx in
   let add ((f,_),p,wf) = prec k f <=> (num p) <&> w k f <=> (num wf) in
   Logic.big_and ctx (List.map add fpw)
 ;;

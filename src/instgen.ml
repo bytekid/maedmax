@@ -87,8 +87,8 @@ let print_literals ppf ls =
 (* various shorthands *)
 let is_negative l = not (Lit.is_equality l);;
 let is_positive l = Lit.is_equality l;;
-let (<=>) = Logic.(<=>);;
 let (<&>) = Logic.(<&>);;
+let (<=>) = Logic.(<=>);;
 let (!!) = Logic.(!!);;
 
 let ground cls = [c, Clause.ground c | c <- Clauses.to_list cls]

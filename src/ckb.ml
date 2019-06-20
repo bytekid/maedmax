@@ -467,7 +467,7 @@ let (<|>) = Logic.(<|>)
 let (<&>) = Logic.(<&>)
 let (!!) = Logic.(!!)
 let (<=>>) = Logic.(<=>>)
-let (<>>) = Logic.(<>>)
+let (<>>) = Logic.Int.(<>>)
 
 let c_maxcomp ctx cc =
  let oriented ((l,r),v) = v <|> (C.find_rule (r,l)) in

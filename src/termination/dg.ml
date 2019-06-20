@@ -7,7 +7,6 @@ module Logic = Settings.Logic
 open Logic
 open Rewriting
 
-(*** TYPES *******************************************************************)
 (*** GLOBALS *****************************************************************)
 let t_edge : (int * Rule.t * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 128
 let cycle_id :  (int * Signature.sym, Logic.t) Hashtbl.t = Hashtbl.create 128
@@ -17,6 +16,9 @@ let varcount = ref 0
 let t_scc : (int * Signature.sym, Logic.t) Hashtbl.t = Hashtbl.create 128
 
 (*** FUNCTIONS ***************************************************************)
+let (<>>) = Int.(<>>)
+
+let (<>=>) = Int.(<>=>)
 
 let x_edge ctx j p1 p2 =
  try Hashtbl.find t_edge (j,p1,p2) with Not_found ->
@@ -28,7 +30,7 @@ let x_edge ctx j p1 p2 =
 let x_scc ctx j f =
  try Hashtbl.find t_scc (j,f) with Not_found ->
   let fresh_name () = incr varcount; "scc"^(string_of_int !varcount) in
-  let x = mk_int_var ctx (fresh_name ()) in
+  let x = Int.mk_var ctx (fresh_name ()) in
   Hashtbl.add t_scc (j,f) x;
   x
 ;;
@@ -37,7 +39,7 @@ let init_without_sccs ctx = ()
 
 let init_with_sccs ctx fs j k =
  let xfs = [x_scc ctx j f | f,_ <- fs] in
- let n0, nk = mk_num ctx 0, mk_num ctx k in
+ let n0, nk = Int.mk_num ctx 0, Int.mk_num ctx k in
  big_and1 [nk <>> xf <&> (xf <>=> n0) | xf <- xfs]
 ;;
 
@@ -71,13 +73,10 @@ let has_edge' ctx (_,t) (u,_) =
  with _ -> failwith "edge_exists: variable found"
 ;;
 
-
-
-
 let x_w ctx j f =
  try Hashtbl.find cycle_id (j,f) with Not_found ->
   let fresh_name () = incr varcount; "wgt"^(string_of_int !varcount) in
-  let x = mk_int_var ctx (fresh_name ()) in
+  let x = Int.mk_var ctx (fresh_name ()) in
   Hashtbl.add cycle_id (j,f) x;
   x
 ;;

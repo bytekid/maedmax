@@ -158,8 +158,8 @@ let (<=>>) = L.(<=>>)
 let (<|>) = L.(<|>)
 let (<&>) = L.(<&>)
 let (!!) = L.(!!)
-let (<>>) = L.(<>>)
-let (<>=>) = L.(<>=>)
+let (<>>) = L.Int.(<>>)
+let (<>=>) = L.Int.(<>=>)
 let (<=>) = L.(<=>)
 let (<<=>>) = L.(<<=>>)
 
@@ -435,7 +435,7 @@ let dg_scc_constraints ctx j rs (k,os) =
   let j', j'' = j+1, j+2 in
   let is = Listx.interval 0 (k-1) in
   let x_w = Dg.x_w ctx j' and x_scc = Dg.x_scc ctx j' in
-  let num = L.mk_num ctx in
+  let num = L.Int.mk_num ctx in
   (* mappings from rules/DPs to constraints *)
   let c_dg ((l,r) as p) =
     (s j' p) <=>> ((x_scc (Term.root l)) <>=> (x_scc (Term.root r)))

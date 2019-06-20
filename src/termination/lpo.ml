@@ -33,6 +33,10 @@ let ge_encodings : (int * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 512
 let eq_encodings : (int * Rule.t, Logic.t) Hashtbl.t = Hashtbl.create 512
 
 (*** FUNCTIONS ***************************************************************)
+let (<>>) = Int.(<>>)
+
+let (<>=>) = Int.(<>=>)
+
 let name = Sig.get_fun_name
 
 let set_af _ = flags.af := true
@@ -182,7 +186,7 @@ let ge_af (ctx,k) s t = ylpo_af false (ctx,k) s t
 let make_fun_vars ctx k fs =
  let add f =
    let ki = string_of_int k in
-   Hashtbl.add precedence (k,f) (mk_int_var ctx ("lpo" ^ (name f) ^ "-" ^ ki))
+   Hashtbl.add precedence (k,f) (Int.mk_var ctx ("lpo" ^ (name f) ^ "-" ^ ki))
  in L.iter add fs
 ;;
 
@@ -191,8 +195,8 @@ let init (ctx,k) fs =
   Hashtbl.clear precedence;
   let fs' = L.map fst fs in
   make_fun_vars ctx k fs';
-  let bnd_0 = mk_zero ctx in
-  let bnd_n = mk_num ctx (L.length fs') in
+  let bnd_0 = Int.mk_zero ctx in
+  let bnd_n = Int.mk_num ctx (L.length fs') in
   let bounds f = let p = prec k f in (p <>=> bnd_0) <&> (bnd_n <>=> p) in
   (* total: causes stack overflow with too large signatures *)
   let total_prec =
@@ -222,7 +226,7 @@ let decode_prec_aux k m =
    if k <> k' then p
    else (
      try
-       let v = eval_int_var m x in
+       let v = Int.eval m x in
        Hashtbl.add p f v; p
      with _ -> p)
  in Hashtbl.fold add precedence (Hashtbl.create 16)
@@ -309,7 +313,7 @@ let print_params = function
   ;;
 
 let encode i preclist ctx =
- let add ((f,_), p) = (prec i f <=> (Logic.mk_num ctx p)) in
+ let add ((f,_), p) = (prec i f <=> (Int.mk_num ctx p)) in
  Logic.big_and ctx (List.map add preclist)
 ;;
 

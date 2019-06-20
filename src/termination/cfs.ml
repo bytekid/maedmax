@@ -15,6 +15,7 @@ let decreasing : (int * Signature.sym, Logic.t) Hashtbl.t = Hashtbl.create 32
 let all_weak : Logic.t option ref = ref None  
 
 (*** FUNCTIONS ***************************************************************)
+let (<>=>) = Logic.Int.(<>=>)
 let passthru () = match !all_weak with
     Some x -> x 
   | None -> failwith "Cfs.passthru: all_weak not initialized"
@@ -51,9 +52,9 @@ let ge (ctx,k) s t =
 let init (ctx,k) fs = 
  all_weak := Some (mk_fresh_bool_var ctx); (* passthru, eg if R duplicating *)
  funs := fs; 
- let zero, one = mk_num ctx 0, mk_num ctx 1 in
+ let zero, one = Int.mk_num ctx 0, Int.mk_num ctx 1 in
  (* only one function symbol may decrease *)
- one <>=> (sum ctx [ite (dec (ctx,k) f) one zero | f,_ <- !funs ])
+ one <>=> (Int.sum ctx [ite (dec (ctx,k) f) one zero | f,_ <- !funs ])
 ;;
 
 let decode_string k m = 

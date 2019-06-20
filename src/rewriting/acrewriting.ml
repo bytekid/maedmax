@@ -96,7 +96,7 @@ let rec fterm f = function
 (* rearrange arguments of AC symbols for canonical representation *)
 let rec ac_normalize t =
   match flatten t with (* also sort arguments of AC symbols *)
-  | T.F(f, ts) as t ->
+  | T.F(f, ts) ->
     if not (Sig.is_ac_symbol f) then T.F(f, L.map ac_normalize ts)
     else fterm f (L.map ac_normalize ts)
   | v -> v
@@ -501,7 +501,6 @@ let test () =
     let trss = Rules.to_string trs in
     let cps = cps trs in
     let app s (u,v) = (s^"\n "^(T.to_string u)^" = "^(T.to_string v)) in
-    let s = List.fold_left app "" cps in
     let pair_aceq (s,t) (u,v) = ac_equivalent s u && ac_equivalent t v in
     let cps = List.filter (fun (u, v) -> not (are_joinable trs u v)) cps in
     let s = List.fold_left app "" cps in

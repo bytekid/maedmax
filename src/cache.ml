@@ -105,7 +105,7 @@ let store_rule_vars ctx rls = List.iter (ignore <.> store_rule_var ctx) rls
 
 let store_eq_var ctx lr =
   let v = L.mk_fresh_bool_var ctx in
-  let vi = L.mk_int_var ctx ("eqw"^(string_of_int !equation_count)) in
+  let vi = L.Int.mk_var ctx ("eqw"^(string_of_int !equation_count)) in
   equation_count := !equation_count + 1;
   eq_vars := (lr, (v, vi)) :: !eq_vars;
   (v, vi) 

@@ -1,6 +1,6 @@
 %{
 module Sig = Signature
-open ConstrEq
+open Constrained.Equality
 
 open Lexing
 open Parsing
@@ -14,7 +14,7 @@ type input = {
   theory: string;
   logic: string;
   signature: string list;
-  rules: ((preterm * preterm) * ConstrEq.bool_expr) list;
+  rules: ((preterm * preterm) * Constrained.Equality.bool_expr) list;
   attributes: attribute list;
   query: string
 }
@@ -81,7 +81,7 @@ let add_attr a d = {d with attributes = a :: d.attributes}
 %token NON_STANDARD IRREGULAR QUERY
 %token OTHER EOF
 
-%type <ConstrEq.t list> toplevel
+%type <Constrained.Equality.t list> toplevel
 %start toplevel
 
 %%
@@ -98,7 +98,6 @@ decl:
   | QUERY IDENT decl              { set_query $2 $3 }
   | attribute decl                { add_attr $1 $2 }
   |                               { empty }
-  | error { syntax_error "Syntax error." }
 
 funs:
   | IDENT more_funs { $1 :: $2 }
@@ -116,7 +115,6 @@ rules:
   |                      { [] }
 
 rule:
-  | term ARROW term { (($1, $3), Top) }
   | term ARROW term log_constraint { (($1, $3), $4) }
   | error                          { syntax_error "Syntax error." }
 
@@ -129,10 +127,10 @@ bool_expr:
   | bool_expr OP_AND bool_expr { And($1, $3) }
   | bool_expr OP_OR bool_expr { Or($1, $3) }
   | bv_expr OP_BV_EQ bv_expr { Equal($1, $3) }
-  | bv_expr OP_BV_LE bv_expr { Le($1, $3) }
-  | bv_expr OP_BV_LT bv_expr { Lt($1, $3) }
-  | bv_expr OP_BV_GE bv_expr { Ge($1, $3) }
-  | bv_expr OP_BV_GT bv_expr { Gt($1, $3) }
+  | bv_expr OP_BV_LE bv_expr { Bv_le($1, $3) }
+  | bv_expr OP_BV_LT bv_expr { Bv_lt($1, $3) }
+  | bv_expr OP_BV_GE bv_expr { Bv_ge($1, $3) }
+  | bv_expr OP_BV_GT bv_expr { Bv_gt($1, $3) }
   | IDENT_BITS LPAREN bv_exprs RPAREN {Pred(fst $1, snd $1, $3)}
 
 bv_expr:
@@ -142,9 +140,9 @@ bv_expr:
   | bv_expr OP_BV_XOR bv_expr { Bv_xor($1, $3) }
   | bv_expr OP_BV_ADD bv_expr { Bv_add($1, $3) }
   | bv_expr OP_BV_SUB bv_expr { Bv_sub($1, $3) }
-  | CONST { Const (fst $1, snd $1) }
+  | CONST { HexConst (fst $1, snd $1) }
   | IDENT_BITS LPAREN bv_exprs RPAREN {Fun(fst $1, snd $1, $3)}
-  | IDENT { Var $1 }
+  | IDENT { Var($1, 8) }
 
 bv_exprs:
   | bv_expr more_bv_exprs {$1 :: $2}
@@ -154,11 +152,15 @@ more_bv_exprs:
   |                { [] }
 
 term:
-  | IDENT LPAREN terms RPAREN { Node ($1, $3) }
-  | IDENT                     { Node ($1, []) }
-  | error { syntax_error "Syntax error." }
+  | IDENT args { Node ($1, $2) }
+
+args:
+  | LPAREN terms RPAREN { $2 }
+  |                     { [] }
 
 terms:
-  | term COMMA terms { $1 :: $3 }
-  | term             { [$1] }
-  |                  { [] }
+  | term more_terms {$1 :: $2}
+
+more_terms:
+  | COMMA terms { $2 }
+  |             { [] }

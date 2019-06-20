@@ -8,6 +8,7 @@ module Logic = Settings.Logic
 (*** OPENS *******************************************************************)
 open Term
 open Logic
+open Logic.Int
 
 (*** TYPES *******************************************************************)
 (*** GLOBALS *****************************************************************)
@@ -67,21 +68,21 @@ let rec lex ctx gt eq ts ss = match ts,ss with
 
 let mk_fresh_int_var ctx =
   var_count := !var_count + 1;
-  mk_int_var ctx ("cov"^ (string_of_int !var_count))
+  Int.mk_var ctx ("cov"^ (string_of_int !var_count))
 ;;
 
 (* multiset cover *)
 let mul_cover ctx ss ts =
  let cs = [ mk_fresh_int_var ctx | j,tj <- index ts ] in
  let m = List.length ss in
- let zero = mk_num ctx 0 in
- big_and ctx [(mk_num ctx m <>> ci) <&> (ci <>=> zero) | ci <- cs], cs
+ let zero = Int.mk_num ctx 0 in
+ big_and ctx [(Int.mk_num ctx m <>> ci) <&> (ci <>=> zero) | ci <- cs], cs
 ;;
 
 (* expresses multiset cover for arguments in ss and ts satisfying p *)
 let mul_p ctx p gt eq ss ts =
  let cover, cs = mul_cover ctx ss ts in
- let is cj i = cj <=> (mk_num ctx i) in
+ let is cj i = cj <=> (Int.mk_num ctx i) in
  let gtp si tj = (gt si tj <|> eq si tj) <&> p si in
  let y cj tj = big_and ctx [ (is cj i) <=>> (gtp si tj) | i,si <- index ss] in
  let tcs = index (Listx.zip ts cs) in
@@ -102,7 +103,7 @@ let mul_gt_p ctx p gt eq ss ts =
   | [s], [t] -> gt s t
   | _ ->
     let cover, cs = mul_cover ctx ss ts in
-    let is cj i = cj <=> (mk_num ctx i) in
+    let is cj i = cj <=> (Int.mk_num ctx i) in
     let gep si tj = (gt si tj <|> eq si tj) <&> p si in
     let gtp si tj = gt si tj <&> p si in
     let yge cj tj = big_and ctx [ (is cj i) <=>> (gep si tj) | i,si <- index ss] in
@@ -121,7 +122,7 @@ let emb_sm f ts =
  let rec emb hd =  function
   | [] -> []
   | ((V _) as t)::ts -> emb (hd @ [t]) ts
-  | (F(h, hs) as t)::ts when f = h -> failwith ("emb_sm: not flat?!") (*emb (hd @ [t]) ts*)
+  | F(h, hs) :: ts when f = h -> failwith ("emb_sm: not flat?!") (*emb (hd @ [t]) ts*)
   | (F(h, hs) as t)::ts -> [hd @ (tf hi) @ ts,h | hi <- hs ] @ (emb (hd@[t]) ts)
  in [F(f, ts), h | ts, h <- emb [] ts ]
 ;;
@@ -216,7 +217,7 @@ let init (ctx,k) fs =
   Hashtbl.clear precedence;
   let add (f,_) =
     let s = "rpo" ^ (Sig.get_fun_name f) ^ (string_of_int k) in
-    Hashtbl.add precedence (k,f) (mk_int_var ctx (s^"p"));
+    Hashtbl.add precedence (k,f) (Int.mk_var ctx (s^"p"));
     Hashtbl.add status_mul (k,f) (mk_fresh_bool_var ctx);
   in List.iter add fs;
   funs := fs;
@@ -228,8 +229,8 @@ let init (ctx,k) fs =
       let p f = prec f k in
       big_and ctx [ p f <!=> p g | f, g <- ps ]
   in
-  let num_0 = mk_zero ctx in
-  let num_n = mk_num ctx (L.length fs) in
+  let num_0 = Int.mk_zero ctx in
+  let num_n = Int.mk_num ctx (L.length fs) in
   let bounds f = let p = prec f k in (p <>=> num_0) <&> (num_n <>=> p) in
   let total = big_and1 (total_prec :: [ bounds f | f,_ <- fs ]) in
   let ac = big_and ctx [ status_is_mul k f | f,_ <- fs; is_ac f ] in
@@ -241,7 +242,7 @@ let decode_prec_aux k m =
     if k <> k' then p
     else (
       try
-        let v = eval_int_var m x in
+        let v = Int.eval m x in
         Hashtbl.add p f v; p
       with _ -> p)
   in Hashtbl.fold add precedence (Hashtbl.create 16)
@@ -284,7 +285,7 @@ let decode_prec_aux k m =
  ;;
 
  let encode i preclist ctx =
-  let add ((f,_), p) = (prec f i <=> (Logic.mk_num ctx p)) in
+  let add ((f,_), p) = (prec f i <=> (Int.mk_num ctx p)) in
   Logic.big_and ctx (List.map add preclist)
  ;;
 

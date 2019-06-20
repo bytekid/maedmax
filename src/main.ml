@@ -558,5 +558,5 @@ let () =
     | SAT -> Format.printf "Satisfiable\n%!"
     | UNSAT -> Format.printf "Unsatisfiable\n%!")
   | Constrained ces ->
-    List.iter (fun ce -> Format.printf "%a\n" ConstrEq.print ce) ces
+    List.iter (fun ce -> Format.printf "%a\n" Constrained.Equality.print ce) ces
 ;;

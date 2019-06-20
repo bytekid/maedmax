@@ -26,6 +26,7 @@ let bv_op op ws =
   | "<" -> OP_BV_LT w
   | ">=" -> OP_BV_LE w
   | ">" -> OP_BV_LT w
+  | _ -> failwith "unknown bitvector operator"
 ;;
 
 exception Lexing_error of string

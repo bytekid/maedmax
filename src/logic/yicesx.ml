@@ -40,19 +40,7 @@ let mk_true ctx = mk ctx (mk_true ctx)
 
 let mk_false ctx = mk ctx (mk_false ctx)
 
-let mk_num ctx n = mk ctx (mk_num ctx n)
-
-let mk_zero ctx = mk_num ctx 0
-
-let mk_one ctx = mk_num ctx 1
-
 let mk_fresh_bool_var ctx = mk ctx (mk_fresh_bool_var ctx)
-
-let mk_int_var ctx name =
-  let ty  = mk_type ctx int_type_name in
-  let d = mk_var_decl ctx name ty in
-  mk_with_decl ctx (mk_var_from_decl ctx d) d
-;;
 
 let (!!) x =
   if is_true x then mk_false x.ctx else
@@ -97,15 +85,6 @@ let big_or = big_binop is_true mk_true is_false mk_false mk_or
 
 let big_or1 = big_binop1 big_or
 
-let (<+>) x y =
-  if is_zero x then y else if is_zero y then x else
-  mk x.ctx (mk_sum x.ctx [| x.expr; y.expr |])
-;;
-
-let sum = big_binop (fun _ -> false) mk_zero is_zero mk_zero mk_sum
-
-let sum1 = big_binop1 sum
-
 let apply ctx name args =
   let a = mk_type ctx "any" in
   let k = List.length args in
@@ -119,18 +98,108 @@ let apply ctx name args =
   else mk ctx (mk_app ctx f (Array.of_list [a.expr | a <- args]))
 ;;
 
-let (<>>) x y = mk x.ctx (mk_gt x.ctx x.expr y.expr)
-
-let (<>=>) x y = mk x.ctx (mk_ge x.ctx x.expr y.expr)
-
 let (<=>) x y = mk x.ctx (mk_eq x.ctx x.expr y.expr)
 
 let (<!=>) x y = mk x.ctx (mk_diseq x.ctx x.expr y.expr)
 
 let ite c t f = mk c.ctx (mk_ite c.ctx c.expr t.expr f.expr)
 
-let max x y = ite (x <>> y) x y
+module Int = struct
+  let mk_num ctx n = mk ctx (mk_num ctx n)
+  
+  let mk_zero ctx = mk_num ctx 0
+  
+  let mk_one ctx = mk_num ctx 1
 
+  let mk_var ctx name =
+    let ty  = mk_type ctx int_type_name in
+    let d = mk_var_decl ctx name ty in
+    mk_with_decl ctx (mk_var_from_decl ctx d) d
+  ;;
+
+  let (<>>) x y = mk x.ctx (mk_gt x.ctx x.expr y.expr)
+  
+  let (<>=>) x y = mk x.ctx (mk_ge x.ctx x.expr y.expr)
+
+  let (<+>) x y =
+    if is_zero x then y else if is_zero y then x else
+    mk x.ctx (mk_sum x.ctx [| x.expr; y.expr |])
+  ;;
+  
+  let sum = big_binop (fun _ -> false) mk_zero is_zero mk_zero mk_sum
+  
+  let sum1 = big_binop1 sum
+
+  let max x y = ite (x <>> y) x y
+
+  let eval m x =
+    match x.decl with
+        Some d -> Int32.to_int (get_int_value m d)
+      | None -> failwith "Yicesx.Int.eval no declaration found"
+  ;;
+end
+
+
+module BitVector = struct
+  let mk_var ctx name bits =
+    let ty  = mk_bitvector_type ctx bits in
+    let d = mk_var_decl ctx name ty in
+    mk_with_decl ctx (mk_var_from_decl ctx d) d
+  ;;
+
+  let mk_num ctx s bits =
+    let n = Prelude.hex2dec s in
+    mk ctx (mk_bv_constant ctx bits n)
+  ;;
+
+  let mk_add x y = mk x.ctx (mk_bv_add x.ctx x.expr y.expr)
+
+  let mk_sub x y = mk x.ctx (mk_bv_aub x.ctx x.expr y.expr)
+
+  let mk_neg x = mk x.ctx (mk_bv_minus x.ctx x)
+
+  let mk_mul x y = mk x.ctx (mk_bv_mul x.ctx x.expr y.expr)
+
+  let mk_udiv x y = failwith "Yicesx.BitVector.mk_udiv"
+
+  let mk_sdiv x y = failwith "Yicesx.BitVector.mk_sdiv"
+
+  let mk_ugt x y = mk x.ctx (mk_bv_ut x.ctx x.expr y.expr)
+
+  let mk_sgt x y = mk x.ctx (mk_bv_sgt x.ctx x.expr y.expr)
+
+  let mk_uge x y = mk x.ctx (mk_bv_ge x.ctx x.expr y.expr)
+
+  let mk_sge x y = mk x.ctx (mk_bv_sge x.ctx x.expr y.expr)
+
+  let mk_eq x y = x <=> y
+
+  let mk_neq x y = !! (mk_eq x y)
+
+  let mk_and x y = mk x.ctx (mk_bv_and x.ctx x.expr y.expr)
+
+  let mk_or = mk x.ctx (mk_bv_or x.ctx x.expr y.expr)
+
+  let mk_xor = mk x.ctx (mk_bv_xor x.ctx x.expr y.expr)
+
+  let mk_not = mk x.ctx (mk_bv_not x.ctx)
+
+  let mk_shl x y = mk x.ctx (mk_bv_shl x.ctx x.expr y.expr)
+
+  let mk_ashr = mk x.ctx (mk_bv_ashr x.ctx x.expr y.expr)
+
+  let mk_lshr = mk x.ctx (mk_bv_lshr x.ctx x.expr y.expr)
+
+  let eval m x =
+    match x.decl with
+      | Some d ->
+        let barr = get_bitvector_value m d 64 in
+        Array.fold (fun b s -> s ^ (if b then "1" else "0")) barr ""
+      | None -> failwith "Yicesx.eval_int: no declaration found"
+  ;;
+end
+
+(* assertions and stuff *)
 let require x = assert_simple x.ctx x.expr
 
 let assert_weighted x n =
@@ -151,12 +220,6 @@ let eval m x =
    let value = evaluate_in_model m x.expr in
    value = True
  with _ -> failwith "Yicesx.evaluate_in_model: variable unknown"
-;;
-
-let eval_int_var m x =
-  match x.decl with
-      Some d -> Int32.to_int (get_int_value m d)
-    | None -> failwith "Yicesx.eval_int: no declaration found"
 ;;
 
 let get_cost _ m = Int64.to_int (get_cost m)

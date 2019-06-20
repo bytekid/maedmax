@@ -6,6 +6,7 @@ module B = Boolean
 module Arith = Arithmetic
 module I = Arith.Integer
 module Real = Arith.Real
+module BV = BitVector
 
 (*** TYPES *******************************************************************)
 type context = {
@@ -64,18 +65,10 @@ let mk_true ctx = mk ctx (B.mk_true ctx.ctx)
 
 let mk_false ctx = mk ctx (B.mk_false ctx.ctx)
 
-let mk_num ctx n = mk ctx (I.mk_numeral_i ctx.ctx n)
-
-let mk_zero ctx = mk_num ctx 0
-
-let mk_one ctx = mk_num ctx 1
-
 let mk_fresh_bool_var ctx =
   var_count := !var_count + 1;
   mk ctx (B.mk_const ctx.ctx (Symbol.mk_int ctx.ctx !var_count))
 ;;
-
-let mk_int_var ctx name = mk ctx (I.mk_const_s ctx.ctx name)
 
 let (!!) x =
   if is_true x then mk_false x.ctx else
@@ -120,12 +113,11 @@ let big_or = big_binop is_true mk_true is_false mk_false B.mk_or
 
 let big_or1 = big_binop1 big_or
 
-let (<+>) x y =
-  if is_zero x then y else if is_zero y then x else
-  mk x.ctx (Arithmetic.mk_add (z3ctx x) [ x.expr; y.expr ])
-;;
+let ite c t f = mk c.ctx (B.mk_ite (z3ctx c) c.expr t.expr f.expr)
 
-let sum = big_binop (fun _ -> false) mk_zero is_zero mk_zero Arith.mk_add
+let (<=>) x y = mk x.ctx (B.mk_eq (z3ctx x) x.expr y.expr)
+
+let (<!=>) x y = !! (x <=> y)
 
 let apply (ctx : context) f args =
   let any = Sort.mk_uninterpreted_s ctx.ctx "any" in
@@ -134,20 +126,97 @@ let apply (ctx : context) f args =
   mk ctx (FuncDecl.apply decl [a.expr | a <- args])
 ;;
 
-let sum1 = big_binop1 sum
+module Int = struct
+  let mk_var ctx name = mk ctx (I.mk_const_s ctx.ctx name)
 
-let (<>>) x y = mk x.ctx (Arith.mk_gt (z3ctx x) x.expr y.expr)
+  let mk_num ctx n = mk ctx (I.mk_numeral_i ctx.ctx n)
+  
+  let mk_zero ctx = mk_num ctx 0
+  
+  let mk_one ctx = mk_num ctx 1
 
-let (<>=>) x y = mk x.ctx (Arith.mk_ge (z3ctx x) x.expr y.expr)
+  let (<+>) x y =
+    if is_zero x then y else if is_zero y then x else
+    mk x.ctx (Arithmetic.mk_add (z3ctx x) [ x.expr; y.expr ])
+  ;;
 
-let (<=>) x y = mk x.ctx (B.mk_eq (z3ctx x) x.expr y.expr)
+  let sum = big_binop (fun _ -> false) mk_zero is_zero mk_zero Arith.mk_add
 
-let (<!=>) x y = !! (x <=> y)
+  let sum1 = big_binop1 sum
 
-let ite c t f = mk c.ctx (B.mk_ite (z3ctx c) c.expr t.expr f.expr)
+  let (<>>) x y = mk x.ctx (Arith.mk_gt (z3ctx x) x.expr y.expr)
 
-let max x y = ite (x <>> y) x y
+  let (<>=>) x y = mk x.ctx (Arith.mk_ge (z3ctx x) x.expr y.expr)
 
+  let max x y = ite (x <>> y) x y
+
+  let get_big_int x e =
+    try I.get_big_int e
+    with _ ->
+      (* FIXME: Z3 sometimes returns 0.0 *)
+      show x;
+      if String.equal (Expr.to_string e) "0.0" then Big_int.zero_big_int
+      else failwith ("Z3x.get_big_int: conversion error " ^ (Expr.to_string e))
+  ;;
+
+  let eval m x =
+    match Model.eval m x.expr true with
+    | Some e -> to_int (get_big_int x e)
+    | _ -> failwith "Z3x.Int.eval failed"
+  ;;
+end
+
+module BitVector = struct
+  let mk_var ctx name bits =  mk ctx (BV.mk_const_s ctx.ctx name bits)
+
+  let mk_num ctx n bits = mk ctx (BV.mk_numeral ctx.ctx n bits)
+
+  let mk_add x y = mk x.ctx (BV.mk_add (z3ctx x) x.expr y.expr)
+
+  let mk_sub x y = mk x.ctx (BV.mk_sub (z3ctx x) x.expr y.expr)
+
+  let mk_neg x = mk x.ctx (BV.mk_neg (z3ctx x) x.expr)
+
+  let mk_mul x y = mk x.ctx (BV.mk_mul (z3ctx x) x.expr y.expr)
+
+  let mk_udiv x y = mk x.ctx (BV.mk_udiv (z3ctx x) x.expr y.expr)
+
+  let mk_sdiv x y = mk x.ctx (BV.mk_sdiv (z3ctx x) x.expr y.expr)
+
+  let mk_ugt x y = mk x.ctx (BV.mk_ugt (z3ctx x) x.expr y.expr)
+
+  let mk_sgt x y = mk x.ctx (BV.mk_sgt (z3ctx x) x.expr y.expr)
+
+  let mk_uge x y = mk x.ctx (BV.mk_uge (z3ctx x) x.expr y.expr)
+
+  let mk_sge x y = mk x.ctx (BV.mk_sge (z3ctx x) x.expr y.expr)
+
+  let mk_eq x y = mk x.ctx (B.mk_eq (z3ctx x) x.expr y.expr)
+
+  let mk_neq x y = !! (mk_eq x y)
+
+  let mk_and x y = mk x.ctx (BV.mk_and (z3ctx x) x.expr y.expr)
+
+  let mk_or x y = mk x.ctx (BV.mk_or (z3ctx x) x.expr y.expr)
+
+  let mk_xor x y = mk x.ctx (BV.mk_xor (z3ctx x) x.expr y.expr)
+
+  let mk_not x = mk x.ctx (BV.mk_not (z3ctx x) x.expr)
+
+  let mk_shl x y = mk x.ctx (BV.mk_shl (z3ctx x) x.expr y.expr)
+
+  let mk_ashr x y = mk x.ctx (BV.mk_ashr (z3ctx x) x.expr y.expr)
+
+  let mk_lshr x y = mk x.ctx (BV.mk_lshr (z3ctx x) x.expr y.expr)
+  
+  let eval m x =
+    match Model.eval m x.expr true with
+    | Some e -> Expr.to_string e
+    | _ -> failwith "Z3x.BitVector.eval failed"
+  ;;
+end
+
+(* assertions and stuff *)
 let require x = Optimize.add (opt x) [x.expr]
 
 let assert_weighted x n =
@@ -176,24 +245,9 @@ let eval m x =
     | _ -> failwith "Z3x.eval: failed"
 ;;
 
-let get_big_int x e =
-  try I.get_big_int e
-  with _ ->
-    (* FIXME: Z3 sometimes returns  *)
-    show x;
-    if String.equal (Expr.to_string e) "0.0" then Big_int.zero_big_int
-    else failwith ("Z3x.get_big_int: conversion error " ^ (Expr.to_string e))
-;;
-
-let eval_int_var m x =
-  match Model.eval m x.expr true with
-  | Some e -> to_int (get_big_int x e)
-  | _ -> failwith "Z3x.eval_int_var: failed"
-;;
-
 let get_cost ctx m =
   match Optimize.get_objectives ctx.opt with
-  | obj :: _ -> eval_int_var m (mk ctx obj)
+  | obj :: _ -> Int.eval m (mk ctx obj)
   | _ -> failwith "Z3x.get_cost: no objective"
 ;;
 
