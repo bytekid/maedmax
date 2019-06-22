@@ -32,6 +32,8 @@ val right_linear : t -> bool
 
 val variable_condition : t -> bool
 
+val renaming_for : t -> Term.subst 
+
 val rename : t -> t
 
 val rename_canonical : ?from:int -> t -> t

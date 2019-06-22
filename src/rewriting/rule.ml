@@ -47,9 +47,13 @@ let variable_condition (l, r) =
 
 let flip (l,r) = (r,l)
 
-let rename (l, r) =
+let renaming_for (l, r) =
   let u = Term.F(0,[l;r]) in
-  let s = [ x, Term.V (Signature.fresh_var ()) | x <- Term.variables u ] in
+  [ x, Term.V (Signature.fresh_var ()) | x <- Term.variables u ]
+;;
+
+let rename (l, r) =
+  let s = renaming_for (l, r) in
   (Term.substitute s l, Term.substitute s r)
 ;;
 
