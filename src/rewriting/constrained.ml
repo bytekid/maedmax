@@ -198,7 +198,13 @@ module Literal = struct
 
   let flip l = {l with terms = Rule.flip l.terms}
 
-  let overlaps_on_below_root l l' = []
+  let overlaps_at l1 l2 p = []
+
+  let overlaps_on_below_root l1 l2 =
+    let rl1, rl2 = Lit.terms l1, Lit.terms l2 in
+    let rho = Rule.renaming_for rl2 in
+    let rl2r = Rule.substitute rho rl2 in
+    []
 
   let overlaps_on l l' = []
 end
