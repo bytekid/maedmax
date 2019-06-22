@@ -32,6 +32,10 @@ module type Logic = sig
     val mk_sgt : t -> t -> t
     val mk_uge : t -> t -> t
     val mk_sge : t -> t -> t
+    val mk_ult : t -> t -> t
+    val mk_slt : t -> t -> t
+    val mk_ule : t -> t -> t
+    val mk_sle : t -> t -> t
     val mk_eq : t -> t -> t
     val mk_neq : t -> t -> t
     val mk_and : t -> t -> t
@@ -68,6 +72,7 @@ module type Logic = sig
   val (<=>) : t -> t -> t
   val (<!=>) : t -> t -> t
   val apply : context -> string -> t list -> t
+  val simplify : t -> t
   val require : t -> unit
   val assert_weighted : t -> int -> unit
   val push : context -> unit

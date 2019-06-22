@@ -34,7 +34,10 @@ let name = Sig.get_fun_name
 
 let w k f = Hashtbl.find weights (k,f)
 
-let prec k f = Hashtbl.find precedence (k,f)
+let prec i f = 
+try Hashtbl.find precedence (i,f)
+with Not_found ->
+  failwith ("Kbo.prec: unknown symbol " ^ (name f) ^ ", " ^ (string_of_int i))
 
 let adm_smt (ctx,k) =
   let p = prec k in

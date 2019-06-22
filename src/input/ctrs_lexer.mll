@@ -13,19 +13,21 @@ let ident_or_keyword = function
   | "QUERY" -> QUERY
   | s -> IDENT s
 
-let bv_op op ws =
-  let w = int_of_string ws in
+let bv_op op =
   match op with
-  | "+" -> OP_BV_ADD w
-  | "-" -> OP_BV_SUB w
-  | "|" -> OP_BV_OR w
-  | "&" -> OP_BV_AND w
-  | "^" -> OP_BV_XOR w
-  | "=" -> OP_BV_EQ w
-  | "<=" -> OP_BV_LE w
-  | "<" -> OP_BV_LT w
-  | ">=" -> OP_BV_LE w
-  | ">" -> OP_BV_LT w
+  | "+" -> OP_BV_ADD
+  | "-" -> OP_BV_SUB
+  | "|" -> OP_BV_OR
+  | "&" -> OP_BV_AND
+  | "^" -> OP_BV_XOR
+  | "<=u" -> OP_BV_ULE
+  | "<u" -> OP_BV_ULT
+  | ">=u" -> OP_BV_UGE
+  | ">u" -> OP_BV_UGT
+  | "<=s" -> OP_BV_SLE
+  | "<s" -> OP_BV_SLT
+  | ">=s" -> OP_BV_SGE
+  | ">s" -> OP_BV_SGT
   | _ -> failwith "unknown bitvector operator"
 ;;
 
@@ -39,7 +41,7 @@ let new_line lexbuf =
 
 }
 
-let bv_op_sym = ['&' '|' '=' '<' '>' '^' '~' '-' '+' '*']
+let bv_op_sym = ['&' '|' '=' '<' '>' '^' '~' '-' '+' '*' 'u' 's']
 
 let letter = 
   ['a'-'z' 'A'-'Z' '0'-'9' ':' '<' '>' '_' '@' '`' '$'
@@ -66,7 +68,7 @@ rule token = parse
   | "/\\"  { OP_AND }
   | "="    { OP_EQUAL }
   | "END OF FILE"    { EOF }
-  | (bv_op_sym+ as op) "." (num as n) { bv_op op n }
+  | (bv_op_sym+ as op) { bv_op op }
   | "bv" (num as n) "\"#x" (hex as v) "\"" { CONST (v, int_of_string n) }
   | (letter+ as id) "." (num as n) { IDENT_BITS (id, int_of_string n) }
   | letter+ as s { ident_or_keyword s }

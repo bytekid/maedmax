@@ -104,6 +104,8 @@ let (<!=>) x y = mk x.ctx (mk_diseq x.ctx x.expr y.expr)
 
 let ite c t f = mk c.ctx (mk_ite c.ctx c.expr t.expr f.expr)
 
+let simplify e = e
+
 module Int = struct
   let mk_num ctx n = mk ctx (mk_num ctx n)
   
@@ -164,13 +166,21 @@ module BitVector = struct
 
   let mk_sdiv x y = failwith "Yicesx.BitVector.mk_sdiv"
 
-  let mk_ugt x y = mk x.ctx (mk_bv_ut x.ctx x.expr y.expr)
+  let mk_ugt x y = mk x.ctx (mk_bv_ugt x.ctx x.expr y.expr)
 
   let mk_sgt x y = mk x.ctx (mk_bv_sgt x.ctx x.expr y.expr)
 
   let mk_uge x y = mk x.ctx (mk_bv_ge x.ctx x.expr y.expr)
 
   let mk_sge x y = mk x.ctx (mk_bv_sge x.ctx x.expr y.expr)
+
+  let mk_ult x y = mk x.ctx (mk_bv_ult x.ctx x.expr y.expr)
+
+  let mk_slt x y = mk x.ctx (mk_bv_slt x.ctx x.expr y.expr)
+
+  let mk_ule x y = mk x.ctx (mk_bv_ule x.ctx x.expr y.expr)
+
+  let mk_sle x y = mk x.ctx (mk_bv_sle x.ctx x.expr y.expr)
 
   let mk_eq x y = x <=> y
 

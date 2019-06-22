@@ -126,6 +126,8 @@ let apply (ctx : context) f args =
   mk ctx (FuncDecl.apply decl [a.expr | a <- args])
 ;;
 
+let simplify e = mk e.ctx (Expr.simplify e.expr None) 
+
 module Int = struct
   let mk_var ctx name = mk ctx (I.mk_const_s ctx.ctx name)
 
@@ -152,10 +154,10 @@ module Int = struct
 
   let get_big_int x e =
     try I.get_big_int e
-    with _ ->
-      (* FIXME: Z3 sometimes returns 0.0 *)
-      show x;
-      if String.equal (Expr.to_string e) "0.0" then Big_int.zero_big_int
+    with _ -> (* optimization cost is real *)
+      if Arith.is_real e &&
+        to_int (I.get_big_int (Real.get_denominator e)) == 1 then
+        I.get_big_int (Real.get_numerator e)
       else failwith ("Z3x.get_big_int: conversion error " ^ (Expr.to_string e))
   ;;
 
@@ -190,6 +192,14 @@ module BitVector = struct
   let mk_uge x y = mk x.ctx (BV.mk_uge (z3ctx x) x.expr y.expr)
 
   let mk_sge x y = mk x.ctx (BV.mk_sge (z3ctx x) x.expr y.expr)
+
+  let mk_ult x y = mk x.ctx (BV.mk_ult (z3ctx x) x.expr y.expr)
+
+  let mk_slt x y = mk x.ctx (BV.mk_slt (z3ctx x) x.expr y.expr)
+
+  let mk_ule x y = mk x.ctx (BV.mk_ule (z3ctx x) x.expr y.expr)
+
+  let mk_sle x y = mk x.ctx (BV.mk_sle (z3ctx x) x.expr y.expr)
 
   let mk_eq x y = mk x.ctx (B.mk_eq (z3ctx x) x.expr y.expr)
 

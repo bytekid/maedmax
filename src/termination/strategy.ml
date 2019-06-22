@@ -56,6 +56,7 @@ let strategy_aql = [(*ts_lpo, [RedSize],[Oriented; CPsRed], max, Size;*)
                     ts_cfsn, [],[Oriented; CPsRed], max, Size]
 let strategy_temp = [ts_cfsn, [Red; Comp],[CPsRed], max, Size]
 let strategy_ac = [ts_ac, [],[MaxRed], max, Size]
+let strategy_constrained = [ts_kbo, [],[Oriented], max, Size]
 
 let strategy_order_generation =
   [ (ts_lpokbo, [], [MaxRed], IterationLimit 5, Size); ]

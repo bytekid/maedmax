@@ -1,12 +1,13 @@
 %{
 module Sig = Signature
-open Constrained.Equality
+open Constrained.Expr
 
 open Lexing
 open Parsing
 
 type preterm =
   | Node of string * preterm list
+  | Bv of Constrained.Expr.bv
 
 type attribute = Irregular | Non_standard
 
@@ -14,7 +15,7 @@ type input = {
   theory: string;
   logic: string;
   signature: string list;
-  rules: ((preterm * preterm) * Constrained.Equality.bool_expr) list;
+  rules: ((preterm * preterm) * Constrained.Expr.boolean) list;
   attributes: attribute list;
   query: string
 }
@@ -28,12 +29,30 @@ let empty = {
   query = ""
 }
 
-let rec convert_term fs = function
-  | Node (x, []) when not (List.mem x fs) -> Term.V (Sig.var_called x)
-  | Node (f, ts) -> Term.F (Sig.fun_called f, List.map (convert_term fs) ts)
+let convert_term fs cs =
+  let rec convert cs = function
+    | Node (x, []) when not (List.mem x fs) -> Term.V (Sig.var_called x), cs
+    | Node (f, ts) ->
+      let fold ti (us, cs) = let ui, cs' = convert cs ti in ui :: us, cs' in
+      let us, cs' = List.fold_right fold ts ([], cs) in 
+      Term.F (Sig.fun_called f, us), cs'
+    | Bv e ->
+      if List.mem_assoc e cs then Term.V (List.assoc e cs), cs
+      else
+        let z = "z" ^ (string_of_int (List.length cs)) in
+        let v = Sig.fresh_var_called z in
+        Term.V v, (e,v) :: cs
+  in
+  convert cs
 ;;
 
-let convert_rule fs ((l, r), c) = (convert_term fs l, convert_term fs r), c
+let convert_rule fs ((l, r), c) =
+  let l', cs = convert_term fs [] l in
+  let r', cs' = convert_term fs cs r in
+  let add c (e, v) = And (c, Equal (Var(Sig.get_var_name v, bit_width e),e)) in
+  let c' = List.fold_left add c cs' in
+  (l', r'), c'
+;;
 
 let convert_rules d = List.map (convert_rule d.signature) d.rules
 
@@ -63,18 +82,21 @@ let add_attr a d = {d with attributes = a :: d.attributes}
 %token LBRACKET RBRACKET
 %token ARROW COMMA SEMICOLON DOT QUOTE HASH
 %token SIGNATURE RULES LOGIC SOLVER THEORY
-%token <int> OP_BV_OR
-%token <int> OP_BV_AND
-%token <int> OP_BV_XOR
-%token <int> OP_BV_ADD
-%token <int> OP_BV_SUB
-%token <int> OP_BV_MULT
-%token <int> OP_BV_DIV
-%token <int> OP_BV_EQ
-%token <int> OP_BV_LT
-%token <int> OP_BV_GT
-%token <int> OP_BV_LE
-%token <int> OP_BV_GE
+%token OP_BV_OR
+%token OP_BV_AND
+%token OP_BV_XOR
+%token OP_BV_ADD
+%token OP_BV_SUB
+%token OP_BV_MULT
+%token OP_BV_DIV
+%token OP_BV_ULT
+%token OP_BV_UGT
+%token OP_BV_ULE
+%token OP_BV_UGE
+%token OP_BV_SLT
+%token OP_BV_SGT
+%token OP_BV_SLE
+%token OP_BV_SGE
 %token OP_AND OP_OR OP_EQUAL
 %token <string * int> CONST
 %token <string * int> IDENT_BITS
@@ -126,12 +148,16 @@ bool_expr:
   | LPAREN bool_expr RPAREN {$2}
   | bool_expr OP_AND bool_expr { And($1, $3) }
   | bool_expr OP_OR bool_expr { Or($1, $3) }
-  | bv_expr OP_BV_EQ bv_expr { Equal($1, $3) }
-  | bv_expr OP_BV_LE bv_expr { Bv_le($1, $3) }
-  | bv_expr OP_BV_LT bv_expr { Bv_lt($1, $3) }
-  | bv_expr OP_BV_GE bv_expr { Bv_ge($1, $3) }
-  | bv_expr OP_BV_GT bv_expr { Bv_gt($1, $3) }
-  | IDENT_BITS LPAREN bv_exprs RPAREN {Pred(fst $1, snd $1, $3)}
+  | bv_expr OP_EQUAL bv_expr { Equal($1, $3) }
+  | bv_expr OP_BV_ULE bv_expr { Bv_ule($1, $3) }
+  | bv_expr OP_BV_ULT bv_expr { Bv_ult($1, $3) }
+  | bv_expr OP_BV_UGE bv_expr { Bv_uge($1, $3) }
+  | bv_expr OP_BV_UGT bv_expr { Bv_ugt($1, $3) }
+  | bv_expr OP_BV_SLE bv_expr { Bv_sle($1, $3) }
+  | bv_expr OP_BV_SLT bv_expr { Bv_slt($1, $3) }
+  | bv_expr OP_BV_SGE bv_expr { Bv_sge($1, $3) }
+  | bv_expr OP_BV_SGT bv_expr { Bv_sgt($1, $3) }
+  | IDENT LPAREN bv_exprs RPAREN {Pred($1, $3)}
 
 bv_expr:
   | LPAREN bv_expr RPAREN {$2}
@@ -142,7 +168,7 @@ bv_expr:
   | bv_expr OP_BV_SUB bv_expr { Bv_sub($1, $3) }
   | CONST { HexConst (fst $1, snd $1) }
   | IDENT_BITS LPAREN bv_exprs RPAREN {Fun(fst $1, snd $1, $3)}
-  | IDENT { Var($1, 8) }
+  | IDENT_BITS { Var(fst $1, snd $1) }
 
 bv_exprs:
   | bv_expr more_bv_exprs {$1 :: $2}
@@ -153,6 +179,7 @@ more_bv_exprs:
 
 term:
   | IDENT args { Node ($1, $2) }
+  | bv_expr    { Bv $1 }
 
 args:
   | LPAREN terms RPAREN { $2 }
