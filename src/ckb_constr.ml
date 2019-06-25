@@ -31,6 +31,8 @@ exception Success of Rules.t
 
 (*** GLOBALS *****************************************************************)
 (*** FUNCTIONS ***************************************************************)
+let (<<=>>) = Logic.(<<=>>)
+
 let make_state c es s h = {
   context = c;
   equations = es;
@@ -73,7 +75,7 @@ let normalize (s,t) =
   uv
 ;;
 
-let print_list = Formatx.print_list (fun f n -> Lit.print f n) "\n "
+let print_list = Lit.print_list
 
 let set_iteration_stats s =
   let aa = s.equations in
@@ -104,8 +106,8 @@ let (<|>) = Logic.(<|>)
 let (!!) = Logic.(!!)
 
 let c_maxcomp k ctx cc =
-  let oriented ((l,r),v) = v <|> (C.find_rule (r,l)) in
-  L.iter (fun ((l,r),v) ->
+  let oriented ((l,r), v) = Format.printf "orient %a %a\n" Term.print l Term.print r; v <|> (C.find_rule (r,l)) in
+  L.iter (fun ((l,r),_, v) ->
     if l > r then Logic.assert_weighted (oriented ((l,r),v)) k) cc
 ;;
 
@@ -118,8 +120,11 @@ let search_constraints s (ccl, ccsymlvs) =
     | S.Oriented -> c_maxcomp 1 s ccsymlvs
     | _ -> Format.printf "unsupported max search_constraints\n%!"
   in L.iter assert_mc (max_constraints s)
- ;;
+;;
 
+let bootstrap_constraints j ctx rs =
+  Logic.big_and ctx [ v <<=>> (Crpo.gt (ctx, 0) s t c) | (s,t), c, v <- rs ]
+;;
 
 let max_k s =
   let ctx, cc = s.context, s.equations in
@@ -127,9 +132,9 @@ let max_k s =
   let cc_eq = [ Lit.terms n | n <- cc ] in
   let cc_symm = [n | n <- Lits.symmetric cc] in 
   let cc_symml = [Lit.terms c | c <- cc_symm] in
-  L.iter (fun n -> ignore (C.store_rule_var ctx n)) cc_symml;
+  L.iter (fun n -> ignore (C.store_rule_var (~assert_rule:false) ctx n)) cc_symml;
   let cc_symm_vars = [n, C.find_rule (Lit.terms n) | n <- cc_symm] in
-  let cc_symml_vars = [Lit.terms n,v | n,v <- cc_symm_vars] in
+  let cc_symml_vars = [Lit.terms n, Lit.constr n, v | n,v <- cc_symm_vars] in
   if debug s 2 then F.printf "K = %i\n%!" k;
   let strat = termination_strategy s in
   let rec max_k acc ctx n =
@@ -141,19 +146,15 @@ let max_k s =
         let c = Logic.get_cost ctx m in
         let add_rule (n,v) rls = if Logic.eval m v then (n,v) :: rls else rls in
         let rr = L.fold_right add_rule cc_symm_vars []  in
-        let order = St.decode 0 m strat in
-        if !Settings.do_assertions then (
-          let ord n =
-            let l, r = Lit.terms n in order#gt l r && not (order#gt r l)
-          in
-          assert (L.for_all ord (L.map fst rr)));
+        (*let order = Crpo.decode 0 m strat in*)
         Logic.require (!! (Logic.big_and ctx [ v | _,v <- rr ]));
-        max_k ((L.map fst rr, c, order) :: acc) ctx (n-1))
+        max_k ((L.map fst rr, c) :: acc) ctx (n-1))
       else acc
    in
-   A.take_time A.t_orient_constr (St.assert_constraints strat 0 ctx) cc_symml;
+   (*A.take_time A.t_orient_constr (St.assert_constraints strat 0 ctx) cc_symml;*)
    Logic.push ctx;
-   Logic.require (St.bootstrap_constraints 0 ctx cc_symml_vars);
+   Logic.require (bootstrap_constraints 0 ctx cc_symml_vars);
+   Format.printf "after bootstrap\n%!";
    search_constraints s (cc_eq, cc_symml_vars);
    let trss = max_k [] ctx k in
    Logic.pop ctx;
@@ -164,13 +165,12 @@ let rec phi s =
   set_iteration_stats s;
   let i = !A.iterations in
   
-  let process (j, s, aa_new) (rr, c, order) =
-    let rr = List.map Lit.terms rr in
-    if debug s 2 then (
-      Format.printf "process TRS %i-%i: %a\n%!" i j Rules.print rr; order#print ());
+  let process (j, s, aa_new) (rr_lits, c) =
+    if debug s 2 then
+      Format.printf "process TRS %i-%i: %a\n%!" i j print_list rr_lits;
     let aa = s.equations in
     (*let irred, red = rewrite rr aa in *)
-    let cps_all = overlaps s rr in
+    let cps_all = overlaps s rr_lits in
     (*let cps = reduced rr cps in
     if debug s 2 then
       Format.printf "%d reduced CPs:\n%a" (List.length cps) Lits.print cps;
@@ -181,10 +181,11 @@ let rec phi s =
     else
        let s' = update_state s (NS.add_list sel aa) in
        (j+1, s', sel @ aa_new)*)
-    raise (Success [])
+    failwith "test"
   in
   try
     let rrs = max_k s in
+    if rrs = [] then failwith "no TRS found";
     let _, s', aa_new = L.fold_left process (0, s, []) rrs in
     phi s'
   with Success rr -> (SAT, Completion rr)
@@ -193,11 +194,7 @@ let rec phi s =
 let check_sat state ces =
   let check_sat l =
     let c, cl = Lit.constr l, Lit.log_constr l in
-    let ctx = state.context in
-    Logic.push ctx;
-    Logic.require cl;
-    assert (Logic.check ctx);
-    Logic.pop ctx
+    assert (Expr.is_sat state.context cl)
   in
   List.iter check_sat ces
 ;;
@@ -205,12 +202,13 @@ let check_sat state ces =
 
 let complete (settings, heuristic) ces =
   let ctx = Logic.mk_context () in
-  let ces = [Constrained.Literal.of_equation ctx (normalize e, c) | e, c <- ces] in
+  let ces = [Constrained.Literal.of_equation ctx (e, c) | e, c <- ces] in
   let start = Unix.gettimeofday () in
   let s = make_state ctx ces settings heuristic in
   check_sat s ces;
   let ss = L.map (fun (ts,_,_,_,_) -> ts) heuristic.strategy in
-  L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- ces ]) ss;
+  let syms = Rules.signature [ Lit.terms n | n <- ces ] in
+  Crpo.init (ctx,0) syms; (* FIXME: crpo now fixed *)
   let res = phi s in
   A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. start);
   Logic.del_context ctx;

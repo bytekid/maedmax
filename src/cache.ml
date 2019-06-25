@@ -93,10 +93,10 @@ let rlvar_cmp st rl = Rule.variant st rl
 
 let find_rule rl = Hashtbl.find ht_rl_vars rl
 
-let store_rule_var ctx lr =
+let store_rule_var ?(assert_rule=true) ctx lr =
   try find_rule lr with _ -> (
     let v = L.mk_fresh_bool_var ctx in
-    if not (Rule.is_rule lr) then L.require (!! v);
+    if assert_rule && not (Rule.is_rule lr) then L.require (!! v);
     Hashtbl.add ht_rl_vars lr v;
     v)
 ;;

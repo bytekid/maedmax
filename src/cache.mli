@@ -38,7 +38,7 @@ val trs_of_index : int -> Rule.t list
 
 val redtrs_of_index : int -> Rules.t
 
-val store_rule_var : Settings.Logic.context -> Rule.t -> Settings.Logic.t
+val store_rule_var : ?assert_rule:bool -> Settings.Logic.context -> Rule.t -> Settings.Logic.t
 
 val store_rule_vars : Settings.Logic.context -> Rule.t list -> unit
 

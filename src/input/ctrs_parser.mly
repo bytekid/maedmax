@@ -40,7 +40,7 @@ let convert_term fs cs =
       if List.mem_assoc e cs then Term.V (List.assoc e cs), cs
       else
         let z = "z" ^ (string_of_int (List.length cs)) in
-        let v = Sig.fresh_var_called z in
+        let v = Sig.var_called z in
         Term.V v, (e,v) :: cs
   in
   convert cs
@@ -49,7 +49,7 @@ let convert_term fs cs =
 let convert_rule fs ((l, r), c) =
   let l', cs = convert_term fs [] l in
   let r', cs' = convert_term fs cs r in
-  let add c (e, v) = And (c, Equal (Var(Sig.get_var_name v, bit_width e),e)) in
+  let add c (e, v) = And (c, Equal (Var(v, bit_width e),e)) in
   let c' = List.fold_left add c cs' in
   (l', r'), c'
 ;;
@@ -168,7 +168,7 @@ bv_expr:
   | bv_expr OP_BV_SUB bv_expr { Bv_sub($1, $3) }
   | CONST { HexConst (fst $1, snd $1) }
   | IDENT_BITS LPAREN bv_exprs RPAREN {Fun(fst $1, snd $1, $3)}
-  | IDENT_BITS { Var(fst $1, snd $1) }
+  | IDENT_BITS { Var(Sig.var_called (fst $1), snd $1) }
 
 bv_exprs:
   | bv_expr more_bv_exprs {$1 :: $2}
