@@ -35,6 +35,7 @@ type state = {
   equations : NS.t;
   goals : NS.t;
   new_nodes : lit list;
+  last_trss : (Rules.t * int * Order.t) list;
   extension : theory_extension_state option
 }
 
@@ -156,6 +157,7 @@ let make_state c es gs = {
   equations = NS.of_list es;
   goals = gs;
   new_nodes = es;
+  last_trss = [];
   extension = None
 }
 
@@ -164,6 +166,7 @@ let copy_state s = {
   equations = NS.copy s.equations;
   goals = NS.copy s.goals;
   new_nodes = s.new_nodes;
+  last_trss = s.last_trss;
   extension = s.extension
 }
 
@@ -970,7 +973,7 @@ let rec phi s =
       if debug 2 then Format.printf "backtrack as unextensible\n%!"; raise Backtrack))
   else
   (**)
-  let process (j, s, aa_new) ((rr, c, order) as sys) =
+  let process (j, s, aa_new) ((rr, _, order) as sys) =
     let aa, gs = s.equations, s.goals in
     let rew = get_rewriter s.context j sys in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)

@@ -7,6 +7,7 @@ type state = {
   equations : Nodes.t;
   goals : Nodes.t;
   new_nodes : lit list;
+  last_trss : (Rules.t * int * Order.t) list;
   extension : theory_extension_state option
 }
 
