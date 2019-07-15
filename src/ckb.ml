@@ -35,7 +35,7 @@ type state = {
   equations : NS.t;
   goals : NS.t;
   new_nodes : lit list;
-  last_trss : (Rules.t * int * Order.t) list;
+  last_trss : (Literal.t list * int * Order.t) list;
   extension : theory_extension_state option
 }
 
@@ -1027,7 +1027,7 @@ let rec phi s =
     let sz = match rrs with (trs,c,_) :: _ -> List.length trs,c | _ -> 0,0 in
     let cp_count = if rrs = [] then 0 else !cp_count / (List.length rrs) in
     A.add_state !redcount (fst sz) (snd sz) cp_count;
-    phi {s' with new_nodes = aa_new}
+    phi {s' with new_nodes = aa_new; last_trss = rrs}
   with Success r -> r
   | Backtrack -> raise (Restart ([], false))
 ;;
