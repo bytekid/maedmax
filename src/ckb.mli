@@ -37,7 +37,7 @@ val reduced_goals: Rewriter.rewriter -> Nodes.t -> Nodes.t * Nodes.t
 
 val equations_for_overlaps: Nodes.t -> Nodes.t -> lit list
 
-val overlaps: state -> lit list -> lit list -> Nodes.t * Overlapper.overlapper
+val overlaps: ?only_new:bool -> state -> lit list -> lit list -> Nodes.t * Overlapper.overlapper
 
 val overlaps_on: lit list -> lit list -> Nodes.t -> Nodes.t
 

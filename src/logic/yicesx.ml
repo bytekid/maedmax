@@ -151,14 +151,14 @@ module BitVector = struct
 
   let mk_num ctx s bits =
     let n = Prelude.hex2dec s in
-    mk ctx (mk_bv_constant ctx bits n)
+    mk ctx (mk_bv_constant ctx bits (Int32.of_int n))
   ;;
 
   let mk_add x y = mk x.ctx (mk_bv_add x.ctx x.expr y.expr)
 
-  let mk_sub x y = mk x.ctx (mk_bv_aub x.ctx x.expr y.expr)
+  let mk_sub x y = mk x.ctx (mk_bv_sub x.ctx x.expr y.expr)
 
-  let mk_neg x = mk x.ctx (mk_bv_minus x.ctx x)
+  let mk_neg x = mk x.ctx (mk_bv_minus x.ctx x.expr)
 
   let mk_mul x y = mk x.ctx (mk_bv_mul x.ctx x.expr y.expr)
 
@@ -166,7 +166,7 @@ module BitVector = struct
 
   let mk_sdiv x y = failwith "Yicesx.BitVector.mk_sdiv"
 
-  let mk_ugt x y = mk x.ctx (mk_bv_ugt x.ctx x.expr y.expr)
+  let mk_ugt x y = mk x.ctx (mk_bv_gt x.ctx x.expr y.expr)
 
   let mk_sgt x y = mk x.ctx (mk_bv_sgt x.ctx x.expr y.expr)
 
@@ -174,11 +174,11 @@ module BitVector = struct
 
   let mk_sge x y = mk x.ctx (mk_bv_sge x.ctx x.expr y.expr)
 
-  let mk_ult x y = mk x.ctx (mk_bv_ult x.ctx x.expr y.expr)
+  let mk_ult x y = mk x.ctx (mk_bv_lt x.ctx x.expr y.expr)
 
   let mk_slt x y = mk x.ctx (mk_bv_slt x.ctx x.expr y.expr)
 
-  let mk_ule x y = mk x.ctx (mk_bv_ule x.ctx x.expr y.expr)
+  let mk_ule x y = mk x.ctx (mk_bv_le x.ctx x.expr y.expr)
 
   let mk_sle x y = mk x.ctx (mk_bv_sle x.ctx x.expr y.expr)
 
@@ -188,23 +188,23 @@ module BitVector = struct
 
   let mk_and x y = mk x.ctx (mk_bv_and x.ctx x.expr y.expr)
 
-  let mk_or = mk x.ctx (mk_bv_or x.ctx x.expr y.expr)
+  let mk_or x y = mk x.ctx (mk_bv_or x.ctx x.expr y.expr)
 
-  let mk_xor = mk x.ctx (mk_bv_xor x.ctx x.expr y.expr)
+  let mk_xor x y = mk x.ctx (mk_bv_xor x.ctx x.expr y.expr)
 
-  let mk_not = mk x.ctx (mk_bv_not x.ctx)
+  let mk_not x = mk x.ctx (mk_bv_not x.ctx x.expr)
 
-  let mk_shl x y = mk x.ctx (mk_bv_shl x.ctx x.expr y.expr)
+  let mk_shl _ _ = failwith ("Yicesx.mk_shl not implemented")
 
-  let mk_ashr = mk x.ctx (mk_bv_ashr x.ctx x.expr y.expr)
+  let mk_ashr _ _ = failwith ("Yicesx.mk_ashr not implemented")
 
-  let mk_lshr = mk x.ctx (mk_bv_lshr x.ctx x.expr y.expr)
+  let mk_lshr _ _ = failwith ("Yicesx.mk_lshr not implemented")
 
   let eval m x =
     match x.decl with
       | Some d ->
         let barr = get_bitvector_value m d 64 in
-        Array.fold (fun b s -> s ^ (if b then "1" else "0")) barr ""
+        Array.fold_left (fun s b -> s ^ (if b then "1" else "0")) "" barr
       | None -> failwith "Yicesx.eval_int: no declaration found"
   ;;
 end

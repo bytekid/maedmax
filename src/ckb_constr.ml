@@ -27,7 +27,7 @@ type state = {
 }
 
 (*** EXCEPTIONS **************************************************************)
-exception Success of Rules.t
+exception Success of Lit.t list
 
 (*** GLOBALS *****************************************************************)
 (*** FUNCTIONS ***************************************************************)
@@ -101,6 +101,10 @@ let overlaps s rr =
 
 let overlaps s = A.take_time A.t_overlap (overlaps s)
 
+let rewrite s ee rr =
+  List.flatten [Lit.nf s.context l rr | l <- ee]
+;;
+
 (* find k maximal TRSs *)
 let (<|>) = Logic.(<|>)
 let (!!) = Logic.(!!)
@@ -136,7 +140,6 @@ let max_k s =
   let cc_symm_vars = [n, C.find_rule (Lit.terms n) | n <- cc_symm] in
   let cc_symml_vars = [Lit.terms n, Lit.constr n, v | n,v <- cc_symm_vars] in
   if debug s 2 then F.printf "K = %i\n%!" k;
-  let strat = termination_strategy s in
   let rec max_k acc ctx n =
     if debug s 2 then F.printf " ... n = %i\n%!" n;
     if n = 0 then L.rev acc (* return TRSs in sequence of generation *)
@@ -161,34 +164,34 @@ let max_k s =
    trss
 ;;
 
+let succeeds s rr (cps, cps_rew) =
+  if cps_rew = [] then true else false
+;;
+
 let rec phi s =
   set_iteration_stats s;
   let i = !A.iterations in
   
-  let process (j, s, aa_new) (rr_lits, c) =
+  let process (j, s) (rr_lits, c) =
     if debug s 2 then
       Format.printf "process TRS %i-%i: %a\n%!" i j print_list rr_lits;
     let aa = s.equations in
     (*let irred, red = rewrite rr aa in *)
-    let cps_all = overlaps s rr_lits in
-    (*let cps = reduced rr cps in
-    if debug s 2 then
-      Format.printf "%d reduced CPs:\n%a" (List.length cps) Lits.print cps;
-    let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
-    let sel, rest = select s aa nn in
-    if succeeds s rr cps_all then
-      raise (Success rr)
+    let cps = overlaps s rr_lits in
+    let cps' = rewrite s cps rr_lits in
+    let cps'' = (*select*) cps' in
+    if succeeds s rr_lits (cps, cps') then
+      raise (Success rr_lits)
     else
-       let s' = update_state s (NS.add_list sel aa) in
-       (j+1, s', sel @ aa_new)*)
-    failwith "test"
+       let s' = update_state s (cps'' @ aa) in
+       (j+1, s')
   in
   try
     let rrs = max_k s in
     if rrs = [] then failwith "no TRS found";
-    let _, s', aa_new = L.fold_left process (0, s, []) rrs in
+    let _, s' = L.fold_left process (0, s) rrs in
     phi s'
-  with Success rr -> (SAT, Completion rr)
+  with Success rr -> Format.printf "yay!\n"; (SAT, Completion [])
 ;;
 
 let check_sat state ces =
@@ -206,9 +209,8 @@ let complete (settings, heuristic) ces =
   let start = Unix.gettimeofday () in
   let s = make_state ctx ces settings heuristic in
   check_sat s ces;
-  let ss = L.map (fun (ts,_,_,_,_) -> ts) heuristic.strategy in
   let syms = Rules.signature [ Lit.terms n | n <- ces ] in
-  Crpo.init (ctx,0) syms; (* FIXME: crpo now fixed *)
+  let _ = Crpo.init (ctx,0) syms in (* FIXME: crpo now fixed *)
   let res = phi s in
   A.t_process := !(A.t_process) +. (Unix.gettimeofday () -. start);
   Logic.del_context ctx;

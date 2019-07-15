@@ -112,13 +112,16 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
   ;;
 
   (* Computes CPs with given (outer) rule. *)
-  method cps rl =
+  method cps ?(only_new=false) rl =
     let l = fst (Lit.terms rl) in
-    List.concat [ self#cps_at rl p | p <- T.function_positions l ]
+    List.concat [ self#cps_at only_new rl p | p <- T.function_positions l ]
   ;;
   
   (* as in Overlap module, but without variant optimization; rule2 is outer *)
-  method overlap_between_at rule1 rule2 p =
+  method overlap_between_at only_new rule1 rule2 p =
+    if only_new && Cache.overlap_was_considered rule1 rule2 p then None
+    else (
+    Cache.consider_overlap rule1 rule2;
     let l1,r1 = rule1 and l2, r2 = Rule.rename_canonical rule2 in
     match mgu (Term.subterm_at p l2) l1 with
       | Some sigma ->
@@ -126,16 +129,17 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
         if pcp && Term.size t > 5 && rcheck#is_reducible_below t then None
         else Some ((l1, r1), p, (l2, r2), sigma)
       | None -> None
+    )
 
   (* rli is inner, rlo is outer *)
-  method cp_at rli rlo p =
+  method cp_at only_new rli rlo p =
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
     else (
       let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
       let bd =
         if Lit.is_inequality rlo then h.hard_bound_goals else h.hard_bound_equations
       in
-      let o = self#overlap_between_at (Lit.terms rli) (Lit.terms rlo) p  in
+      let o = self#overlap_between_at only_new (Lit.terms rli) (Lit.terms rlo) p in
       match o with
         | None -> None
         | Some o -> (
@@ -151,7 +155,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
 ;;
 
   (* Computes CPs with given rule at position p in l. *)
-  method cps_at rl p =
+  method cps_at only_new rl p =
     let l,r = Lit.terms rl in
     let l' = Term.subterm_at p l in
     let rs = self#unifiables l' in
@@ -160,8 +164,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
     let max_size = bd - (Lit.size rl - (Term.size l')) in
     let add os = function None -> os | Some o -> o :: os in
     let rl_cands = [rl' | rl', s <- rs; s <= max_size] in
-    let res = List.fold_left add [] [ self#cp_at rl' rl p | rl' <- rl_cands ] in
-    res
+    List.fold_left add [] [ self#cp_at only_new rl' rl p | rl' <- rl_cands ]
   ;;
 end
 

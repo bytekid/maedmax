@@ -299,7 +299,7 @@ let equations_for_overlaps irred all =
 ;;
 
 (* get overlaps for rules rr and equations aa *)
-let overlaps s rr aa =
+let overlaps only_new s rr aa =
   (* by default, do AC pruning *)
   let prune_AC = !heuristic.prune_AC || !A.iterations mod 2 <> 0 in
   let ns =
@@ -319,12 +319,12 @@ let overlaps s rr aa =
   let ns' = !settings.norm @ ns in (* normalized rules only on one side of CP *)
   let ovl = new Overlapper.overlapper !heuristic ns' (L.map Lit.terms rr) in
   ovl#init ();
-  let cpl = [cp | n <- ns'; cp <- ovl#cps n] in
+  let cpl = [cp | n <- ns'; cp <- ovl#cps ~only_new:only_new n] in
   let cps = NS.of_list cpl in
   cps, ovl
 ;;
 
-let overlaps s rr = A.take_time A.t_overlap (overlaps s rr)
+let overlaps ?(only_new=false) s rr = A.take_time A.t_overlap (overlaps only_new s rr)
 
 (* Goal only as outer rule, compute CPs with equations.
    Use rr only if the goals are not ground (otherwise, goals with rr are
@@ -338,7 +338,7 @@ let overlaps_on rr aa gs =
   let ns' = NS.c_equivalence_free cs ns' in
   let ovl = new Overlapper.overlapper !heuristic [eq | eq <- ns'] (L.map Lit.terms rr) in
   ovl#init ();
-  let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps g] in
+  let cps2 = NS.of_list [cp | g <- gs_for_ols; cp <- ovl#cps ~only_new:true g] in
   cps2
 ;;
 
@@ -347,7 +347,6 @@ let saturated state (rr, ee) rew (axs, cps, cps') =
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
   let sys = rr, ee', rew#order in
-  (*let cps, _ = overlaps state (L.map Lit.make_axiom rr) (L.map Lit.make_axiom ee) in*)
   let cc = axs @ (NS.to_list cps @ (NS.to_list cps')) in
   let eqs = [ Lit.terms n | n <- cc; Lit.is_equality n ] in
   let eqs = L.filter (fun e -> not (L.mem e rr)) eqs in
@@ -357,7 +356,12 @@ let saturated state (rr, ee) rew (axs, cps, cps') =
     else
       let joinable (s,t) = try fst (rew#nf s) =fst (rew#nf t) with _ -> false in
       let eqs = L.filter (fun e -> not (joinable e)) eqs in
-      Ground.all_joinable !settings state.context str sys eqs
+      (*match*) Ground.all_joinable !settings state.context str sys eqs (*with 
+      | None -> None
+      | Some _ ->
+        let to_axs = L.map Lit.make_axiom in
+        let cps = NS.to_list (fst (overlaps state (to_axs rr) (to_axs ee))) in
+        Ground.all_joinable !settings state.context str sys [Lit.terms e | e <- cps]*)
   in
   if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
   j
@@ -976,7 +980,7 @@ let rec phi s =
     let gs = NS.add_all gs_red' gs in
 
     let aa_for_ols = equations_for_overlaps irred aa in
-    let cps', ovl = overlaps s rr aa_for_ols in
+    let cps', ovl = overlaps (*~only_new:true *)s rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps');
     let eq_bound = !heuristic.hard_bound_equations in
     let cps = NS.filter (fun cp -> Lit.size cp < eq_bound) cps' in

@@ -313,13 +313,14 @@ module Literal = struct
       let ctx = L.ctx l1.log_constr in
       let lc = Expr.to_logic ctx (And(c1s, c2s)) in
       if not (Expr.is_sat ctx lc) then (
-        Format.printf "No overlap (unsat): %a and %a\n%!" print l1 print l2;
+        (*Format.printf "No overlap (unsat): %a and %a\n%!" print l1 print l2;*)
         None)
       else
         let s, t = Overlap.cp_of_overlap (l1.terms, p, l2.terms, sigma) in
         if s = t then None else Some (make (s, t) (And(c1s, c2s)) lc)
     with Expr.Invalid_subst -> 
-      Format.printf "No overlap (invalid unifier): %a and %a\n%!" print l1 print l2;
+      (*Format.printf "No overlap (invalid unifier): %a and %a\n%!"
+          print l1 print l2;*)
       None
   ;;
   

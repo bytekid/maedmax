@@ -56,3 +56,7 @@ val get_all_strict : int -> (Rule.t * Settings.Logic.t) list
 val clear : unit -> unit
 
 val decode_print : Settings.Logic.model -> int -> unit
+
+val overlap_was_considered : Rule.t -> Rule.t -> Term.pos -> bool
+
+val consider_overlap : Rule.t -> Rule.t -> Term.pos -> unit
