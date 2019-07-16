@@ -205,7 +205,7 @@ let problem_shape es =
   let lat = Theory.Lattice.count es > 0 in
   let acs = Theory.Ac.count es in
   let cs = Theory.Commutativity.count es - acs in
-  let distrib = Theory.Ring.has_distrib es in
+  let distrib = Theory.NonAssocRing.has_distrib es in
   let no_prop = not app && not dup && not distrib && acs + cs = 0 && not mon in
   let fs_count = List.length (Rules.signature es) in
   (* Piombo: heavy terms like in lattices, LAT084-1, LAT392-1, ... *)
@@ -235,7 +235,7 @@ let theory_equations es =
     let eq = Literal.terms l in
     Theory.Commutativity.is_axiom eq || Theory.Ac.is_axiom eq ||
     Theory.Monoid.is_axiom eq || Theory.Group.is_axiom eq ||
-    Theory.Lattice.is_axiom eq || Theory.Ring.is_distributivity eq
+    Theory.Lattice.is_axiom eq || Theory.NonAssocRing.is_distributivity eq
   in
   let ths = List.filter theory_relevant es in
   let esl = [Literal.terms e | e <- es] in
@@ -267,12 +267,13 @@ let analyze es gs =
   let group = "groups", `Int (Theory.Group.count es) in
   let agroup = "abelian groups", `Int (Theory.AbelianGroup.count es) in
   let ring = "ring", `Int (Theory.Ring.count es) in
-  let distrib = "has distribution", `Bool (Theory.Ring.has_distrib es) in
+  let na_ring = "non-associative ring", `Int (Theory.NonAssocRing.count es) in
+  let distr = "has distribution", `Bool (Theory.NonAssocRing.has_distrib es) in
   let lattice = "lattice", `Int (Theory.Lattice.count es) in
   let shp = "shape", `String (Settings.shape_to_string (problem_shape es)) in
   let assoc =
     [eqc; ieqc; eqs; mar; symcount; mts; mtd; gc; app; dup;
-    cs; ac; mon; group; agroup; ring; lattice; distrib; shp]
+    cs; ac; mon; group; agroup; na_ring; ring; lattice; distr; shp]
   in
   `Assoc assoc
 

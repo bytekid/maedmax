@@ -35,6 +35,8 @@ val to_string : t -> string
 
 val has_dps : Settings.t_term -> bool
 val init : Settings.t_term -> int -> Settings.Logic.context -> Rules.t -> unit
+val fix_parameters : Settings.t_term -> int -> Settings.Logic.context ->
+  Rules.t -> unit
 val assert_constraints : Settings.t_term -> int -> Settings.Logic.context ->
   Rules.t -> unit
 val bootstrap_constraints :

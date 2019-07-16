@@ -105,6 +105,12 @@ let init_kbo (ctx,k) fs =
 
 let init c = init_kbo c
 
+let fix_parameters (ctx,k) es =
+  (* group constraints *)
+  let set_group c (f, i, _) = c <&> (prec k i <>> prec k f) in
+  List.fold_left set_group (mk_true ctx) (Theory.Group.symbols es)
+;;
+
 let cond_gt k ctx conds s t =
   let rec gt s t =
     if List.mem (s,t) conds then mk_true ctx

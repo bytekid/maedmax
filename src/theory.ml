@@ -198,13 +198,11 @@ module AbelianGroup = struct
 
 end
 
-module Ring = struct
+module NonAssocRing = struct
   (*** FUNCTIONS **************************************************************)
   let x = V (-1)
   let y = V (-2)
   let z = V (-3)
-
-  let associativity f = F(f, [F(f, [x; y]); z]), F(f, [x; F(f, [y; z])])
 
   let left_distrib m a =
     F(m, [x; F(a, [y; z]);]), F(a, [F(m, [x; y]); F(m, [x; z])])
@@ -226,7 +224,7 @@ module Ring = struct
     let var = Variant.eq_variant in
     let ex = List.exists in
     ex (var (right_distrib m a)) es && ex (var (left_distrib m a)) es &&
-    AbelianGroup.is_for es (a,i,z) && ex (var (associativity m)) es
+    AbelianGroup.is_for es (a,i,z)
   ;;
 
   let symbols es =
@@ -256,6 +254,24 @@ module Ring = struct
 
   let is_distributivity st =
     is_left_distributivity st || is_right_distributivity st
+end
+
+module Ring = struct
+  (*** FUNCTIONS **************************************************************)
+  let x = V (-1)
+  let y = V (-2)
+  let z = V (-3)
+
+  let associativity f = F(f, [F(f, [x; y]); z]), F(f, [x; F(f, [y; z])])
+
+  let is_for es (m,a,i,z) =
+    let var = Variant.eq_variant in
+    NonAssocRing.is_for es (m,a,i,z)  && List.exists (var (associativity m)) es
+  ;;
+
+  let symbols es = List.filter (is_for es) (NonAssocRing.symbols es)
+
+  let count es = List.length (symbols es)
 end
 
 module Lattice = struct

@@ -238,6 +238,20 @@ let init s j ctx rs =
   in L.require c
 ;;
 
+let fix_parameters s j ctx rs =
+  let fix_ord i = function
+    | LPO -> Lpo.fix_parameters (ctx,i) rs
+    | KBO -> Kbo.fix_parameters (ctx,i) rs
+    | _ -> L.mk_true ctx
+  in
+  let c =
+    match s with
+    | Orders (Seq os) ->
+      L.big_and ctx [fix_ord i o | i,o <- index ~i:(j+1) os]
+    | _ -> L.mk_true ctx
+  in L.require c
+;;
+
 (* abbreviations for strict and weak variables *)
 let s ctx i rl = C.get_strict_var ctx (i, rl);;
 let w ctx i rl = C.get_weak_var ctx (i, rl);;

@@ -317,14 +317,13 @@ let overlaps only_new s rr aa =
       let large_or_keep = A.last_cp_count () < 1000 || not prune_AC in
       let rr' = if large_or_keep then rr' else NS.c_equivalence_free cs rr' in
       rr' @ aa'
-  in
+  in 
   (* only proper overlaps with rules*)
   let ns' = !settings.norm @ ns in (* normalized rules only on one side of CP *)
   let ovl = new Overlapper.overlapper !heuristic ns' (L.map Lit.terms rr) in
   ovl#init ();
   let cpl = [cp | n <- ns'; cp <- ovl#cps ~only_new:only_new n] in
-  let cps = NS.of_list cpl in
-  cps, ovl
+  NS.of_list cpl, ovl
 ;;
 
 let overlaps ?(only_new=false) s rr = A.take_time A.t_overlap (overlaps only_new s rr)
@@ -359,12 +358,13 @@ let saturated state (rr, ee) rew (axs, cps, cps') =
     else
       let joinable (s,t) = try fst (rew#nf s) =fst (rew#nf t) with _ -> false in
       let eqs = L.filter (fun e -> not (joinable e)) eqs in
-      (*match*) Ground.all_joinable !settings state.context str sys eqs (*with 
+      match Ground.all_joinable !settings state.context str sys eqs with 
       | None -> None
       | Some _ ->
         let to_axs = L.map Lit.make_axiom in
-        let cps = NS.to_list (fst (overlaps state (to_axs rr) (to_axs ee))) in
-        Ground.all_joinable !settings state.context str sys [Lit.terms e | e <- cps]*)
+        let ee' = NS.to_list (eqs_for_overlaps (NS.of_list (to_axs ee))) in
+        let cps = Overlap.cps (rr @ [Lit.terms e | e <- ee']) in
+        Ground.all_joinable !settings state.context str sys cps
   in
   if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
   j
@@ -680,7 +680,7 @@ let last_trss = ref []
 (* find k maximal TRSs *)
 let max_k s =
   let ctx, cc, gs = s.context, s.equations, s.goals in
-  let k = !heuristic.k !(A.iterations) in
+  let k = (*if !A.iterations > 18 then 1 else*) !heuristic.k !(A.iterations) in
   let cc_eq = [ Lit.terms n | n <- NS.to_list cc ] in
   let cc_symm = [n | n <- NS.to_list (NS.symmetric cc)] in 
   let cc_symml = [Lit.terms c | c <- cc_symm] in
@@ -740,8 +740,22 @@ let max_k s =
      Smtlib.benchmark (string_of_int rs ^ "_" ^ (string_of_int is)));
    let trss = max_k [] ctx k in
    Logic.pop ctx; (* backtrack: get rid of all assertions added since push *)
-   (*last_trss := trss;*)
    trss
+;;
+
+let repeated _ = false && (let its = !(A.iterations) in its > 15 && its mod 2 = 0)
+
+let new_oriented_by s o =
+  let add_new rr l =
+    let s, t = Lit.terms l in
+    if o#gt s t then l :: rr else if o#gt t s then Lit.flip l :: rr else rr
+  in 
+  List.fold_left add_new [] s.new_nodes
+;;
+
+let max_k s =
+  let update (rr, c, o) = (new_oriented_by s o @ rr, c, o) in
+  if not (repeated ()) then max_k s else [update sys | sys <- s.last_trss]
 ;;
 
 let max_k = A.take_time A.t_maxk max_k
@@ -871,8 +885,6 @@ let set_iteration_stats s =
     set_settings s)
 ;;
 
-let last_trss = ref []
-
 let store_trs ctx j rr cost =
   let rr = [ Lit.terms r | r <- rr ] in
   let rr_index = C.store_trs rr in
@@ -908,6 +920,12 @@ let get_rewriter ctx j (rr, c, order) =
   check_order_generation false order;
   rew#init ();
   last_rewriters := (if j = 0 then [rew] else !last_rewriters @ [rew]);
+  rew
+;;
+
+let get_rewriter' ctx j (rr, c, order) =
+  let rew = new Rewriter.rewriter !heuristic rr !settings.ac_syms order in
+  rew#init ();
   rew
 ;;
 
@@ -973,17 +991,18 @@ let rec phi s =
       if debug 2 then Format.printf "backtrack as unextensible\n%!"; raise Backtrack))
   else
   (**)
-  let process (j, s, aa_new) ((rr, _, order) as sys) =
+  let process (j, s, aa_new) ((rr, c, order) as sys) =
     let aa, gs = s.equations, s.goals in
     let rew = get_rewriter s.context j sys in
+    let rew' = if repeated () then get_rewriter' s.context j (List.map Lit.terms (new_oriented_by s order), c, order) else rew in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     redcount := !redcount + (NS.size red);
 
-    let gs_red', gs_big = reduced_goals rew gs in
+    let gs_red', gs_big = reduced_goals rew' gs in
     let gs = NS.add_all gs_red' gs in
 
     let aa_for_ols = equations_for_overlaps irred aa in
-    let cps', ovl = overlaps (*~only_new:true *)s rr aa_for_ols in
+    let cps', ovl = overlaps ~only_new:true s rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps');
     let eq_bound = !heuristic.hard_bound_equations in
     let cps = NS.filter (fun cp -> Lit.size cp < eq_bound) cps' in
@@ -1159,6 +1178,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       let ss = Listx.unique (t_strategies ()) in
       let all_lits = !settings.norm @ gs0 @ es0 in
       L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- all_lits ]) ss;
+      (*if !settings.auto then
+        L.iter (fun s -> St.fix_parameters s 0 ctx [Lit.terms n | n <- es0]) ss;*)
       let state = make_state ctx (!settings.norm @ es0) (NS.of_list gs0) in
       if !settings.keep_orientation then
         preorient state es;

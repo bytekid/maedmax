@@ -113,15 +113,16 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
 
   (* Computes CPs with given (outer) rule. *)
   method cps ?(only_new=false) rl =
-    let l = fst (Lit.terms rl) in
-    List.concat [ self#cps_at only_new rl p | p <- T.function_positions l ]
+    let l_pos = T.function_positions (fst (Lit.terms rl)) in
+    let check (rl1, _, rl2, _) = Cache.consider_overlap rl1 rl2; true in
+    let cps = [e | p <- l_pos; e <- self#cps_at only_new rl p] in
+    [ cp | cp, o <- cps; check o]
   ;;
   
   (* as in Overlap module, but without variant optimization; rule2 is outer *)
   method overlap_between_at only_new rule1 rule2 p =
-    if only_new && Cache.overlap_was_considered rule1 rule2 p then None
+    if only_new && Cache.overlap_was_considered rule1 rule2 then None
     else (
-    Cache.consider_overlap rule1 rule2;
     let l1,r1 = rule1 and l2, r2 = Rule.rename_canonical rule2 in
     match mgu (Term.subterm_at p l2) l1 with
       | Some sigma ->
@@ -151,7 +152,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
             if !(Settings.do_proof) <> None then
               (if not is_equality then
                 Trc.add_overlap_goal else Trc.add_overlap) st' o;
-            Some (Lit.make st' is_equality))))
+            Some (Lit.make st' is_equality, o))))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)

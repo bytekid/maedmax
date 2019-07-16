@@ -221,6 +221,15 @@ let init_af (ctx,k) fs =
 
 let init ctx = (if !(flags.af) then init_af else init) ctx
 
+let fix_parameters (ctx,k) es =
+  (* group constraints *)
+  let set_group c (f, i, _) = c <&> (prec k i <>> prec k f) in
+  let c = List.fold_left set_group (mk_true ctx) (Theory.Group.symbols es) in
+  (*let set_ring c (m, a, i, _) = c <&> (prec k m <>> prec k i) in
+  List.fold_left set_ring c (Theory.NonAssocRing.symbols es)*)
+  c
+;;
+
 let decode_prec_aux k m =
  let add (k',f) x p =
    if k <> k' then p

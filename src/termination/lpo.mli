@@ -16,6 +16,9 @@ val init : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
 val init_af : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
   Settings.Logic.t
 
+val fix_parameters : (Settings.Logic.context * int) -> Rules.t ->
+  Settings.Logic.t
+
 val decode_print: int -> Settings.Logic.model -> unit
 
 val decode_term_gt : int -> Settings.Logic.model -> (Term.t -> Term.t -> bool)

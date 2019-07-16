@@ -42,7 +42,7 @@ let ht_rlycs : (Rule.t, bool) H.t = H.create 128;;
 
 let ht_rewriters : (int, Rewriter.rewriter) H.t = H.create 128
 
-let ht_considered_overlaps : (Rule.t * Rule.t * Term.pos, bool) H.t = H.create 128
+let ht_considered_overlaps : (Rule.t * Rule.t, bool) H.t = H.create 128
 
 let equation_count = ref 0
 
@@ -205,6 +205,6 @@ let decode_print m i =
   Format.printf "Weak %i: \n@[ %a@]\n" i Rules.print w'
 ;;
 
-let consider_overlap rl1 rl2 p = H.replace ht_considered_overlaps (rl1,rl2,p) true
+let consider_overlap rl1 rl2 = H.replace ht_considered_overlaps (rl1, rl2) true
 
-let overlap_was_considered rl1 rl2 p = H.mem ht_considered_overlaps (rl1,rl2,p)
+let overlap_was_considered rl1 rl2 = H.mem ht_considered_overlaps (rl1, rl2)
