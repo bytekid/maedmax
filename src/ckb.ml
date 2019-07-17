@@ -15,6 +15,13 @@ module Logic = Settings.Logic
 module T = Term
 module Sig = Signature
 
+module SizeOrderedNode = struct
+  type t = Lit.t
+  let le l l' = Lit.size l <= Lit.size l'
+end
+
+module SizeQueue = UniqueHeap.Make(SizeOrderedNode)
+
 (*** OPENS *******************************************************************)
 open Prelude
 open Settings
@@ -33,6 +40,7 @@ type theory_extension_state = {
 type state = {
   context : Logic.context;
   equations : NS.t;
+  size_queue : SizeQueue.t; (* equations sorted by size *)
   goals : NS.t;
   new_nodes : lit list;
   last_trss : (Literal.t list * int * Order.t) list;
@@ -155,6 +163,7 @@ let set_extension s =
 let make_state c es gs = {
   context = c;
   equations = NS.of_list es;
+  size_queue = SizeQueue.empty;
   goals = gs;
   new_nodes = es;
   last_trss = [];
@@ -164,6 +173,7 @@ let make_state c es gs = {
 let copy_state s = {
   context = s.context;
   equations = NS.copy s.equations;
+  size_queue = s.size_queue;
   goals = NS.copy s.goals;
   new_nodes = s.new_nodes;
   last_trss = s.last_trss;
@@ -181,8 +191,9 @@ let store_remaining_nodes ctx ns gs =
   let ns = NS.smaller_than !heuristic.soft_bound_equations ns in
   let ns' = [n | n <- ns; not (NS.mem Select.all_nodes_set n)] in
   let ns_sized = [n, Lit.size n | n <- NS.sort_size ns' ] in
-  Select.all_nodes := L.rev_append (L.rev !Select.all_nodes) ns_sized;
-  ignore (NS.add_list ns' Select.all_nodes_set);
+  (*Select.all_nodes := L.rev_append (L.rev !Select.all_nodes) ns_sized;
+  ignore (NS.add_list ns' Select.all_nodes_set);*)
+  Select.add_to_all_nodes (ns', ns_sized);
   let gs = NS.smaller_than !heuristic.soft_bound_goals gs in
   let gs_sized = [n, Lit.size n | n <- NS.sort_size gs] in
   Select.all_goals := L.rev_append (L.rev !Select.all_goals) gs_sized
@@ -680,7 +691,7 @@ let last_trss = ref []
 (* find k maximal TRSs *)
 let max_k s =
   let ctx, cc, gs = s.context, s.equations, s.goals in
-  let k = (*if !A.iterations > 18 then 1 else*) !heuristic.k !(A.iterations) in
+  let k = (*if !A.iterations > 20 && !A.iterations mod 2 = 0 then 1 else*) !heuristic.k !(A.iterations) in
   let cc_eq = [ Lit.terms n | n <- NS.to_list cc ] in
   let cc_symm = [n | n <- NS.to_list (NS.symmetric cc)] in 
   let cc_symml = [Lit.terms c | c <- cc_symm] in

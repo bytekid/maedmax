@@ -389,5 +389,6 @@ let h_boro h = { h with
   n = 14;
   size_age_ratio = 70;
   soft_bound_equations = 16;
+  k = (fun i -> if i > 20 then 1 else h.k i);
   strategy = [ts_kbo, [], [MaxRed], IterationLimit 10000, Size]
 }

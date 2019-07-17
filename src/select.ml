@@ -9,6 +9,13 @@ module Ac = Theory.Ac
 module T = Term
 module FI = FingerprintIndex
 
+module SizeOrderedNode = struct
+  type t = Lit.t
+  let le l l' = Lit.size l <= Lit.size l'
+end
+
+module SizeQueue = UniqueHeap.Make(SizeOrderedNode)
+
 (*** OPENS *******************************************************************)
 open Prelude
 open Settings
@@ -21,7 +28,11 @@ let heuristic = ref Settings.default_heuristic
 (* maintain list of created nodes to speed up selection by age *)
 let all_nodes = ref []
 let all_nodes_set = NS.empty ()
+(* min size of all_nodes, max_int if unknown *)
+let min_all_nodes = ref max_int
+
 let all_goals = ref []
+let min_all_goals = ref max_int
 
 
 (*** FUNCTIONS ***************************************************************)
@@ -39,6 +50,16 @@ let log_select cc ss thresh =
   if debug 1 then
     F.printf "all:\n%a\n%!" pl sorted
 ;;
+
+let add_to_all_nodes (ns, ns_sized) =
+  all_nodes := L.rev_append (L.rev !all_nodes) ns_sized;
+  ignore (NS.add_list ns all_nodes_set);
+  if !min_all_nodes < max_int then (
+    let m = List.fold_left (fun m (_, s) -> min m s) !min_all_nodes ns_sized in
+    Format.printf "update min size to %d\n%!" m;
+    min_all_nodes := m)
+;; 
+
 
 let init es0 gs0 =
   all_nodes := [ e, Lit.size e | e <- es0 ];
@@ -59,15 +80,18 @@ let yes _ = true
 
 let old_select = ref 0
 
+let max_list_scan = ref 5000
+
 let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
+  (*Format.printf "get oldest %d\n%!" max;*)
   old_select := !old_select + 1;
-  let rec get_oldest acc max k =
-    if k > 5000 then (
+  let rec get_oldest acc max min_size k =
+    if k > !max_list_scan then (
       nodelist := List.rev acc @ !nodelist;
-      if max + 2 <= maxmax then get_oldest [] (max + 2) 0 else None
+      if max + 2 <= maxmax then get_oldest [] (max + 2) max_int 0 else None, min_size
     ) else
       match !nodelist with
-      | [] -> None
+      | [] -> None, min_size
       | ((n, size_n) as na) :: ns -> (
         nodelist := ns;
         (match onodeset with Some nss -> ignore (NS.remove n nss) | None -> ());
@@ -81,17 +105,20 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
             with Rewriter.Max_term_size_exceeded -> None
         in
         match nfs with
-        | None -> get_oldest acc max (k+1)
+        | None -> get_oldest acc max min_size (k+1)
         | Some ((s',rss),(t',rst)) ->
           (* check for subsumption by other literals seems not beneficial *)
           if s' = t' || NS.mem aa n then
-            get_oldest acc max (k+1)
+            get_oldest acc max min_size (k+1)
           else if size_n > max || not (accept n) then
-            get_oldest (na :: acc) max (k+1)
-          else (nodelist := List.rev acc @ !nodelist; Some n)
+            get_oldest (na :: acc) max (min min_size size_n) (k+1)
+          else (
+            nodelist := List.rev acc @ !nodelist;
+            (*Format.printf "pick size %d\n%!" size_n;*)
+            Some n, min_size)
         )
   in
-  get_oldest [] max 0
+  get_oldest [] max max_int 0
 ;;
 
 let select_count i = !heuristic.n
@@ -113,26 +140,34 @@ let select_goal_similar ns =
   n
 ;;
 
-let get_old_nodes_from accept nodeset onodeset maxsize aarew n =
+let get_old_nodes_from accept (nodeset, min) onodeset maxsize aarew n =
+  if !min < max_int && maxsize < !min && List.length !nodeset < !max_list_scan then
+    ( F.printf "no node with maxsize %d exists, min %d\n" maxsize !min; [])
+  else (
   let maxmaxsize = maxsize + 6 in
   let rec get_old_nodes n =
     if n = 0 then []
     else match get_oldest_max_from accept nodeset onodeset maxsize maxmaxsize aarew with
-    | Some b ->
+    | Some b, _ ->
       if debug 1 then (
         F.printf "extra age selected: %a  (%i) (%i)\n%!"
           Lit.print b (Nodes.age b) (Lit.size b)
       );
       b :: (get_old_nodes (n - 1))
-    | None -> []
-  in get_old_nodes n
+    | None, minsize -> (
+      (*F.printf "no node with maxsize %d found, min size is %d\n%!" maxsize minsize;*)
+      min := minsize;
+      [])
+  in get_old_nodes n)
 ;;
 
 let get_old_nodes ?(accept = yes) =
-  get_old_nodes_from accept all_nodes (Some all_nodes_set)
+  get_old_nodes_from accept (all_nodes, min_all_nodes) (Some all_nodes_set)
 ;;
 
-let get_old_goals ?(accept = yes) = (get_old_nodes_from accept all_goals None)
+let get_old_goals ?(accept = yes) =
+  get_old_nodes_from accept (all_goals, min_all_goals) None
+;;
 
 (* ns is assumed to be size sorted *)
 let select_size_age aarew ns_sorted all n =
@@ -206,25 +241,33 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
   let k = if k = 0 then select_count !(A.iterations) else k in
   let acs = !settings.ac_syms in
   let small = NS.smaller_than thresh cc in
+  (*Format.printf "%d smaller than threshhold %d\n%!" (List.length small) thresh;*)
   if not is_restart then
     adjust_bounds thresh (List.length small);
   let small', _ = L.partition (keep acs) small in
+  let t = Unix.gettimeofday () in
   let size_sorted = NS.sort_size_age small' in
+  A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
   let aa = 
     if only_size || !heuristic.size_age_ratio = 100 then
       fst (Listx.split_at_most k size_sorted)
     else
       let size_sorted' = split k size_sorted in
       Random.self_init();
-      select_size_age aarew size_sorted' (NS.smaller_than 16 cc) k
+      let res = select_size_age aarew size_sorted' (NS.smaller_than 16 cc) k in
+      res
   in
   let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
+  let tt = Unix.gettimeofday () in
   let aa =
     let kk = if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2 in
     if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
   in
+  A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. tt);
+  let tt = Unix.gettimeofday () in
   let add_goal_sim = A.little_progress 10 && size_sorted <> [] in
   let aa = if add_goal_sim then select_goal_similar size_sorted :: aa else aa in
+  A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. tt);
   let pp = NS.diff_list cc aa in
   (aa,pp)
 ;;

@@ -1,3 +1,5 @@
+module SizeOrderedNode : UniqueHeap.Ordered
+
 type lit = Literal.t
 
 type theory_extension_state
@@ -5,6 +7,7 @@ type theory_extension_state
 type state = {
   context : Settings.Logic.context;
   equations : Nodes.t;
+  size_queue : UniqueHeap.Make (SizeOrderedNode).t;
   goals : Nodes.t;
   new_nodes : lit list;
   last_trss : (Literal.t list * int * Order.t) list;
