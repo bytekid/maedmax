@@ -280,7 +280,7 @@ let h_piombo h = { h with
 let h_zolfo h = { h with
   n = 10;
   restart_carry = (2, 0);
-  k = k_limiting
+  k = k_limiting;
 }
 
 let h_xeno0 h = { h with
@@ -372,8 +372,8 @@ let h_no_shape1 h = { h_no_shape0 h with
 }
 
 let h_idrogeno h = { h with
-  hard_bound_equations = 65;
-  hard_bound_goals = 70;
+  hard_bound_equations = 60;
+  hard_bound_goals = 60;
   n = 6;
   soft_bound_equations = 45; (* 53 needed for GRP505, 506*)
   soft_bound_goals = 40;
