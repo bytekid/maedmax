@@ -196,7 +196,8 @@ let store_remaining_nodes ctx ns gs =
   Select.add_to_all_nodes (ns', ns_sized);
   let gs = NS.smaller_than !heuristic.soft_bound_goals gs in
   let gs_sized = [n, Lit.size n | n <- NS.sort_size gs] in
-  Select.all_goals := L.rev_append (L.rev !Select.all_goals) gs_sized
+  Select.add_to_all_goals gs_sized;
+  (*Select.all_goals := L.rev_append (L.rev !Select.all_goals) gs_sized*)
 ;;
 
 let add_cassociativity acs =
@@ -257,6 +258,8 @@ let reduced ?(max_size=0) rr ns =
 
 let reduced_goals rew gs =
   let t = Unix.gettimeofday () in
+  if debug 2 then
+    Format.printf "rewrite G:\n%a\n" NS.print gs;
   let gs_red = reduced ~max_size:!heuristic.hard_bound_goals rew gs in
   let thresh = NS.avg_size gs + 8 in
   let res =
@@ -265,6 +268,20 @@ let reduced_goals rew gs =
   in
   A.t_rewrite_goals := !A.t_rewrite_goals +. (Unix.gettimeofday () -. t);
   res
+;;
+
+let goal_cp_table : (Lit.t, bool) Hashtbl.t = Hashtbl.create 128
+
+let reduced_goal_cps rew gs =
+  if not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio) then
+    reduced_goals rew gs
+  else (
+    let t = Unix.gettimeofday () in
+    let gs' = NS.filter (fun g -> not (Hashtbl.mem goal_cp_table g)) gs in
+    NS.iter (fun g -> Hashtbl.add goal_cp_table g true) gs';
+    let res = reduced_goals rew gs' in
+    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
+    res)
 ;;
 
 let interreduce rr =
@@ -754,19 +771,12 @@ let max_k s =
    trss
 ;;
 
-let repeated _ = false && (let its = !(A.iterations) in its > 15 && its mod 2 = 0)
-
 let new_oriented_by s o =
   let add_new rr l =
     let s, t = Lit.terms l in
     if o#gt s t then l :: rr else if o#gt t s then Lit.flip l :: rr else rr
   in 
   List.fold_left add_new [] s.new_nodes
-;;
-
-let max_k s =
-  let update (rr, c, o) = (new_oriented_by s o @ rr, c, o) in
-  if not (repeated ()) then max_k s else [update sys | sys <- s.last_trss]
 ;;
 
 let max_k = A.take_time A.t_maxk max_k
@@ -905,9 +915,12 @@ let store_trs ctx j rr cost =
     else if !(Settings.do_proof) <> None then interreduce rr
     else Variant.reduce_encomp rr
   in
-  (*let rr_red_sort = List.sort Pervasives.compare rr_reduced in
-  if List.mem rr_red_sort !last_trss then Format.printf "repeated TRS %d\n%!" j;
-  last_trss := rr_red_sort :: !last_trss;*)
+  (*let subset rr' = Listset.subset rr_reduced rr' in
+  let tt = Unix.gettimeofday () in
+  let repeated = List.exists subset !last_trss in 
+  A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. tt);
+  (*if repeated then Format.printf "repeated TRS %d\n%!" j;*)
+  last_trss := rr_reduced :: !last_trss;*)
   C.store_redtrs rr_reduced rr_index;
   C.store_rule_vars ctx rr_reduced; (* otherwise problems in norm *)
   if has_comp () then C.store_eq_vars ctx rr_reduced;
@@ -1005,11 +1018,10 @@ let rec phi s =
   let process (j, s, aa_new) ((rr, c, order) as sys) =
     let aa, gs = s.equations, s.goals in
     let rew = get_rewriter s.context j sys in
-    let rew' = if repeated () then get_rewriter' s.context j (List.map Lit.terms (new_oriented_by s order), c, order) else rew in
     let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
     redcount := !redcount + (NS.size red);
 
-    let gs_red', gs_big = reduced_goals rew' gs in
+    let gs_red', gs_big = (*if !A.shape = Idrogeno && j > 1 then NS.empty (), NS.empty () else*) reduced_goals rew gs in
     let gs = NS.add_all gs_red' gs in
 
     let aa_for_ols = equations_for_overlaps irred aa in
@@ -1024,7 +1036,7 @@ let rec phi s =
 
     let go = overlaps_on rr aa_for_ols gs in
     let go = NS.filter (fun g -> Lit.size g < !heuristic.hard_bound_goals) go in
-    let gcps, gcps' = reduced_goals rew go in
+    let gcps, gcps' = reduced_goal_cps rew go in
     let gs' = NS.diff (NS.add_all gs_big (NS.add_all gcps' gcps)) gs in
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in
 
@@ -1212,6 +1224,10 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       NS.reset_age ();
       A.mem_diffs := [];
       A.time_diffs := [];
+      Select.min_all_nodes := max_int;
+      Select.min_all_goals := max_int;
+      last_trss := [];
+      Hashtbl.reset goal_cp_table;
       let es' = if gs = [] || not (unsat_allowed ()) then [] else es_new in
       let esx = List.map Lit.terms (es' @ es0) in
       let shape = A.problem_shape esx in

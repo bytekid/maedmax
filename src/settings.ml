@@ -331,9 +331,9 @@ let h_ossigeno h = { h with
   size_age_ratio = 80;
   hard_bound_equations = 45;
   hard_bound_goals = 45;
-  soft_bound_equations = 30;
+  soft_bound_equations = 18;
   soft_bound_goals = 30;
-  restart_carry = (2, 2);
+  restart_carry = (2, 0);
   k = k_limiting
 }
 
@@ -377,10 +377,12 @@ let h_no_shape1 h = { h_no_shape0 h with
 
 let h_idrogeno h = { h with
   hard_bound_equations = 65;
+  hard_bound_goals = 70;
   n = 6;
-  soft_bound_equations = 45;
+  soft_bound_equations = 45; (* 53 needed for GRP505, 506*)
+  soft_bound_goals = 40;
   k = k_limiting;
-  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
+  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
 }
 
 let h_boro h = { h with

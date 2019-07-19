@@ -7,6 +7,10 @@ type t = Settings.literal
 
 let sizes : (int, int*int) Hashtbl.t = Hashtbl.create 100
 
+let terms l = l.terms
+
+let size l = Rule.size (l.terms)
+
 let print_sizes _ = 
   let show (k,(v,vg)) = Format.printf "size %d: (%d,%d)\n%!" k v vg in
   let sz = Hashtbl.fold (fun k v l -> (k,v)::l) sizes [] in
@@ -15,7 +19,7 @@ let print_sizes _ =
 
 let print ppf l =
   let eq = if l.is_equality then "=" else "!=" in
-  Format.fprintf ppf "%a %s %a" Term.print (fst l.terms) eq Term.print (snd l.terms)
+  Format.fprintf ppf "%a %s %a (%d)" Term.print (fst l.terms) eq Term.print (snd l.terms) (size l)
 ;;
 
 let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
@@ -23,10 +27,6 @@ let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
 let killed = ref 0
 
 let make ts e = {terms = ts; is_equality = e}
-
-let terms l = l.terms
-
-let size l = Rule.size (l.terms)
 
 let is_equality l = l.is_equality
 

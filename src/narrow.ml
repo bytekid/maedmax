@@ -33,36 +33,39 @@ let propagate_basic_pos p ps r =
   Hashset.add_all ps_new ps'
 ;;
 
-let rec nf rr (s,ps) =
-  let nf_at_with p (t,pt) (l,r) =
+let rec nf rr ((s, _, _) as spr) =
+  let nf_at_with p (t, pt, rt) (l,r) =
     try
-      let u, _ = Rewriting.step_at_with t p (l, r) in
-      (u, propagate_basic_pos p pt r)
-    with _ -> (t,pt)
+      let u, sigma = Rewriting.step_at_with t p (l, r) in
+      (u, propagate_basic_pos p pt r, ((l,r), p, sigma) :: rt)
+    with _ -> (t,pt, rt)
   in
   let nf_at t_pt p = List.fold_left (nf_at_with p) t_pt rr in
-  let s_ps' = List.fold_left nf_at (s,ps) (T.function_positions s) in
-  if s_ps' = (s,ps) then (s,ps) else nf rr s_ps'
+  let ((s', _, _) as spr') = List.fold_left nf_at spr (T.function_positions s) in
+  if s' = s then spr else nf rr spr'
 ;;
 
 (* rewriting to normal form for both terms *)
 let nf2 rr ((s,t),(ps,pt)) =
-  let s',ps' = nf rr (s,ps) in
-  let t',pt' = nf rr (t,pt) in
-  ((s',t'),(ps',pt'))
+  let s',ps',rs = nf rr (s,ps,[]) in
+  let t',pt',rt = nf rr (t,pt,[]) in
+  ((s',t'),(ps',pt'), (rs, rt))
 ;;
 
 (* basic narrowing *)
 let narrow_forward_at_with settings rr ((s,t),(ps,pt)) p (l,r) =
   let s_p = T.subterm_at p s in
   try
-    let subst = T.substitute (Subst.mgu s_p l) in
+    let sigma = Subst.mgu s_p l in
+    let subst = T.substitute sigma in
     let s' = T.replace (subst s) (subst r) p in
     let ps' = propagate_basic_pos p ps r in
     let st', keep_dir = Variant.normalize_rule_dir (s',subst t) in
     if Rule.size st' > (*!(settings.size_bound_goals)*) 200 then (
       heuristic := { !heuristic with mode = OnlyUNSAT };
       raise Too_large);
+    if !(Settings.do_proof) <> None then
+      Trace.add_overlap st' ((l,r), p, (s,t), sigma);
     let pst = if keep_dir then (ps',pt) else (pt,ps') in
     if debug settings then
       Format.printf "forward narrow (%a,%a) with %a at %s to (%a,%a) %d\n%!"
@@ -70,9 +73,11 @@ let narrow_forward_at_with settings rr ((s,t),(ps,pt)) p (l,r) =
         R.print (l,r) (pstr p)
         T.print (fst st') T.print (snd st')
         (R.size st');
-    let uv,ps_uv = nf2 rr (st',pst) in
+    let uv,ps_uv, rs_uv = nf2 rr (st',pst) in
     if debug settings then
       Format.printf "rewrite to (%a,%a)\n%!" T.print (fst uv) T.print (snd uv);
+    if !(Settings.do_proof) <> None then
+      Trace.add_rewrite st' uv rs_uv;
     [(uv,ps_uv)]
   with _ -> []
 ;;
