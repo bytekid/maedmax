@@ -852,7 +852,7 @@ let detect_shape es =
     | Zolfo -> [h_zolfo h, 200.; h_ossigeno h, 1000.]
     | Xeno -> [h_xeno0 h, 230.; h_xeno1 h, 1000.] 
     | Elio -> [h_elio h, 1000.]
-    | Silicio -> [h_silicio0 h, 240.; h_silicio1 h, 1000.]
+    | Silicio -> [h_silicio h, 1000.]
     | Ossigeno -> [h_ossigeno h, 1000.]
     | Carbonio -> [h_carbonio1 h, 4.; h_carbonio0 h, 1000.]
     | Magnesio -> [h_magnesio h, 1000.]
@@ -1018,10 +1018,10 @@ let rec phi s =
   let process (j, s, aa_new) ((rr, c, order) as sys) =
     let aa, gs = s.equations, s.goals in
     let rew = get_rewriter s.context j sys in
-    let irred, red = rewrite rew aa in (* rewrite eqs wrt new TRS *)
+    let irred, red = if !A.shape = Silicio && j > 1 then NS.empty (), NS.empty () else rewrite rew aa in (* rewrite eqs wrt new TRS *)
     redcount := !redcount + (NS.size red);
 
-    let gs_red', gs_big = (*if !A.shape = Idrogeno && j > 1 then NS.empty (), NS.empty () else*) reduced_goals rew gs in
+    let gs_red', gs_big = if !A.shape = Silicio && j > 1 then NS.empty (), NS.empty () else reduced_goals rew gs in
     let gs = NS.add_all gs_red' gs in
 
     let aa_for_ols = equations_for_overlaps irred aa in
@@ -1224,6 +1224,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       NS.reset_age ();
       A.mem_diffs := [];
       A.time_diffs := [];
+      Select.all_nodes := [];
+      Select.all_goals := [];
       Select.min_all_nodes := max_int;
       Select.min_all_goals := max_int;
       last_trss := [];

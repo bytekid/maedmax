@@ -310,26 +310,22 @@ let h_elio h = { h with
   restart_carry = (2, 2)
 }
 
-let h_silicio0 h = { h with
+let h_silicio h = { h with
   n = 10;
   n_goals = 1;
   size_age_ratio = 80;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
   hard_bound_equations = 45;
   hard_bound_goals = 45;
-  soft_bound_equations = 30;
+  soft_bound_equations = 25;
   soft_bound_goals = 30;
-  k = (fun i -> if i > 30 then 1 else 2)
-}
-
-let h_silicio1 h = { h_silicio0 h with
-  no_select_nf = 3 (* LAT171-1, LAT143-1 *)
+  k = (fun i -> if i > 30 then 1 else 2);
 }
 
 let h_ossigeno h = { h with
   n = 12;
   size_age_ratio = 80;
-  hard_bound_equations = 45;
+  hard_bound_equations = 25;
   hard_bound_goals = 45;
   soft_bound_equations = 18;
   soft_bound_goals = 30;
