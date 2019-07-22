@@ -55,6 +55,7 @@ type termination_strategy = t_setting list
 
 (* heuristically detected problem class *)
 type shape =
+  | Anello
   | Boro
   | Carbonio
   | Elio
@@ -255,6 +256,7 @@ let tmp = ref 0.0
 let fixed_shape = ref ""
 
 let shape_to_string = function
+  | Anello -> "anello"
   | Boro -> "boro"
   | Carbonio -> "carbonio"
   | Elio -> "elio"
@@ -287,22 +289,32 @@ let h_zolfo h = { h with
   soft_bound_goals = 30;*)
 }
 
-let h_xeno0 h = { h with
+let h_xeno h = { h with
   n = 10;
   n_goals = 1;
   reduce_AC_equations_for_CPs = true;
-  hard_bound_equations = 90;
-  hard_bound_goals = 120;
+  hard_bound_equations = 40;
+  hard_bound_goals = 40;
   size_age_ratio = 60;
-  soft_bound_equations = 70;
-  soft_bound_goals = 100;
+  soft_bound_equations = 20;
+  soft_bound_goals = 20;
   restart_carry = (2, 0);
-  select_recursion_limit = 2000
+  select_recursion_limit = 2000;
+  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, SizeAge 60];
 }
 
-let h_xeno1 h = { h_xeno0 h with
-  no_similar_select = true;
-  k = k_limiting
+let h_anello h = { h with
+  n = 10;
+  n_goals = 1;
+  reduce_AC_equations_for_CPs = true;
+  hard_bound_equations = 40;
+  hard_bound_goals = 40;
+  size_age_ratio = 60;
+  soft_bound_equations = 25;
+  soft_bound_goals = 25;
+  restart_carry = (2, 0);
+  select_recursion_limit = 2000;
+  strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, SizeAge 60];
 }
 
 let h_elio h = { h with
@@ -357,7 +369,7 @@ let h_magnesio h = { h with
   hard_bound_equations = 40;
   hard_bound_goals = 45;
   soft_bound_equations = 25;
-  soft_bound_goals = 37
+  soft_bound_goals = 32
 }
 
 let h_no_shape0 h = { h with

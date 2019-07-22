@@ -116,17 +116,28 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
         | None -> get_oldest acc max min_size (k+1)
         | Some ((s',rss),(t',rst)) ->
           (* check for subsumption by other literals seems not beneficial *)
-          if s' = t' || NS.mem aa n then (
+          if (s' = t' && !A.shape <> Anello) || NS.mem aa n then (
             (*if size_n = 12 then Format.printf "skip %a %B\n%!" Lit.print n (s' = t');*)
             get_oldest acc max (min min_size size_n) (k+1)
           )
+          else (
+          let ac_equiv n =
+            let t = Unix.gettimeofday () in
+            let ac_equiv = Lit.are_ac_equivalent !settings.ac_syms in
+            let res = NS.exists (fun n' -> ac_equiv n n') aa in
+            A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
+            res
+          in
+          if false && ac_equiv n then (
+            if debug 3 then Format.printf "throw out %a \n%!" Lit.print n;
+            get_oldest acc max (min min_size size_n) (k+1))
           else if size_n > max || not (accept n) then
             get_oldest (na :: acc) max (min min_size size_n) (k+1)
           else (
             nodelist := List.rev acc @ !nodelist;
             (*Format.printf "pick size %d, is %dth\n%!" size_n k;*)
             Some n, min_size)
-        )
+        ))
   in
   get_oldest [] max max_int 0
 ;;

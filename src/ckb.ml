@@ -276,11 +276,9 @@ let reduced_goal_cps rew gs =
   if not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio) then
     reduced_goals rew gs
   else (
-    let t = Unix.gettimeofday () in
     let gs' = NS.filter (fun g -> not (Hashtbl.mem goal_cp_table g)) gs in
     NS.iter (fun g -> Hashtbl.add goal_cp_table g true) gs';
     let res = reduced_goals rew gs' in
-    A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
     res)
 ;;
 
@@ -851,7 +849,8 @@ let detect_shape es =
     match shape with
     | Piombo -> [h_piombo h, 1000.]
     | Zolfo -> [h_zolfo h, 200.; h_ossigeno h, 1000.]
-    | Xeno -> [h_xeno0 h, 230.; h_xeno1 h, 1000.] 
+    | Xeno -> [h_xeno h, 1000.] 
+    | Anello -> [h_anello h, 1000.] 
     | Elio -> [h_elio h, 1000.]
     | Silicio -> [h_silicio h, 1000.]
     | Ossigeno -> [h_ossigeno h, 1000.]

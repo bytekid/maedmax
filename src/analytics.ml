@@ -181,7 +181,8 @@ let find_duplicating es =
 
 let problem_shape es =
   let s = !Settings.fixed_shape in
-  if s = "boro" then Boro
+  if s = "anello" then Anello
+  else if s = "boro" then Boro
   else if s = "carbonio" then Carbonio
   else if s = "idrogeno" then Idrogeno
   else if s = "elio" then Elio
@@ -203,6 +204,7 @@ let problem_shape es =
   let mon = Theory.Monoid.count es > 0 in
   let group = Theory.Group.count es > 0 in
   let lat = Theory.Lattice.count es > 0 in
+  let ring = Theory.NonAssocRing.count es > 0 in
   let acs = Theory.Ac.count es in
   let cs = Theory.Commutativity.count es - acs in
   let distrib = Theory.NonAssocRing.has_distrib es in
@@ -213,7 +215,8 @@ let problem_shape es =
   (* Ossigeno: GRP166-1, GRP185-3, GRP193-2, GRP184-4 *)
   else if (acs > 0 && dup && distrib && group && lat) then Ossigeno
   (* Xeno: relation problems like REL011-2 *)
-  else if (acs > 0 && dup && distrib && mon && not app) then Xeno
+  else if (acs > 0 && dup && distrib && mon && not app) then
+    (if ring then Anello else Xeno)
   (* Zolfo: some groups like GRP119-1 - GRP122-1 *)
   else if (app && not dup && not distrib && acs = 0) then Zolfo
   (* Carbonio: COL003-* *)
