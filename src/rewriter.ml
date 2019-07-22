@@ -89,7 +89,7 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   (* Returns tuple (u, rs@rs') where u is a normal form of t that was obtained
      using rules rs'. Lookup in table, otherwise compute. *)
   method nf' rs t =
-    if Term.size t > h.hard_bound_equations then
+    if Term.size t > h.hard_bound_goals then
       raise Max_term_size_exceeded;
     try let u, urs = H.find nf_table t in u, rs @ urs with
     Not_found -> (

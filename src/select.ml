@@ -116,7 +116,7 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
         | None -> get_oldest acc max min_size (k+1)
         | Some ((s',rss),(t',rst)) ->
           (* check for subsumption by other literals seems not beneficial *)
-          if (s' = t' && !A.shape <> Anello) || NS.mem aa n then (
+          if s' = t' || NS.mem aa n then (
             (*if size_n = 12 then Format.printf "skip %a %B\n%!" Lit.print n (s' = t');*)
             get_oldest acc max (min min_size size_n) (k+1)
           )
