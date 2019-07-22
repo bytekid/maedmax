@@ -281,6 +281,10 @@ let h_zolfo h = { h with
   n = 10;
   restart_carry = (2, 0);
   k = k_limiting;
+  (*hard_bound_equations = 45;
+  hard_bound_goals = 45;
+  soft_bound_equations = 30;
+  soft_bound_goals = 30;*)
 }
 
 let h_xeno0 h = { h with

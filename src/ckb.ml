@@ -308,8 +308,9 @@ let eqs_for_overlaps ee =
 
 let subsumption_ratios : float list ref = ref []
 
-let equations_for_overlaps irred all =
-  let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
+let equations_for_overlaps red irred all =
+  let ee = if !A.shape = Magnesio && NS.size red < 15 then NS.add_all irred red else irred in
+  let irr = NS.filter Lit.not_increasing (NS.symmetric ee) in
   if !A.iterations < 3 && !heuristic.full_CPs_with_axioms then
     NS.to_list (eqs_for_overlaps all)
   else
@@ -345,7 +346,7 @@ let overlaps only_new s rr aa =
       let large_or_keep = A.last_cp_count () < 1000 || not prune_AC in
       let rr' = if large_or_keep then rr' else NS.c_equivalence_free cs rr' in
       rr' @ aa'
-  in 
+  in
   (* only proper overlaps with rules*)
   let ns' = !settings.norm @ ns in (* normalized rules only on one side of CP *)
   let ovl = new Overlapper.overlapper !heuristic ns' (L.map Lit.terms rr) in
@@ -1024,7 +1025,7 @@ let rec phi s =
     let gs_red', gs_big = if !A.shape = Silicio && j > 1 then NS.empty (), NS.empty () else reduced_goals rew gs in
     let gs = NS.add_all gs_red' gs in
 
-    let aa_for_ols = equations_for_overlaps irred aa in
+    let aa_for_ols = equations_for_overlaps red irred aa in
     let cps', ovl = overlaps ~only_new:true s rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps');
     let eq_bound = !heuristic.hard_bound_equations in

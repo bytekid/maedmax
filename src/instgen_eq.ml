@@ -63,7 +63,7 @@ let rec phi s =
     let gs_red', gs_big = reduced_goals rew gs in
     let gs = NS.add_all gs_red' gs in
 
-    let aa_for_ols = equations_for_overlaps irred aa in
+    let aa_for_ols = equations_for_overlaps red irred aa in
     let cps',_ = overlaps s rr aa_for_ols in
     let eq_bound = !heuristic.hard_bound_equations in
     let cps = NS.filter (fun cp -> Lit.size cp < eq_bound) cps' in
