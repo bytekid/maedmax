@@ -42,7 +42,6 @@ type inference =
 
 (*** GLOBALS *****************************************************************)
 let trace_table : (R.t, origin * int) H.t = H.create 128
-let children_table : (R.t, result) H.t = H.create 128
 let goal_trace_table : (R.t, origin * int) H.t = H.create 128
 let deleted : R.t list ref = ref []
 
@@ -115,7 +114,6 @@ let gadd g o =
 let clear _ =
   H.clear trace_table;
   H.clear goal_trace_table;
-  H.clear children_table;
   count := 0;
   deleted := []
 ;;
@@ -126,12 +124,6 @@ let add_overlap eq (rl1, p, rl2, mu) = add eq (CP (rl1, p, mu, rl2))
 
 let add_rewrite eq eq0 steps =
   add eq (Rewrite (eq0, steps));
-  H.add children_table eq0 (Reduced (eq, steps))
-;;
-
-let add_delete eq =
-  if not (H.mem children_table eq) then
-    H.add children_table eq Deleted
 ;;
 
 let add_initial_goal eqs = List.iter (fun e -> gadd e Initial) eqs

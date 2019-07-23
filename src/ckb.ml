@@ -281,9 +281,10 @@ let interreduce rr =
         Trace.add_rewrite (normalize (l,r')) (l, r) ([],rs));
     (l,r')
   in
-  let rr' = Listx.unique ((L.map right_reduce) rr) in
-  let reducible rl = Rewriting.reducible_with (Listx.remove rl rr') (fst rl) in
-  [ rl | rl <- rr'; not (reducible rl)]
+  let rr_hat = Listx.unique ((L.map right_reduce) rr) in
+  let proper_enc l l' = Subst.enc l l' && not (Subst.enc l' l) in
+  let nonred l = List.for_all (fun (l',r') -> not (proper_enc l l')) rr_hat in
+  [ rl | rl <- rr_hat; nonred (fst rl)]
 ;;
 
 (* * CRITICAL PAIRS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -452,8 +453,8 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
           let orientable (s,t) = order#gt s t || order#gt t s in
           (* if an equation is orientable, wait one iteration ... *)
           let ee_sym = ee @ [s, t| t, s <- ee ] in
-          if not gs_ground && L.for_all (fun e -> not (orientable e)) ee &&
-            !(Settings.do_proof) = None then (* no narrowing proof output yet *)
+          if not gs_ground && L.for_all (fun e -> not (orientable e)) ee (*&&
+            !(Settings.do_proof) = None*) then  (*no narrowing proof output yet *)
             Narrow.decide_goals !settings rr ee_sym order !heuristic
           else if not (rr @ ee = [] || gs_ground) then None
           else (
@@ -1150,10 +1151,10 @@ let ext (es,gs) settings =
 ;;
 
 let ckb ((settings_flags, heuristic_flags) as flags) input =
-  let input,settings_flags =
+  (*let input,settings_flags =
     if !(S.do_proof) <> None then ext input settings_flags
     else input, settings_flags
-  in
+  in*)
   set_settings settings_flags;
   set_heuristic heuristic_flags;
   if debug 2 then Format.printf "strategy %s\n%!" (Strategy.to_string heuristic_flags.strategy);

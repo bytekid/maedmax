@@ -55,7 +55,8 @@ let adm_smt (ctx,k) =
   let ps = [ f,g | f,_ <- !funs; g,_ <- !funs; f <> g ] in
   let total_prec = big_and ctx [ !! (p f <=> (p g)) | f, g <- ps ] in
   let cw0 = big_or ctx [ w k c <=> one | c <- cs ] in
-  let cw0' = if !(Settings.do_proof) <> None then cw0 else mk_true ctx in
+  (* CeTA expects 0 *)
+  let cw0' = if !(Settings.do_proof) = Some CPF then cw0 else mk_true ctx in
   big_and1 [ensure_nat; cadm; uadm; total_prec; cw0']
 ;;
     

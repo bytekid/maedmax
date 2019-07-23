@@ -246,7 +246,6 @@ let rec joinable ctx sys p =
   if r_joinable ctx sys p || (e_instance ctx sys p) || (e_instance ctx sys p')
     || (cong_joinable ctx sys p')
     then True
-  (*else if !(Settings.do_proof) <> None then False*) (* CeTA does not support more *)
   else if sys.acsyms <> [] then ac_joinable ctx sys p
   else instance_joinable ctx sys p None
   (*let j0 = joinable_args ctx sys p in

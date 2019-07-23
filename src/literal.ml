@@ -97,8 +97,7 @@ let rewriter_nf_with ?(max_size = 0) l rewriter =
   if s' = t' && l.is_equality then (
     if !(Settings.do_proof) <> None then (
       let st' = Variant.normalize_rule (s', t') in
-      T.add_rewrite st' ts (rs, rt);
-      T.add_delete st');
+      T.add_rewrite st' ts (rs, rt));
     Some([], rls))
   else if Rule.equal ts (s', t') then None
   else (
