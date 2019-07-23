@@ -200,7 +200,7 @@ let store_remaining_nodes ctx ns gs =
   (*Select.all_goals := L.rev_append (L.rev !Select.all_goals) gs_sized*)
 ;;
 
-let add_cassociativity acs =
+let trace_cassociativity acs =
   let x = T.V 1 in
   let y = T.V 2 in
   let z = T.V 3 in
@@ -210,23 +210,16 @@ let add_cassociativity acs =
     let comm = (T.F(f, [x'; y']), T.F(f, [y'; x'])) in
     let st = T.F(f, [T.F(f, [y; x]); z]), T.F(f, [x; T.F(f, [y; z])]) in
     let mu = [4,y; 5,x] in
-    let st = Variant.normalize_rule st in
+    let st = normalize st in
     Trace.add_overlap st (comm, [0], assoc, mu);
     let ut = T.F(f, [y; T.F(f, [x; z])]), T.F(f, [x; T.F(f, [y; z])]) in
-    let ut = Variant.normalize_rule ut in
+    let ut = normalize ut in
     Trace.add_rewrite ut st ([], [assoc, [], [1, y; 2, x]])
   in
   List.iter add acs
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
-let add_rewrite_trace st rls st' =
-  if has_comp () then (
-    let rdcts = try Hashtbl.find rewrite_trace st with Not_found -> [] in
-    Hashtbl.replace rewrite_trace st ((rls, st') :: rdcts)
-  )
-;;
-
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
    are newly generated eqs and cs' \subseteq cs is set of irreducible eqs *)
 let rewrite ?(max_size=0) rewriter (cs : NS.t) =
@@ -242,10 +235,7 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
   let rewrite n (irrdcbl, news) =
     match nf n with
       | None -> (NS.add n irrdcbl, news) (* no progress here *)
-      | Some (nnews, rs) -> ((* if terms got equal, nnews is empty *)
-          if !(Settings.do_proof) <> None && nnews <> [] then
-            add_rewrite_trace (Lit.terms n) rs (Lit.terms (L.hd nnews));
-          irrdcbl, NS.add_list nnews news)
+      | Some (nnews, rs) -> irrdcbl, NS.add_list nnews news
   in
   let res = NS.fold rewrite cs (NS.empty (), NS.empty ()) in
   A.t_rewrite := !A.t_rewrite +. (Unix.gettimeofday () -. t);
@@ -285,12 +275,11 @@ let reduced_goal_cps rew gs =
 let interreduce rr =
  let rew = new Rewriter.rewriter !heuristic rr [] Order.default in
  let right_reduce (l,r) =
-   let r', rs = rew#nf r in
-   if r <> r' then (
-     if !(Settings.do_proof) <> None then
-       Trace.add_rewrite (normalize (l,r')) (l, r) ([],rs);
-     add_rewrite_trace (l, r) (L.map (fun (rl, _, _) -> rl) rs) (l, r'));
-   (l,r')
+    let r', rs = rew#nf r in
+    if r <> r' then (
+      if !(Settings.do_proof) <> None then
+        Trace.add_rewrite (normalize (l,r')) (l, r) ([],rs));
+    (l,r')
   in
   let rr' = Listx.unique ((L.map right_reduce) rr) in
   let reducible rl = Rewriting.reducible_with (Listx.remove rl rr') (fst rl) in
@@ -683,7 +672,7 @@ let c_comp s = A.take_time A.t_ccomp (c_comp s)
 *)
 let search_constraints s (ccl, ccsymlvs) gs =
  (* orientable equations are used for CPs in CeTA ... *)
- let take_max = nth_iteration !heuristic.max_oriented (*|| !(S.do_proof)*) in
+ let take_max = nth_iteration !heuristic.max_oriented in
  (* A.little_progress 5 && !A.equalities < 500 *)
  let assert_c = function
    | S.Red -> c_red s ccl ccsymlvs
@@ -1187,8 +1176,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     try
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
       if !(S.do_proof) <> None then
-        add_cassociativity !settings.ac_syms;
-      let es0 = [ Lit.make_axiom (Variant.normalize_rule r) | r <- cas ] @ es0 in
+        trace_cassociativity !settings.ac_syms;
+      let es0 = [ Lit.make_axiom (normalize r) | r <- cas ] @ es0 in
       let ctx = Logic.mk_context () in
       let ss = Listx.unique (t_strategies ()) in
       let all_lits = !settings.norm @ gs0 @ es0 in
