@@ -702,8 +702,6 @@ let search_constraints s (ccl, ccsymlvs) gs =
  in L.iter assert_mc (if take_max then [S.Oriented] else max_constraints ())
 ;;
 
-let last_trss = ref []
-
 (* find k maximal TRSs *)
 let max_k s =
   let ctx, cc, gs = s.context, s.equations, s.goals in
@@ -944,12 +942,6 @@ let get_rewriter ctx j (rr, c, order) =
   check_order_generation false order;
   rew#init ();
   last_rewriters := (if j = 0 then [rew] else !last_rewriters @ [rew]);
-  rew
-;;
-
-let get_rewriter' ctx j (rr, c, order) =
-  let rew = new Rewriter.rewriter !heuristic rr !settings.ac_syms order in
-  rew#init ();
   rew
 ;;
 
@@ -1228,7 +1220,6 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       Select.all_goals := [];
       Select.min_all_nodes := max_int;
       Select.min_all_goals := max_int;
-      last_trss := [];
       Hashtbl.reset goal_cp_table;
       let es' = if gs = [] || not (unsat_allowed ()) then [] else es_new in
       let esx = List.map Lit.terms (es' @ es0) in
