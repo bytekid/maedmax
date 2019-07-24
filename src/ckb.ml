@@ -266,7 +266,8 @@ let reduced_goal_cps rew gs =
   if not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio) then
     reduced_goals rew gs
   else (
-    let gs' = NS.filter (fun g -> not (Hashtbl.mem goal_cp_table g)) gs in
+    let gs' = NS.filter (fun g -> not (Hashtbl.mem goal_cp_table g) &&
+                                Lit.size g < !heuristic.hard_bound_goals) gs in
     NS.iter (fun g -> Hashtbl.add goal_cp_table g true) gs';
     let res = reduced_goals rew gs' in
     res)
@@ -1017,7 +1018,6 @@ let rec phi s =
     let sel, rest = Select.select (aa,rew) nn in
 
     let go = overlaps_on rr aa_for_ols gs in
-    let go = NS.filter (fun g -> Lit.size g < !heuristic.hard_bound_goals) go in
     let gcps, gcps' = reduced_goal_cps rew go in
     let gs' = NS.diff (NS.add_all gs_big (NS.add_all gcps' gcps)) gs in
     let gg, grest = Select.select_goals (aa,rew) !heuristic.n_goals gs' in

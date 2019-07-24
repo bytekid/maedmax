@@ -83,7 +83,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
   val unif_cache : (Term.t, (Literal.t * int) list) H.t = H.create 256
   val mutable index = FingerprintIndex.empty []
   val rcheck = new reducibility_checker trs
-  val pcp = false
+  val pcp = true
 
   method init () =
     let data l = fst (Lit.terms l), (l, Term.size (snd (Lit.terms l))) in
