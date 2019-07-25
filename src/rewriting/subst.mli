@@ -7,6 +7,8 @@ exception Not_matched
 
 val empty : t
 
+val print : t -> unit
+
 val mgu : Term.t -> Term.t -> t
 
 val mgu_list : (Term.t * Term.t) list -> t
@@ -19,8 +21,8 @@ val is_instance_of : Term.t -> Term.t -> bool
 
 val enc : Term.t -> Term.t -> bool
 
-val after: t -> t -> t
-
 val is_renaming: t -> bool
 
 val compose : t -> t -> t
+
+val equal : t -> t -> bool

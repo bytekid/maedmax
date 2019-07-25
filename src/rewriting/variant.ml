@@ -14,10 +14,10 @@ let eq_set_equal es1 es2 = eq_subset es1 es2 && eq_subset es2 es1
 
 let rec var_name fs i = i * 13
 
-let rename_rule (l, r) =
-  let s = [ x, V i | i, x <- Listx.ix (Rule.variables (l, r)) ] in
+let rename_rule (l, r) = Rule.rename_canonical ~from:0 (l, r)
+  (*let s = [ x, V i | i, x <- Listx.ix (Rule.variables (l, r)) ] in
   (substitute s l, substitute s r)
-;;
+;;*)
 
 let rename_rules rs = [ rename_rule rule | rule <- rs ]
 
@@ -63,7 +63,7 @@ let t_normalize = ref 0.0
 
 let normalize_rule_dir (s,t) =
   let tt = Unix.gettimeofday () in
-  let s',t' =  Term.substitute_bot s, Term.substitute_bot t in
+  let s',t' =  substitute_bot s, substitute_bot t in
   let rule, dir =
     if s = t || s' < t' then (s,t), true
     else if t' < s' then (t,s), false
@@ -78,6 +78,8 @@ let normalize_rule_dir (s,t) =
 let normalize_rule (s,t) = fst (normalize_rule_dir (s,t))
 
 let normalize_term t =
-  let sigma = [ x, V i | i, x <- Listx.ix (Term.variables t) ] in
-  Term.substitute sigma t
+  let vs = Listx.ix (variables t) in
+  let sub = List.fold_left (fun s (i,x) -> Sub.add x (V i) s) Sub.empty vs in
+  (*let sigma = [ x, V i | i, x <- Listx.ix (variables t) ] in*)
+  substitute sub t
 ;;

@@ -3,6 +3,14 @@ open Format
 open Formatx
 open Signature
 
+
+module Var = struct
+  type t = Signature.var
+  let compare = Pervasives.compare
+end
+
+module Sub = Map.Make(Var)
+
 (*** TYPES *******************************************************************)
 type t = 
   | V of Signature.var
@@ -12,7 +20,7 @@ type pos = int list
 
 type binding = Signature.var * t
 
-type subst = binding list
+type subst = t Sub.t
 
 (*** FUNCTIONS ***************************************************************)
 let compare = Pervasives.compare
@@ -71,7 +79,7 @@ let is_subterm s t = List.mem s (subterms t)
 
 let is_proper_subterm s t = List.mem s (proper_subterms t)
 
-let apply subst x = try List.assoc x subst with Not_found -> V x
+let apply subst x = try Sub.find x subst with Not_found -> V x
 
 let rec substitute subst = function
   | V x -> apply subst x
@@ -82,8 +90,10 @@ let rec substitute_uniform t = function
   | F (f, ts) -> F (f, [substitute_uniform t ti | ti <- ts])
 
 let rename_canonical t =
-  let subst = [x, V i | i, x <- Listx.index (variables t)] in
+  let vs = Listx.index (variables t) in
+  let subst = List.fold_left (fun s (x,i) -> Sub.add x (V i) s) Sub.empty vs in
   substitute subst t
+;;
 
 let rec substitute_bot = function
   | V x -> V 0

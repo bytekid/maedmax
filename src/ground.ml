@@ -7,6 +7,7 @@ module Sig = Signature
 module Ac = Theory.Ac
 module S = Strategy
 module Logic = Settings.Logic
+module Sub = Term.Sub
 
 (*** TYPES *******************************************************************)
 type sys = {
@@ -337,7 +338,7 @@ and instance_joinable ctx sys p ac =
    | (V x :: _) -> ( (* take smallest *)
     if !debug > 1 then Format.printf "  instantiate %a \n" Term.print (V x);
     let rec vs a = if a=0 then [] else (V (Sig.fresh_var ())) :: (vs (a-1)) in 
-    let sub (f, a) = substitute [(x, F(f, vs a))] in
+    let sub (f, a) = substitute (Sub.add x (F(f, vs a)) Sub.empty) in
     let instance_joinable (f,a) =
       let sub = sub (f,a) in (* call sub only once -> different vars*)
       let s0,t0 = sub p.s, sub p.t in

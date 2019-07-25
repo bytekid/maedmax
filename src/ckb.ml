@@ -14,6 +14,7 @@ module NS = Nodes
 module Logic = Settings.Logic
 module T = Term
 module Sig = Signature
+module Sub = Term.Sub
 
 module SizeOrderedNode = struct
   type t = Lit.t
@@ -209,12 +210,12 @@ let trace_cassociativity acs =
     let assoc = T.F(f, [T.F(f, [x; y]); z]), T.F(f, [x; T.F(f, [y; z])]) in
     let comm = (T.F(f, [x'; y']), T.F(f, [y'; x'])) in
     let st = T.F(f, [T.F(f, [y; x]); z]), T.F(f, [x; T.F(f, [y; z])]) in
-    let mu = [4,y; 5,x] in
+    let mu = Sub.add 4 y (Sub.add 5 x Sub.empty) in
     let st = normalize st in
     Trace.add_overlap st (comm, [0], assoc, mu);
     let ut = T.F(f, [y; T.F(f, [x; z])]), T.F(f, [x; T.F(f, [y; z])]) in
     let ut = normalize ut in
-    Trace.add_rewrite ut st ([], [assoc, [], [1, y; 2, x]])
+    Trace.add_rewrite ut st ([], [assoc,[],Sub.add 1 y (Sub.add 2 x Sub.empty)])
   in
   List.iter add acs
 ;;
@@ -404,8 +405,10 @@ let solved_goal rewriter gs =
       let s,t = Lit.terms g in
       let s',rss = rewriter#nf s in
       let t',rst = rewriter#nf t in
-      if s' = t' then Some ((s,t), rewrite_seq rewriter (s,t) (rss,rst), [])
-      else if Subst.unifiable s t then Some ((s,t), ([],[]), Subst.mgu s t)
+      if s' = t' then
+        Some ((s,t), rewrite_seq rewriter (s,t) (rss,rst), Sub.empty)
+      else if Subst.unifiable s t then
+        Some ((s,t), ([],[]), Subst.mgu s t)
       else None
     with Rewriter.Max_term_size_exceeded -> None
   in
@@ -442,7 +445,7 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
         with Rewriter.Max_term_size_exceeded -> false  
       in
       if unsat_allowed () && L.exists joinable ieqs then (* joinable inequality axiom *)
-      Some (UNSAT, Proof (L.find joinable ieqs,([],[]),[]))
+      Some (UNSAT, Proof (L.find joinable ieqs, ([],[]), Sub.empty))
       else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
       else match saturated state (rr,ee) rewriter cc with

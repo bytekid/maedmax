@@ -4,6 +4,7 @@ module Lit = Literal
 module Logic = Settings.Logic
 module Sig = Signature
 module H = Hashtbl
+module Sub = Term.Sub
 
 module Clause = struct
 
@@ -29,7 +30,7 @@ module Clause = struct
     let oriented l = fst (Lit.terms l) < snd (Lit.terms l) in
     let c = [ if oriented lg then l else Lit.flip l | l, lg <- c'] in
     let ren = [ x, Term.V i | i, x <- Listx.ix (variables c) ] in
-    substitute ren c
+    substitute (List.fold_left (fun s (x,t) -> Sub.add x t s) Sub.empty ren) c
   ;;
 
   let norm_subst sigma c = normalize (substitute sigma c)

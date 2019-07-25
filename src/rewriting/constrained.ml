@@ -3,6 +3,7 @@ module L = Order.Logic
 module F = Format
 module BV = L.BitVector
 module Sig = Signature
+module Sub = Term.Sub
 
 module Expr = struct
   open L
@@ -108,10 +109,11 @@ module Expr = struct
 
   let rename rho =
     let rec ren_bv = function
-      | Var(x, i) as v -> ( if not (List.mem_assoc x rho) then v
-        else match List.assoc x rho with
+      | Var(x, i) as v -> (try
+        match Sub.find x rho with
         | Term.V y -> Var(y, i)
-        | _ -> raise Invalid_subst)
+        | _ -> raise Invalid_subst
+        with Not_found -> v)
       | HexConst(_, _) as c -> c
       | Bv_not e -> Bv_not (ren_bv e)
       | Bv_neg e -> Bv_neg (ren_bv e)

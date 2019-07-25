@@ -43,9 +43,9 @@ let init_with_sccs ctx fs j k =
  big_and1 [nk <>> xf <&> (xf <>=> n0) | xf <- xfs]
 ;;
 
+let add f = List.map (fun fs -> f :: fs)
 
-let add f = List.map (fun fs -> f :: fs) 
-let subst (x,t) = List.map (Rule.substitute [x,t]) 
+let subst (x,t) = List.map (Rule.substitute (Term.Sub.add x t Term.Sub.empty)) 
 
 let rec uf = function
   | [] -> [[]]

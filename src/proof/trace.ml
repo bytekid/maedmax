@@ -5,7 +5,7 @@ module T = Term
 module R = Rule
 module O = Overlap
 module S = Settings
-module Sub = Subst
+module Sub = Term.Sub
 
 (*** TYPES *******************************************************************)
 type pos = int list
@@ -43,7 +43,6 @@ type inference =
 (*** GLOBALS *****************************************************************)
 let trace_table : (R.t, origin * int) H.t = H.create 128
 let goal_trace_table : (R.t, origin * int) H.t = H.create 128
-let deleted : R.t list ref = ref []
 
 let count = ref 0
 
@@ -54,7 +53,8 @@ let rl_sub (rl, _, s) = (rl,s)
 
 let parents = function
   | Initial -> []
-  | Rewrite (p, (lstps, rstps)) -> (p, []) :: (List.map rl_sub (lstps @ rstps))
+  | Rewrite (p, (lstps, rstps)) ->
+    (p, Sub.empty) :: (List.map rl_sub (lstps @ rstps))
   | CP (rl1, _, mu, rl2) -> [rl1, mu; rl2, mu]
 ;;
 
@@ -97,8 +97,8 @@ let rec print_steps = function
 let add eq o = if not (H.mem trace_table eq) then
   let c = !count in
   count := c + 1;
-  if S.do_proof_debug () then
-    F.printf "ADDING %i:%a %s\n" c R.print eq (origin_string o);
+  (*if S.do_proof_debug () then
+    F.printf "ADDING %i:%a %s\n" c R.print eq (origin_string o);*)
   H.add trace_table eq (o, c)
 ;;
 
@@ -114,8 +114,7 @@ let gadd g o =
 let clear _ =
   H.clear trace_table;
   H.clear goal_trace_table;
-  count := 0;
-  deleted := []
+  count := 0
 ;;
 
 let add_initials eqs = List.iter (fun e -> add e Initial) eqs
@@ -192,10 +191,10 @@ let ancestors eqs =
 (* Get renaming that renames first to second rule *)
 let rename_to (l1, r1) (l2, r2) =
   let t1, t2 = T.F(0, [l1; r1]), T.F(0, [l2; r2]) in
-  try Sub.pattern_match t1 t2, true
-  with Sub.Not_matched ->
-    try Sub.pattern_match (T.F(0, [r1; l1])) t2, false
-    with Sub.Not_matched -> (
+  try Subst.pattern_match t1 t2, true
+  with Subst.Not_matched ->
+    try Subst.pattern_match (T.F(0, [r1; l1])) t2, false
+    with Subst.Not_matched -> (
       F.printf "%a to %a\n%!" R.print (l1, r1) R.print (l2, r2);
       failwith "Trace.rename_to: not a variant"
     )
@@ -234,12 +233,6 @@ let subst_conversion sub (t,steps) =
   T.substitute sub t, List.map subst_step steps
 ;;
 
-let subst_print =
-  let vname = Signature.get_var_name in
-  let print_binding (x, t) = F.printf "  %s -> %a\n" (vname x) T.print t in
-  List.iter print_binding
-;;
-
 (* Given a conversion for s = t where u = v or v = u occurs produce a conversion
    for u = v using s = t or t = s. *)
 let solve (s, steps) (u, v) goals =
@@ -272,7 +265,7 @@ let solve (s, steps) (u, v) goals =
           let conv = rev_unless (res st_step) (uv_tau = (s', t')) in
           if S.do_proof_debug () then (
             F.printf "SUBSTITUTE TO %a\n%!" R.print (equation_of conv);
-            subst_print tau;
+            Subst.print tau;
           );
           conv, tau
         )
@@ -442,8 +435,8 @@ let all_goal_conversions gc g =
 
 let subst_append (s, sconv) (t, tconv) =
   if S.do_proof_debug () then
-    assert (Sub.unifiable (last (s, sconv)) t);
-  let sigma = Sub.mgu (last (s, sconv)) t in
+    assert (Subst.unifiable (last (s, sconv)) t);
+  let sigma = Subst.mgu (last (s, sconv)) t in
   subst_conversion sigma  (s, sconv @ tconv)
 ;;
 
@@ -852,7 +845,9 @@ let ancestors_with_subst eqs =
 
 let goal_ancestors_with_subst (g, sigma) =
   let mk eq = mk_lit eq false in
-  let restr subst rl = [x,t | x,t <- subst; List.mem x (Rule.variables rl)] in
+  let restr subst rl = (*[x,t | x,t <- subst; List.mem x (Rule.variables rl)]*)
+    Sub.filter (fun x _ -> List.mem x (Rule.variables rl)) subst
+  in
   let rec goal_ancestors (g', sigma) =
     (*Format.printf "looking for ancestors of %a (substituted: %a)\n%!"
       Rule.print g' Rule.print (Rule.substitute sigma g');*)

@@ -1,6 +1,6 @@
 (*** MODULES *****************************************************************)
 module L = List
-module Sub = Subst
+module Sub = Term.Sub
 module H = Hashtbl
 module ACL = Aclogic
 module T = Term
@@ -17,8 +17,8 @@ type overlap = {
 }
 
 (*** GLOBALS *****************************************************************)
-let match_cache : (T.t * T.t, Sub.t list) H.t = H.create 256
-let unify_cache : (T.t * T.t, Sub.t list) H.t = H.create 256
+let match_cache : (T.t * T.t, Subst.t list) H.t = H.create 256
+let unify_cache : (T.t * T.t, Subst.t list) H.t = H.create 256
 let cp_cache : (R.t * T.pos * R.t, overlap list) H.t = H.create 256
 let reducts_cache : (T.t, T.t list) H.t = H.create 256
 let reducible_cache : (T.t * Rule.t, bool) H.t = H.create 256
@@ -40,8 +40,6 @@ let mk_overlap i p o s =
   outer = o;
   sub = s
 }
-
-let sub_find x s = L.assoc x s
 
 let next_var v = v + 1
 
@@ -70,8 +68,8 @@ let bipartition xs =
   v. Returns renamed term, extended substitution, and the next free variable*)
 let rec normalize sub v = function
 | T.V x -> (
-  try (sub_find x sub, sub, v)
-  with Not_found -> (T.V v, (x, T.V v) :: sub, next_var v))
+  try (Sub.find x sub, sub, v)
+  with Not_found -> (T.V v, Sub.add x (T.V v) sub, next_var v))
 | T.F (f, ts) ->
   let fold_norm (l,s,v) t = let (t',s,v) = normalize s v t in (t'::l,s,v) in
   let (ts', sub', v') = L.fold_left fold_norm ([], sub, v) ts in

@@ -1,5 +1,21 @@
 (* $Id: term.mli,v 1.3 2014/09/29 07:37:28 swinkler Exp $ *)
 
+module Var : Map.OrderedType
+module Sub : sig
+  type key = Signature.var
+  type 'a t
+  val empty : 'a t
+  val is_empty : 'a t -> bool
+  val mem : key -> 'a t -> bool
+  val add : key -> 'a -> 'a t -> 'a t
+  val update : key -> ('a option -> 'a option) -> 'a t -> 'a t
+  val find : key -> 'a t -> 'a
+  val filter : (key -> 'a -> bool) -> 'a t -> 'a t
+  val iter : (key -> 'a -> unit) -> 'a t -> unit
+  val fold : (key -> 'a -> 'b -> 'b) -> 'a t -> 'b -> 'b
+  val map : ('a -> 'b) -> 'a t -> 'b t
+  val equal : ('a -> 'a -> bool) -> 'a t -> 'a t -> bool
+end
 (** Term operations *)
 
 type t = 
@@ -10,7 +26,7 @@ type pos = int list
 
 type binding = Signature.var * t
 
-type subst = binding list
+type subst = t Sub.t
 
 val compare : t -> t -> int
 

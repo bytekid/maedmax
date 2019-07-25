@@ -1,7 +1,7 @@
 (*** SUBMODULES ***************************************************************)
 module A = Array
 module F = Format
-module Sub = Subst
+module Sub = Term.Sub
 module Sig = Signature
 module T = Term
 
@@ -90,12 +90,12 @@ let zero_list = [Sub.empty]
 let is_ac_symbol = Sig.is_ac_symbol
 
 let print_sub sub =
-  let append s (x, t) =
+  let append x t s =
     let t = T.to_string t in
     let x = Sig.get_var_name x in
     (s ^ " " ^ x ^ "->" ^ t)
   in
-  List.fold_left append "" sub
+  Sub.fold append sub ""
 ;;
 
 let print_subs ss =
@@ -228,19 +228,17 @@ let sum_up subsets b' vars f =
   let vars = Listx.index (Listx.unique vars) in
   let fterm f = function [x] -> x | args -> T.F(f, args) in
   let col_sum sub i = fterm f (List.concat [ b'.(r).(i) | r <- sub ]) in
-  let add_binding sub s (i, v) = (v, col_sum sub i) :: s in
+  let add_binding sub s (i, v) = Sub.add v (col_sum sub i) s in
   let sub_for_subset s = List.fold_left (add_binding s) Sub.empty vars in
   let subs = List.map sub_for_subset subsets in
   subs
 ;;
 
-let sub_equal s s' = Listset.equal s s'
-
 (* make substitution idempotent *)
 let make_idempotent sigma =
   let rec fix sigma sigman =
-    let sigman' = Sub.compose sigman sigma in
-    if sub_equal sigman' sigman then sigman
+    let sigman' = Subst.compose sigman sigma in
+    if Subst.equal sigman' sigman then sigman
     else fix sigma sigman'
   in fix sigma sigma
 ;;
@@ -252,8 +250,8 @@ let make_idempotent sigma =
 let rec unify s t =
   (* restrict substitution to variables of interest *)
   let vars = Listset.union (T.variables s) (T.variables t) in
-  let add s (x,t) = if List.mem x vars then (x, t) :: s else s in
-  let simplify s = List.fold_left add Sub.empty s in
+  let add x t sub = if List.mem x vars then Sub.add x t sub else sub in
+  let simplify s = Sub.fold add s Sub.empty in
   match unify' s t with
   | Some ss -> Some (List.map simplify ss)
   | _ -> None
@@ -262,12 +260,12 @@ let rec unify s t =
 and unify' s t =
   match s, t with
   | T.V x, _ ->
-    if T.is_proper_subterm s t then None (* occur check *)
+    if T.is_proper_subterm s t then (None : Subst.t list option) (* occur check *)
     else if s = t then (Some zero_list)
-    else Some [[x, t]]
+    else Some [Sub.add x t Sub.empty]
   | _, T.V y ->
     if T.is_proper_subterm t s then None (* occur check *)
-    else Some [[y,s]]
+    else Some [Sub.add y s Sub.empty]
   | T.F(a, []), T.F(b, []) -> (* both constants *)
     if a = b then Some zero_list
     else None
@@ -302,7 +300,7 @@ and unify' s t =
     where CSU(X) is complete set of unifiers for X. *)
 and unify_with_list es subs =
   let add csus theta =
-    let compose s = Sub.compose theta s in
+    let compose s = Subst.compose theta s in
     let cs = [ Term.substitute theta l, Term.substitute theta r | l,r <- es ] in
     match unify_conjunction cs with
     | None -> csus
@@ -325,7 +323,7 @@ and unify_conjunction cj =
 
 let unify s t =
   match unify s t with
-  | Some ss -> unique ~c:(fun s t -> if Listset.equal s t then 0 else 1) ss
+  | Some ss -> unique ~c:(fun s t -> if Subst.equal s t then 0 else 1) ss
   | _ -> []
 ;;
 
@@ -338,16 +336,15 @@ let rec tsub_apply rho = function
   | v -> v
 ;;
 
-let reverse_skolemization =
-  let tsub_add s (x, t) = (t, T.V x) :: s in
-  List.fold_left tsub_add []
+let reverse_skolemization rho =
+  let tsub_add x t s = (t, T.V x) :: s in
+  Sub.fold tsub_add rho []
 ;;
 
 let skolemization =
   let rec skolemization s = function
     | T.V x ->
-      if List.mem_assoc x s then s
-      else (x, T.F(Sig.fresh_fun (), [])) :: s
+      if Sub.mem x s then s else Sub.add x (T.F(Sig.fresh_fun (), [])) s
     | T.F (f, ts) -> List.fold_left skolemization s ts
   in skolemization Sub.empty
 ;;
@@ -359,7 +356,8 @@ let match_term s t =
   let s' = Term.substitute rho s in
   let sigmas = unify s' t in
   let rho_inv = reverse_skolemization rho in
-  [ [x, tsub_apply rho_inv t | x, t <- sigma] | sigma <- sigmas]
+  [ Sub.map (tsub_apply rho_inv) sigma | sigma <- sigmas]
+  (*[ [x, tsub_apply rho_inv t | x, t <- sigma] | sigma <- sigmas]*)
 ;;
 
 let matches s t = match_term s t <> []

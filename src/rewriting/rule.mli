@@ -62,6 +62,8 @@ val is_dp : t -> bool
 
 val substitute : Term.subst -> t -> t
 
+val substitute_uniform : Term.t -> t -> t
+
 val to_xml : t -> Xml.xml
 
 val to_tptp : t -> string

@@ -8,6 +8,7 @@ module H = Hashtbl
 module Sig = Signature
 module Ac = Theory.Ac
 module Logic = Settings.Logic
+module Sub = T.Sub
 
 (*** TYPES ********************************************************************)
 type term_cmp = Term.t -> Term.t -> bool
@@ -121,9 +122,9 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
     else
       (* renamed rule: avoid capture of Var(r) - Var(l) *)
       let rho = match order#bot with
-          None -> []
+          None -> Sub.empty
         | Some c -> let vs = Listset.diff (T.variables r) (T.variables l) in
-          [ x, T.F(c,[]) | x <- vs ]
+          List.fold_left (fun s x -> Sub.add x (T.F(c,[])) s) Sub.empty vs
       in
       let lsub = Term.substitute sigma l in
       let rsub = Term.substitute rho rsub in (

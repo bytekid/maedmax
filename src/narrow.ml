@@ -3,6 +3,8 @@ module L = List
 module T = Term
 module R = Rule
 module S = Settings
+module Sub = Term.Sub
+
 (*** MODULES *****************************************************************)
 open Settings
 
@@ -122,10 +124,11 @@ let narrow settings rr ((s,t),(ps,pt)) =
 
 let decide settings rr ee ord gs h =
   heuristic := h;
-  let bot = match ord#bot with Some b -> b | _ -> 100 in
+  let bot = T.F ((match ord#bot with Some b -> b | _ -> 100), []) in
   let patch (l, r) = 
     let vs = Listset.diff (T.variables r) (T.variables l) in
-    R.substitute [ v, T.F (bot,[]) | v <- vs ] (l, r)
+    let sub = List.fold_left (fun s x -> Sub.add x bot s) Sub.empty vs in
+    R.substitute sub (l, r)
   in
   let ee' = L.map patch ee in
   let var_add es n = if not (L.exists (R.variant n) es) then n::es else es in
@@ -143,7 +146,7 @@ let decide settings rr ee ord gs h =
       if debug settings then
         Format.printf "UNSAT, found unifiable equation\n%!";
       if unsat_allowed () then
-        Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]),[]))
+        Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]), Sub.empty))
       else raise Backtrack
       )
     else if L.for_all (fun (_,ps) -> both_empty ps) gs && sat_allowed () then (
