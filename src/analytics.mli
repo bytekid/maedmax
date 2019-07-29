@@ -27,6 +27,7 @@ val selections : int ref
 val time_diffs : float list ref
 val mem_diffs : int list ref
 val eq_counts : int list ref
+val cp_counts : int list ref
 val goal_counts : int list ref
 val shape : Settings.shape ref
 

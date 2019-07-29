@@ -161,7 +161,7 @@ type heuristic = {
   reduce_AC_equations_for_CPs: bool;
   full_CPs_with_axioms : bool;
   prune_AC : bool;
-  no_similar_select: bool;
+  fix_parameters: bool;
   select_recursion_limit: int;
   no_select_nf: int;
   mode : mode
@@ -236,7 +236,7 @@ let default_heuristic = {
   reduce_AC_equations_for_CPs = false;
   full_CPs_with_axioms = false;
   prune_AC = true;
-  no_similar_select = false;
+  fix_parameters = false;
   select_recursion_limit = 5000;
   no_select_nf = 0;
   mode = SATorUNSAT
@@ -348,6 +348,7 @@ let h_ossigeno h = { h with
   soft_bound_equations = 18;
   soft_bound_goals = 30;
   restart_carry = (2, 0);
+  fix_parameters = true;
   k = k_limiting
 }
 

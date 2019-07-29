@@ -60,8 +60,18 @@ let interreduce rr =
 let union_es es1 es2 = unique ~eq:eq_variant (es1 @ es2)
 
 let t_normalize = ref 0.0
+let t_normalize_cache = ref 0.0
+
+let ht_normalize : (Rule.t, Rule.t * bool) Hashtbl.t = Hashtbl.create 128
 
 let normalize_rule_dir (s,t) =
+  let tt = Unix.gettimeofday () in
+  (*try
+    let c = Hashtbl.find ht_normalize (s,t) in
+    t_normalize_cache := !t_normalize_cache +. (Unix.gettimeofday () -. tt);
+    c
+  with Not_found ->*) (
+    t_normalize_cache := !t_normalize_cache +. (Unix.gettimeofday () -. tt);
   let tt = Unix.gettimeofday () in
   let s',t' =  substitute_bot s, substitute_bot t in
   let rule, dir =
@@ -72,7 +82,8 @@ let normalize_rule_dir (s,t) =
   in
   let res = rename_rule rule, dir in
   t_normalize := !t_normalize +. (Unix.gettimeofday () -. tt);
-  res
+  Hashtbl.add ht_normalize (s,t) res;
+  res)
 ;;
 
 let normalize_rule (s,t) = fst (normalize_rule_dir (s,t))

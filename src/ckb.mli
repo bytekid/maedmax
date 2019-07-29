@@ -33,11 +33,11 @@ val store_remaining_nodes : Settings.Logic.context -> Nodes.t -> Nodes.t -> unit
 val get_rewriter :  Settings.Logic.context -> int ->
   Settings.literal list * int * Order.t -> Rewriter.rewriter
 
-val rewrite : ?max_size:int -> Rewriter.rewriter -> Nodes.t -> Nodes.t * Nodes.t
+val rewrite : ?max_size:int -> ?normalize:bool -> Rewriter.rewriter -> Nodes.t -> Nodes.t * Nodes.t
 
-val reduced : ?max_size:int -> Rewriter.rewriter -> Nodes.t -> Nodes.t
+val reduced : ?max_size:int -> ?normalize:bool -> Rewriter.rewriter -> Nodes.t -> Nodes.t
 
-val reduced_goals: Rewriter.rewriter -> Nodes.t -> Nodes.t * Nodes.t
+val reduced_goals: ?normalize:bool -> Rewriter.rewriter -> Nodes.t -> Nodes.t * Nodes.t
 
 val equations_for_overlaps: Nodes.t -> Nodes.t -> Nodes.t -> lit list
 
@@ -48,7 +48,7 @@ val overlaps_on: lit list -> lit list -> Nodes.t -> Nodes.t
 val max_k : state -> (lit list * int * Order.t) list
 
 val succeeds : state -> (lit list * Nodes.t) -> Rewriter.rewriter ->
-  (lit list * Nodes.t * Nodes.t) -> Rules.t -> Nodes.t ->
+  (lit list * Nodes.t * Nodes.t option) -> Rules.t -> Nodes.t ->
   (Settings.answer * Settings.proof) option
 
 (* given settings and heuristic, equations and goals, try to produce a

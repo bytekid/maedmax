@@ -62,7 +62,7 @@ let narrow_forward_at_with settings rr ((s,t),(ps,pt)) p (l,r) =
     let subst = T.substitute sigma in
     let s' = T.replace (subst s) (subst r) p in
     let ps' = propagate_basic_pos p ps r in
-    let st', keep_dir = Variant.normalize_rule_dir (s',subst t) in
+    let st', keep_dir = (*Variant.normalize_rule_dir*) (s',subst t), true in
     if Rule.size st' > (*!(settings.size_bound_goals)*) 200 then (
       heuristic := { !heuristic with mode = OnlyUNSAT };
       raise Too_large);
@@ -139,7 +139,7 @@ let decide settings rr ee ord gs h =
     Format.printf "EE:\n%a\n%!" Rules.print ee';
     Format.printf "SAT allowed:%B\n%!" (sat_allowed ()));
   let rr' = rr @ ee' in
-  let rec decide_by_narrowing all gs =
+  let rec decide_by_narrowing acc gs =
     let unifiable ((s,t),_) = Subst.unifiable s t in
     let both_empty (ps,pt) = Hashset.is_empty ps && Hashset.is_empty pt in
     if L.exists unifiable gs then (
@@ -152,10 +152,10 @@ let decide settings rr ee ord gs h =
     else if L.for_all (fun (_,ps) -> both_empty ps) gs && sat_allowed () then (
       Some (S.SAT, S.GroundCompletion (rr,ee,ord)))
     else
-      let all' = unique_add gs all in
+      let acc' = unique_add gs acc in
       let aux = L.concat (L.map (narrow settings rr') gs) in
       let gs' = unique aux in
-      decide_by_narrowing all' gs'
+      decide_by_narrowing acc' gs'
     in
   let poss t = Hashset.of_list (T.function_positions t) in
   let gs = [(s, t), (poss s, poss t) | s,t <- gs] in

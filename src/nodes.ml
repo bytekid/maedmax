@@ -21,11 +21,21 @@ let add n ns = if not (H.mem ns n) then H.add ns n true; ns
 
 let remove n ns = H.remove ns n; ns
 
-let add_all ns ns' = H.fold (fun n _ h -> add n h) ns ns'
+let add_all ns ns' =
+  let t = Unix.gettimeofday () in
+  let res = H.fold (fun n _ h -> add n h) ns ns' in
+  Analytics.t_tmp1 := !Analytics.t_tmp1 +. (Unix.gettimeofday () -. t);
+  res
+;;
 
 let remove_all rem ns' = H.fold (fun n _ h -> remove n h) rem ns'
 
-let add_list l ns = L.fold_left (fun h n -> add n h) ns l
+let add_list l ns =
+  let t = Unix.gettimeofday () in
+  let res = L.fold_left (fun h n -> add n h) ns l in
+  Analytics.t_tmp1 := !Analytics.t_tmp1 +. (Unix.gettimeofday () -. t);
+  res
+;;
 
 let of_list l = add_list l (H.create (L.length l * 2))
 
@@ -189,7 +199,12 @@ let filter_out p ns =
   ns, rest
 ;;
 
-let diff ns d = H.fold (fun n _ nsr -> remove n nsr) d ns 
+let diff ns d =
+  let t = Unix.gettimeofday () in
+  let res = H.fold (fun n _ nsr -> remove n nsr) d ns in
+  Analytics.t_tmp1 := !Analytics.t_tmp1 +. (Unix.gettimeofday () -. t);
+  res
+;;
 
 let diff_list ns = L.fold_left (fun nsr n -> remove n nsr) ns
 

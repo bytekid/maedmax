@@ -223,7 +223,7 @@ let trace_cassociativity acs =
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
    are newly generated eqs and cs' \subseteq cs is set of irreducible eqs *)
-let rewrite ?(max_size=0) rewriter (cs : NS.t) =
+let rewrite ?(max_size=0) ?(normalize=false) rewriter (cs : NS.t) =
   let t = Unix.gettimeofday () in
   (* skip exponential rewrite sequences with unfortunate orders *)
   let nf n =
@@ -234,8 +234,9 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
       None
   in
   let rewrite n (irrdcbl, news) =
+    let norm = if normalize then Lit.normalize else (fun x -> x) in
     match nf n with
-      | None -> (NS.add n irrdcbl, news) (* no progress here *)
+      | None -> (NS.add (norm n) irrdcbl, news) (* no progress here *)
       | Some (nnews, rs) -> irrdcbl, NS.add_list nnews news
   in
   let res = NS.fold rewrite cs (NS.empty (), NS.empty ()) in
@@ -243,15 +244,17 @@ let rewrite ?(max_size=0) rewriter (cs : NS.t) =
   res
 ;;
 
-let reduced ?(max_size=0) rr ns =
-  let (irred, news) = rewrite ~max_size:max_size rr ns in NS.add_all news irred
+let reduced ?(max_size=0) ?(normalize=false) rr ns =
+  let (irred, news) = rewrite ~max_size:max_size ~normalize:normalize rr ns in
+  NS.add_all news irred
 ;;
 
-let reduced_goals rew gs =
+let reduced_goals ?(normalize=false) rew gs =
   let t = Unix.gettimeofday () in
   if debug 2 then
     Format.printf "rewrite G:\n%a\n" NS.print gs;
-  let gs_red = reduced ~max_size:!heuristic.hard_bound_goals rew gs in
+  let bnd = !heuristic.hard_bound_goals in
+  let gs_red = reduced ~max_size:bnd ~normalize:normalize rew gs in
   let thresh = NS.avg_size gs + 8 in
   let res =
     if NS.size gs_red < 10 then gs_red, NS.empty ()
@@ -265,12 +268,12 @@ let goal_cp_table : (Lit.t, bool) Hashtbl.t = Hashtbl.create 128
 
 let reduced_goal_cps rew gs =
   if not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio) then
-    reduced_goals rew gs
+    reduced_goals ~normalize:true rew gs
   else (
     let gs' = NS.filter (fun g -> not (Hashtbl.mem goal_cp_table g) &&
                                 Lit.size g < !heuristic.hard_bound_goals) gs in
     NS.iter (fun g -> Hashtbl.add goal_cp_table g true) gs';
-    let res = reduced_goals rew gs' in
+    let res = reduced_goals ~normalize:true rew gs' in
     res)
 ;;
 
@@ -365,6 +368,9 @@ let overlaps_on rr aa gs =
 
 (* * SUCCESS CHECKS  * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 let saturated state (rr, ee) rew (axs, cps, cps') =
+  match cps' with
+  | None -> None (* too many CPs generated *)
+  | Some cps' -> (
   let ee' = Rules.subsumption_free ee in
   let str = termination_strategy () in
   let sys = rr, ee', rew#order in
@@ -386,7 +392,7 @@ let saturated state (rr, ee) rew (axs, cps, cps') =
         Ground.all_joinable !settings state.context str sys cps
   in
   if debug 2 then Format.printf "saturated:%B\n%!" (j <> None);
-  j
+  j)
 ;;
 
 let rewrite_seq rew (s,t) (rss,rst) =
@@ -979,6 +985,50 @@ let inconsistent ee=
   L.exists (function (T.V x,T.V y) -> x<>y | _ -> false) ee
 ;;
 
+let filter_cps bound cps0 =
+  let t = Unix.gettimeofday () in
+  let rec filter b cps = 
+    let cps' = [ l, s | l, s <- cps; s < b] in
+    if List.length cps' > 4000 then filter (b - 2) cps'
+    else
+      let cps_large =
+        if NS.size cps0 > 4000 then None
+        else Some (NS.filter (fun cp -> Lit.size cp >= b) cps0)
+      in
+      NS.of_list [l | l, _ <- cps'], cps_large, b
+  in
+  let cps_s, cps_l, b = filter bound [l, Lit.size l | l <- NS.to_list cps0] in
+  (*Format.printf "filter out %d, %d remaining, bound %d\n%!"
+    (match cps_l with Some s -> NS.size s | _ -> -1) (NS.size cps_s) b;*)
+  A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
+  cps_s, cps_l
+;;
+
+let filter_cps bound cps0 =
+  let t = Unix.gettimeofday () in
+  let the_limit = 8000 in 
+  let rec filter b cps = 
+    let cps' = [ l, s | l, s <- cps; s < b] in
+    if List.length cps' > the_limit then filter (b - 2) cps'
+    else
+      let cps_large =
+        if NS.size cps0 > 4000 then None
+        else Some (NS.filter (fun cp -> Lit.size cp >= b) cps0)
+      in
+      NS.of_list [l | l, _ <- cps'], cps_large, b
+  in
+  let cps = NS.filter (fun cp -> Lit.size cp < bound) cps0 in
+  let cps_large = NS.filter (fun cp -> Lit.size cp >= bound) cps0 in
+  let cps_s, cps_l, b = 
+    if NS.size cps < the_limit then cps, Some cps_large, bound (* like before *)
+    else filter (bound - 2) [l, Lit.size l | l <- NS.to_list cps0]
+  in
+  (*Format.printf "filter out %d, %d remaining, bound %d\n%!"
+    (match cps_l with Some s -> NS.size s | _ -> -1) (NS.size cps_s) b;*)
+  A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
+  cps_s, cps_l
+;;
+
 let rec phi s =
   if do_restart s then
     raise (Restart (Select.select_for_restart s.equations, false));
@@ -986,6 +1036,8 @@ let rec phi s =
   let redcount, cp_count = ref 0, ref 0 in
   set_iteration_stats s;
   Select.reset ();
+  (*if !A.iterations mod 7 = 0 && List.hd !A.cp_counts > 1000 then
+    Select.consolidate_all_nodes ();*)
   let aa, gs = s.equations, s.goals in
   (**)
   if debug 2 then (Format.printf "iteration %d %!" !A.iterations;
@@ -1013,10 +1065,13 @@ let rec phi s =
     let aa_for_ols = equations_for_overlaps red irred aa in
     let cps', ovl = overlaps ~only_new:true s rr aa_for_ols in
     cp_count := !cp_count +  (NS.size cps');
-    let eq_bound = !heuristic.hard_bound_equations in
+    (*let eq_bound = !heuristic.hard_bound_equations in
     let cps = NS.filter (fun cp -> Lit.size cp < eq_bound) cps' in
-    let cps_large = NS.filter (fun cp -> Lit.size cp >= eq_bound) cps' in
-    let cps = reduced rew cps in
+    let cps_large = NS.filter (fun cp -> Lit.size cp >= eq_bound) cps' in*)
+    let cps, cps_large = filter_cps !heuristic.hard_bound_equations cps' in
+    let t = Unix.gettimeofday () in
+    let cps = reduced ~normalize:true rew cps in
+    A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
     let nn = NS.diff (NS.add_all cps red) aa in (* new equations *)
     let sel, rest = Select.select (aa,rew) nn in
 
@@ -1186,8 +1241,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       let ss = Listx.unique (t_strategies ()) in
       let all_lits = !settings.norm @ gs0 @ es0 in
       L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- all_lits ]) ss;
-      (*if !settings.auto then
-        L.iter (fun s -> St.fix_parameters s 0 ctx [Lit.terms n | n <- es0]) ss;*)
+      if !heuristic.fix_parameters && !A.restarts > 2 then
+        L.iter (fun s -> St.fix_parameters s 0 ctx [Lit.terms n | n <- es0]) ss;
       let state = make_state ctx (!settings.norm @ es0) (NS.of_list gs0) in
       if !settings.keep_orientation then
         preorient state es;

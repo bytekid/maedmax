@@ -164,7 +164,8 @@ let print () =
   printf " tmp1               %.3f@." !t_tmp1;
   printf " tmp2               %.3f@." !t_tmp2;
   printf " tmp3               %.3f@." !t_tmp3;
-  printf " normalization      %.3f@." !Variant.t_normalize
+  printf " normalization      %.3f@." !Variant.t_normalize;
+  printf " normalization      %.3f@." !Variant.t_normalize_cache
 
 let is_applicative es =
   let bs, rest = List.partition (fun (_ ,a) -> a = 2) (Rules.signature es) in

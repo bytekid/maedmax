@@ -29,3 +29,5 @@ val normalize_rule : Rule.t -> Rule.t
 val normalize_term : Term.t -> Term.t
 
 val t_normalize : float ref
+
+val t_normalize_cache : float ref

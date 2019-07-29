@@ -82,7 +82,7 @@ let rec phi s =
       A.update_proof_track (sel @ gg) (NS.to_list rest @ (NS.to_list grest));
     store_remaining_nodes s.context rest grest;
     let ieqs = NS.to_rules (NS.filter Lit.is_inequality aa) in
-    let cc = (!settings.axioms, cps, cps_large) in
+    let cc = (!settings.axioms, cps, Some cps_large) in
     let irr = NS.filter Lit.not_increasing (NS.symmetric irred) in
 
     let gs' = NS.add_list gg gs in

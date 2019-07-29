@@ -148,7 +148,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
           if Rule.size (s, t) > bd then None
           else if s = t && is_equality then None
           else (
-            let st' = V.normalize_rule (s,t) in
+            let st' = (*V.normalize_rule*) (s,t) in
             if !(Settings.do_proof) <> None then
               (if not is_equality then
                 Trc.add_overlap_goal else Trc.add_overlap) st' o;

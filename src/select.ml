@@ -88,11 +88,26 @@ let yes _ = true
 
 let old_select = ref 0
 
+let consolidate_all_nodes _ =
+  if !settings.ac_syms <> [] then (
+  Format.printf "consolidate\n%!";
+  let t = Unix.gettimeofday () in
+  let ac_equiv (n, _) (n', _) = Lit.are_ac_equivalent !settings.ac_syms n n' in
+  let rec drop_AC_eq acc = function
+   | [] -> List.rev acc
+   | n :: ns -> drop_AC_eq (n :: acc) [n' | n' <- ns; not (ac_equiv n n')]
+  in
+  all_nodes := drop_AC_eq [] !all_nodes;
+  A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t)
+  )
+;;
+
 let max_list_scan = ref 5000
 
 let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
   (*Format.printf "get oldest %d\n%!" max;*)
   old_select := !old_select + 1;
+  let many_cps = !A.cp_counts <> [] && List.hd !A.cp_counts > 1000 in
   let rec get_oldest acc max min_size k =
     if k > !max_list_scan then (
       nodelist := List.rev acc @ !nodelist;
@@ -128,7 +143,7 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
             A.t_tmp3 := !A.t_tmp3 +. (Unix.gettimeofday () -. t);
             res
           in
-          if false && ac_equiv n then (
+          if false && many_cps && ac_equiv n then (
             if debug 3 then Format.printf "throw out %a \n%!" Lit.print n;
             get_oldest acc max (min min_size size_n) (k+1))
           else if size_n > max || not (accept n) then
@@ -246,7 +261,7 @@ let adjust_bounds thresh small_count =
   if small_count > (if !A.shape = Idrogeno then 300 else 1500) then
     let delta = if thresh > 20 then 1 else 0 in
     heuristic := {!heuristic with
-      soft_bound_equations = thresh - 1;
+      soft_bound_equations = thresh - 1 (*2*);
       hard_bound_equations = !heuristic.hard_bound_equations - delta}
   else if small_count < 20 then 
     heuristic := {!heuristic with soft_bound_equations = thresh + 1;
@@ -390,10 +405,8 @@ let classify aa =
     (fun node ->
       try Hashtbl.find classification_table node with
       Not_found ->
-        let t = Unix.gettimeofday () in
         let n = node_features node inst_count unif_count in
         let pqs = pq_grams (Lit.terms node) in
-        A.t_tmp1 := !A.t_tmp1 +. (Unix.gettimeofday () -. t);
         let bnd =
           if !Settings.tmp > 0.01 then !Settings.tmp 
           else (*if !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio then 0.15 else*) 0.2

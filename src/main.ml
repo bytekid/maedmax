@@ -103,6 +103,9 @@ let options =
    ("-D", Arg.Int (fun d -> settings := { !settings with debug = d };
        Settings.do_debug := d > 0),
      " print debugging output");
+   ("--fix-params", Arg.Unit (fun _ ->
+        heuristic := { !heuristic with fix_parameters = true }),
+         " fix order parameters");
    ("--gcr", Arg.Unit (fun _ -> only_gcr := true),
        " check ground confluence");
    ("--interactive", Arg.Set Settings.interactive,
