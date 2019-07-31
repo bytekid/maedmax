@@ -147,7 +147,7 @@ type heuristic = {
   hard_bound_equations: int;
   hard_bound_goals: int;
   k : int -> int;  (* k TRSs are chosen in an iteration *)
-  n : int;  (* how many equations are (at most) selected *)
+  n : int -> int;  (* how many equations are (at most) selected in iteration *)
   n_goals : int;  (* how many equations are (at most) selected *)
   strategy : termination_strategy;
   check_subsumption : int; (* degree of subsumption check, in {0,1,2} *)
@@ -164,6 +164,7 @@ type heuristic = {
   fix_parameters: bool;
   select_recursion_limit: int;
   no_select_nf: int;
+  cp_cutoff: int;
   mode : mode
 }
 
@@ -172,7 +173,7 @@ type rewrite_steps = (Rule.t * Term.pos * Subst.t * Term.t) list
 type proof =
   | Completion of Rules.t
   | GroundCompletion of (Rules.t * Rules.t * Order.t)
-  | Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Subst.t)
+  | Proof of (Rule.t * (rewrite_steps * rewrite_steps) * Term.t * Subst.t)
   | Disproof of (Rules.t * Rules.t * Order.t * (rewrite_steps * rewrite_steps))
 
 type answer =
@@ -210,19 +211,21 @@ let default = {
   keep_orientation = false;
   selection = MixedSelect;
   select_classify = None;
-  complete_if_no_goal = true;
+  complete_if_no_goal = false;
   switch_to_okb = false;
   modulo_ac = false;
   modulo_constraints = false;
   norm = []
 }
 
+let const k _ = k 
+
 (* default settings *)
 let default_heuristic = {
   hard_bound_equations = 2500;
   hard_bound_goals = 200;
   k = k_default;
-  n = 10;
+  n = const 10;
   n_goals = 2;
   max_oriented = 1000;
   strategy = [];
@@ -239,6 +242,7 @@ let default_heuristic = {
   fix_parameters = false;
   select_recursion_limit = 5000;
   no_select_nf = 0;
+  cp_cutoff = 20000;
   mode = SATorUNSAT
 }
 
@@ -275,15 +279,16 @@ let do_proof_debug () = !do_debug && !do_proof <> None
 let h_piombo h = { h with
   hard_bound_equations = 4000;
   hard_bound_goals = 200;
-  n = 10;
+  n = const 10;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
 }
 
 let h_zolfo h = { h with
-  n = 10;
+  n = const 10;
   restart_carry = (2, 0);
   k = k_limiting;
   hard_bound_equations = 200;
+  cp_cutoff = 20000;
   (*size_age_ratio = 80;*)
   (*hard_bound_equations = 45;
   hard_bound_goals = 45;
@@ -291,8 +296,12 @@ let h_zolfo h = { h with
   soft_bound_goals = 30;*)
 }
 
+let h_zolfo0 h = { h_zolfo h with
+  cp_cutoff = 2000
+}
+
 let h_xeno h = { h with
-  n = 10;
+  n = (fun i -> 10);
   n_goals = 1;
   reduce_AC_equations_for_CPs = true;
   hard_bound_equations = 70;
@@ -302,11 +311,20 @@ let h_xeno h = { h with
   soft_bound_goals = 50;
   restart_carry = (2, 0);
   select_recursion_limit = 2000;
+  cp_cutoff = 4000;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, SizeAge 60];
 }
 
+let h_xeno1 h = { h_xeno h with
+  n = (fun i -> 11);
+  hard_bound_equations = 38;
+  hard_bound_goals = 35;
+  soft_bound_equations = 28;
+  soft_bound_goals = 12;
+}
+
 let h_anello h = { h with
-  n = 10;
+  n = const 10;
   n_goals = 1;
   reduce_AC_equations_for_CPs = true;
   hard_bound_equations = 60;
@@ -320,16 +338,21 @@ let h_anello h = { h with
 }
 
 let h_elio h = { h with
-  n = 10;
+  n = const 10;
   hard_bound_equations = 45;
   hard_bound_goals = 45;
   soft_bound_equations = 30;
   soft_bound_goals = 30;
+  cp_cutoff = 20000;
   restart_carry = (2, 2)
 }
 
+let h_elio0 h = { h_elio h with
+  cp_cutoff = 1000 (* GRP708-1 *)
+}
+
 let h_silicio h = { h with
-  n = 10;
+  n = const 10;
   n_goals = 1;
   size_age_ratio = 80;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
@@ -337,11 +360,12 @@ let h_silicio h = { h with
   hard_bound_goals = 45;
   soft_bound_equations = 25;
   soft_bound_goals = 30;
+  cp_cutoff = 30000;
   k = (fun i -> if i > 30 then 1 else 2);
 }
 
 let h_ossigeno h = { h with
-  n = 12;
+  n = const 12;
   size_age_ratio = 80;
   hard_bound_equations = 25;
   hard_bound_goals = 45;
@@ -349,6 +373,7 @@ let h_ossigeno h = { h with
   soft_bound_goals = 30;
   restart_carry = (2, 0);
   fix_parameters = true;
+  cp_cutoff = 4000;
   k = k_limiting
 }
 
@@ -356,7 +381,7 @@ let h_carbonio0 h = { h with
   full_CPs_with_axioms = true;
   hard_bound_equations = 360;
   hard_bound_goals = 270;
-  n = 10;
+  n = const 10;
   n_goals = 3;
   size_age_ratio = 60;
   soft_bound_equations = 40; (* 36 for COL006-7 *)
@@ -367,8 +392,12 @@ let h_carbonio1 h = { h_carbonio0 h with
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
 }
 
+let h_carbonio2 h = { h_carbonio0 h with
+cp_cutoff = 1000;
+}
+
 let h_magnesio h = { h with
-  n = 6;
+  n = const 6;
   hard_bound_equations = 40;
   hard_bound_goals = 45;
   soft_bound_equations = 25;
@@ -376,7 +405,7 @@ let h_magnesio h = { h with
 }
 
 let h_no_shape0 h = { h with
-  n = 6;
+  n = const 6;
   hard_bound_equations = 60;
   hard_bound_goals = 90;
   soft_bound_equations = 40;
@@ -393,7 +422,7 @@ let h_no_shape1 h = { h_no_shape0 h with
 let h_idrogeno h = { h with
   hard_bound_equations = 60;
   hard_bound_goals = 60;
-  n = 6;
+  n = const 6;
   soft_bound_equations = 45; (* 53 needed for GRP505, 506*)
   soft_bound_goals = 40;
   k = k_limiting;
@@ -403,7 +432,7 @@ let h_idrogeno h = { h with
 let h_boro h = { h with
   hard_bound_equations = 20;
   hard_bound_goals = 20;
-  n = 14;
+  n = const 14;
   size_age_ratio = 70;
   soft_bound_equations = 16;
   k = (fun i -> if i > 20 then 1 else h.k i);

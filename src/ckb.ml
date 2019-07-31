@@ -13,6 +13,7 @@ module Lit = Literal
 module NS = Nodes
 module Logic = Settings.Logic
 module T = Term
+module Tr = Trace
 module Sig = Signature
 module Sub = Term.Sub
 
@@ -212,10 +213,10 @@ let trace_cassociativity acs =
     let st = T.F(f, [T.F(f, [y; x]); z]), T.F(f, [x; T.F(f, [y; z])]) in
     let mu = Sub.add 4 y (Sub.add 5 x Sub.empty) in
     let st = normalize st in
-    Trace.add_overlap st (comm, [0], assoc, mu);
+    Tr.add_overlap st (comm, [0], assoc, mu);
     let ut = T.F(f, [y; T.F(f, [x; z])]), T.F(f, [x; T.F(f, [y; z])]) in
     let ut = normalize ut in
-    Trace.add_rewrite ut st ([], [assoc,[],Sub.add 1 y (Sub.add 2 x Sub.empty)])
+    Tr.add_rewrite ut st ([], [assoc,[],Sub.add 1 y (Sub.add 2 x Sub.empty)])
   in
   List.iter add acs
 ;;
@@ -234,9 +235,13 @@ let rewrite ?(max_size=0) ?(normalize=false) rewriter (cs : NS.t) =
       None
   in
   let rewrite n (irrdcbl, news) =
-    let norm = if normalize then Lit.normalize else (fun x -> x) in
     match nf n with
-      | None -> (NS.add (norm n) irrdcbl, news) (* no progress here *)
+      | None ->
+        let n' = if normalize then Lit.normalize n else n in
+        if normalize && !(Settings.do_proof) <> None then (
+          let tn = if Lit.is_equality n then Tr.add_norm else Tr.add_norm_goal in
+          tn (Lit.terms n) (Lit.terms n'));
+        (NS.add n' irrdcbl, news) (* no progress here *)
       | Some (nnews, rs) -> irrdcbl, NS.add_list nnews news
   in
   let res = NS.fold rewrite cs (NS.empty (), NS.empty ()) in
@@ -281,9 +286,9 @@ let interreduce rr =
  let rew = new Rewriter.rewriter !heuristic rr [] Order.default in
  let right_reduce (l,r) =
     let r', rs = rew#nf r in
-    if r <> r' then (
+    if r <> r' && l <> r' then (
       if !(Settings.do_proof) <> None then
-        Trace.add_rewrite (normalize (l,r')) (l, r) ([],rs));
+        Tr.add_rewrite (normalize (l,r')) (l, r) ([],rs));
     (l,r')
   in
   let rr_hat = Listx.unique ((L.map right_reduce) rr) in
@@ -412,9 +417,9 @@ let solved_goal rewriter gs =
       let s',rss = rewriter#nf s in
       let t',rst = rewriter#nf t in
       if s' = t' then
-        Some ((s,t), rewrite_seq rewriter (s,t) (rss,rst), Sub.empty)
+        Some ((s,t), rewrite_seq rewriter (s,t) (rss,rst), s', Sub.empty)
       else if Subst.unifiable s t then
-        Some ((s,t), ([],[]), Subst.mgu s t)
+        Some ((s,t), ([],[]), s, Subst.mgu s t)
       else None
     with Rewriter.Max_term_size_exceeded -> None
   in
@@ -443,15 +448,16 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
       Rules.print rr Rules.print ee NS.print gs;
   rewriter#add_more ee;
   match solved_goal rewriter gs with
-    | Some (st, rseq, sigma) ->
-      if unsat_allowed () then Some (UNSAT, Proof (st, rseq, sigma)) else None
+    | Some (st, rseq, u, sigma) ->
+      if unsat_allowed () then Some (UNSAT, Proof (st, rseq, u,sigma)) else None
     | None ->
       let joinable (s,t) =
         try fst (rewriter#nf s) = fst (rewriter#nf t)
         with Rewriter.Max_term_size_exceeded -> false  
       in
       if unsat_allowed () && L.exists joinable ieqs then (* joinable inequality axiom *)
-      Some (UNSAT, Proof (L.find joinable ieqs, ([],[]), Sub.empty))
+        let e = L.find joinable ieqs in
+        Some (UNSAT, Proof (e, ([],[]), fst e, Sub.empty))
       else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
       else match saturated state (rr,ee) rewriter cc with
@@ -846,10 +852,10 @@ let detect_shape es =
   let hs =
     match shape with
     | Piombo -> [h_piombo h, 1000.]
-    | Zolfo -> [h_zolfo h, 200.; h_ossigeno h, 1000.]
-    | Xeno -> [h_xeno h, 1000.] 
+    | Zolfo -> [h_zolfo0 h, 80.; h_zolfo h, 1000.]
+    | Xeno -> [h_xeno1 h, 100.; h_xeno h, 1000.] 
     | Anello -> [h_anello h, 1000.] 
-    | Elio -> [h_elio h, 1000.]
+    | Elio -> [h_elio0 h, 30.; h_elio h, 1000.]
     | Silicio -> [h_silicio h, 1000.]
     | Ossigeno -> [h_ossigeno h, 1000.]
     | Carbonio -> [h_carbonio1 h, 4.; h_carbonio0 h, 1000.]
@@ -1004,9 +1010,9 @@ let filter_cps bound cps0 =
   cps_s, cps_l
 ;;
 
-let filter_cps bound cps0 =
+let filter_cps state bound cps0 =
   let t = Unix.gettimeofday () in
-  let the_limit = 8000 in 
+  let the_limit = !heuristic.cp_cutoff in 
   let rec filter b cps = 
     let cps' = [ l, s | l, s <- cps; s < b] in
     if List.length cps' > the_limit then filter (b - 2) cps'
@@ -1068,7 +1074,7 @@ let rec phi s =
     (*let eq_bound = !heuristic.hard_bound_equations in
     let cps = NS.filter (fun cp -> Lit.size cp < eq_bound) cps' in
     let cps_large = NS.filter (fun cp -> Lit.size cp >= eq_bound) cps' in*)
-    let cps, cps_large = filter_cps !heuristic.hard_bound_equations cps' in
+    let cps, cps_large = filter_cps s !heuristic.hard_bound_equations cps' in
     let t = Unix.gettimeofday () in
     let cps = reduced ~normalize:true rew cps in
     A.t_tmp2 := !A.t_tmp2 +. (Unix.gettimeofday () -. t);
@@ -1151,8 +1157,8 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   else
     time_limit := 600.;
   if !(Settings.do_proof) <> None then (
-    Trace.add_initials axs_eqs;
-    Trace.add_initial_goal gs);
+    Tr.add_initials axs_eqs;
+    Tr.add_initial_goal gs);
   if !heuristic.reduce_AC_equations_for_CPs then (
     let acx = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
     acx_rules := [ Lit.flip r | r <- acx ] @ acx);
@@ -1163,7 +1169,7 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
 let remember_state es gs =
  let h = Hashtbl.hash (termination_strategy (), es, gs) in
  if h = !hash_initial then
-   set_heuristic {!heuristic with n = Pervasives.max (!heuristic.n + 1) 15};
+   set_heuristic {!heuristic with n = (fun _ -> max (!heuristic.n 0 + 1) 15)};
  hash_initial := h
 ;;
 
@@ -1256,7 +1262,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     with Restart (es_new, is_hard) -> (
       if debug 1 then
         Format.printf "New lemmas on restart:\n%a\n%!" NS.print_list es_new;
-      if is_hard then Trace.clear () else pop_strategy ();
+      if is_hard then Tr.clear () else pop_strategy ();
       St.clear ();
       Cache.clear ();
       A.restarts := !A.restarts + 1;

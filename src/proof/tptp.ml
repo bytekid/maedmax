@@ -55,34 +55,52 @@ let print_step ppf ?(goal = false) filename eqindex (eqn, o) =
   F.fprintf ppf ").@]@."
 ;;
 
+let print_trivial_model ppf es trs filename =
+  F.fprintf ppf
+    "%s SZS status Satisfiable\n" "%";
+    F.fprintf ppf "%s SZS output start Model for %s@." "%" filename;
+  F.fprintf ppf "fof(interpretation_domain, fi_domain, (! [X]: ( X = e0 ))).\n";
+  let rec e0s n = if n <= 1 then "e0" else e0s (n-1) ^ ",e0" in
+  let args n = if n = 0 then "" else "(" ^ (e0s n) ^ ")" in
+  let print_interpretation (f, a) =
+    F.fprintf ppf "fof(interpretation_terms, fi_functors, ( %s%s = e0)).\n"
+      (Signature.get_fun_name f) (args a)
+  in
+  List.iter print_interpretation (Rules.signature es);
+  F.fprintf ppf "%s SZS output end Model@." "%"
+;;
+
 let print_saturation ppf trs filename =
   let eqindex : (Rule.t, int) H.t = H.create 128 in
   let steps = T.ancestors trs in
   F.fprintf ppf
-    "%s SZS status Satisfiable\n%s SZS output start Saturation@." "%" "%";
+    "%s SZS status Satisfiable\n%s SZS output start Saturation for %s@."
+      "%" "%" filename;
   List.iter (print_step ppf filename eqindex) steps;
   F.fprintf ppf "@.%s SZS output end Saturation@." "%"
 ;;
 
-let get_goal_steps g_origs ((s, t) as st) (rs, rt) =
+let get_goal_steps g_origs ((s, t) as st) (rs, rt) u =
   if not (List.mem st g_origs) then (
     (*let o = try fst (H.find T.goal_trace_table st) with _ -> T.Initial in*)
     (*H.add T.goal_trace_table g_orig (T.Initial, -1);*) (* should happen anyway*)
     T.goal_ancestors st
   ) else (
-    let s' = T.last (s, T.rewrite_conv s rs) in
+    Format.printf "proved %a = %a\n%!" Term.print s Term.print t;
+    (*let s' = T.last (s, T.rewrite_conv s rs) in
     let t' = T.last (t, T.rewrite_conv t rt) in
     assert (Subst.unifiable s' t');
-    let u = Term.substitute (Subst.mgu s' t') s' in
+    let u = Term.substitute (Subst.mgu s' t') s' in*)
     [], [(s,t), T.Initial; (u, u), T.Rewrite ((s,t), (rs, rt))])
 ;;
 
-let print_goal_proof ppf filename eqs gs st (rs, rt) sigma =
-  let grls, gsteps = get_goal_steps gs st (rs, rt) in
+let print_goal_proof ppf filename eqs gs st (rs, rt) u sigma =
+  let grls, gsteps = get_goal_steps gs st (rs, rt) u in
   let rls = Listx.unique ([r | r, _, _ <- rs @ rt] @ grls) in
   let steps = T.ancestors rls in
   F.fprintf ppf
-    "%s SZS status Unsatisfiable\n%s SZS output start CNFRefutation@." "%" "%";
+    "%s SZS status Unsatisfiable\n%s SZS output start CNFRefutation for %s@."
+      "%" "%" filename;
   let eqindex : (Rule.t, int) H.t = H.create 128 in
   List.iter (print_step ppf filename eqindex) steps;
   List.iter (print_step ppf ~goal:true filename eqindex) gsteps;
@@ -93,23 +111,25 @@ let print_goal_proof ppf filename eqs gs st (rs, rt) sigma =
 ;;
 
 let fprint_proof ppf filename (es,gs) = function
-  | Settings.Proof ((s,t),(rs, rt), sigma)
+  | Settings.Proof ((s,t),(rs, rt), u, sigma)
     when List.for_all Literal.is_equality es && List.length gs = 1 ->
     let eqs = List.map Literal.terms es in
     let gs = [Variant.normalize_rule (Literal.terms g) | g <- gs] in
     let rl_p_sub = List.map (fun (rl, p, r, _) -> (rl, p, r)) in
-    print_goal_proof ppf filename eqs gs (s, t) (rl_p_sub rs, rl_p_sub rt) sigma
+    print_goal_proof ppf filename eqs gs (s, t) (rl_p_sub rs, rl_p_sub rt) u sigma
   | Settings.Completion rr ->
-    print_saturation ppf rr filename
+    print_trivial_model ppf [Lit.terms e | e <- es] rr filename
   | Settings.GroundCompletion (rr,ee,o) -> (* no goal exists *)
-    print_saturation ppf (rr @ ee) filename
+    print_trivial_model ppf [Lit.terms e | e <- es]  (rr @ ee) filename
 (*  | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
       let g = Literal.terms (List.hd gs) in
-      let es = List.map Literal.terms es in
+      let es = List.map Literal.terms es start 
+      s
       let p = T.xml_goal_disproof es g (rr,ee,o) rst in
       result_string p*)
   | Settings.Proof _ -> failwith "Tptp.show_proof: proof type not supported"
-  | Settings.Disproof _ -> failwith "Tptp.show_proof: disproof not supported"
+  | Settings.Disproof (rr, ee, o, steps) ->
+    print_saturation ppf (rr @ ee) filename
 ;;
 
 let print_proof = fprint_proof F.std_formatter

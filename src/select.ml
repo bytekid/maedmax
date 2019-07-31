@@ -157,7 +157,7 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
   get_oldest [] max max_int 0
 ;;
 
-let select_count i = !heuristic.n
+let select_count i = !heuristic.n i
 
 let keep acs n =
   let fs = Rule.functions (Lit.terms n) in

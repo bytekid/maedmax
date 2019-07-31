@@ -151,7 +151,7 @@ let options =
    ("--keep-oriented", Arg.Unit (fun _ ->
      settings := {!settings with keep_orientation = true}),
      " preserve orientation of input axioms");
-   ("--growth-eqs", Arg.Int (fun n -> heuristic := {!heuristic with n = n}),
+   ("--growth-eqs", Arg.Int (fun n -> heuristic := {!heuristic with n = const n}),
      "<n> select <n> active equations from CPs of TRS");
      ("--growth-gls",
        Arg.Int (fun n -> heuristic := {!heuristic with n_goals = n}),
@@ -269,7 +269,7 @@ let success_code_inf = function UNSAT -> "MAYBE" | SAT -> "YES"
 
 let json_settings settings s =
  let s = "strategy", `String s in
- let n = "n", `Int !heuristic.n in
+ let n = "n", `Int (!heuristic.n 0) in
  let sa = "sizeage", `Int !heuristic.size_age_ratio in
  `Assoc [s; n; sa]
 ;;
@@ -359,10 +359,10 @@ let cpf_proof_string ?(readable = false) (es, gs) =
       ((if readable then Xml.to_string_fmt else Xml.to_string) p)
   in
   function
-    Proof ((s,t),(rs, rt), sigma) when L.for_all Lit.is_equality es ->
+    Proof ((s,t),(rs, rt), _, sigma) when L.for_all Lit.is_equality es ->
       let goal = Literal.terms (L.hd gs) in
       let es = L.map Literal.terms es in
-      let p = Cpf.goal_proof es goal ((s,t),(rs, rt), sigma) in
+      let p = Cpf.goal_proof es goal ((s,t), (rs, rt), sigma) in
       result_string p
   | Completion rr -> (* FIXME only check ground completion new *)
       let es = L.map Literal.terms es in
@@ -381,7 +381,7 @@ let cpf_proof_string ?(readable = false) (es, gs) =
 ;;
 
 let selection_trace (es, gs) = function
-    Proof ((s, t),(rs, rt), sigma) when L.for_all Lit.is_equality es ->
+    Proof ((s, t),(rs, rt), _, sigma) when L.for_all Lit.is_equality es ->
       let goal = Literal.terms (L.hd gs) in
       let es = L.map Literal.terms es in
       SelectionTrace.for_goal_proof es goal ((s, t), (rs, rt), sigma)
@@ -471,7 +471,7 @@ let run file ((es, gs) as input) =
   let timer = Timer.start () in
   let ans, proof =
     if gs = [] && !settings.unfailing && not !settings.complete_if_no_goal then
-      (SAT, GroundCompletion ([], [Term.V 0, Term.V 1], Order.default))
+      (SAT, GroundCompletion ([], [], Order.default))
     else if !settings.modulo_ac then
       Ckb_AC.complete (!settings, !heuristic) (fst input)
     else
@@ -482,7 +482,7 @@ let run file ((es, gs) as input) =
   if !(Settings.interactive) then
     interactive_mode proof
   else if !settings.json then
-    print_json (es,gs) secs (ans,clean es proof) settings
+    print_json (es,gs) secs (ans, clean es proof) settings
   else (
     match !(Settings.do_proof) with
     | Some fmt when not !Settings.benchmark ->

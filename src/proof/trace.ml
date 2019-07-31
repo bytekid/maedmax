@@ -58,10 +58,15 @@ let parents = function
   | CP (rl1, _, mu, rl2) -> [rl1, mu; rl2, mu]
 ;;
 
+let parent_string o =
+  let cnt rl = try snd (Hashtbl.find trace_table rl) with Not_found -> -1 in
+  List.fold_left (fun s p -> s ^ (string_of_int (cnt p)) ^ ",") "" [p | p, _ <- parents o]
+;;
+
 let origin_string = function
 | Initial -> "Initial"
-| Rewrite (p, _) -> "Rewrite(" ^ (Rule.to_string p) ^ ")"
-| CP (rl1, _, _, rl2) -> "CP(" ^ (Rule.to_string rl1) ^ ","^ (Rule.to_string rl2) ^")"
+| Rewrite (p, _) as o -> (parent_string o) ^ " Rewrite(" ^ (Rule.to_string p) ^ ")" 
+| CP (rl1, _, _, rl2) as o -> (parent_string o) ^ " CP(" ^ (Rule.to_string rl1) ^ ","^ (Rule.to_string rl2) ^")"
 ;;
 
 let children = function
@@ -97,8 +102,8 @@ let rec print_steps = function
 let add eq o = if not (H.mem trace_table eq) then
   let c = !count in
   count := c + 1;
-  (*if S.do_proof_debug () then
-    F.printf "ADDING %i:%a %s\n" c R.print eq (origin_string o);*)
+  if S.do_proof_debug () then
+    F.printf "ADDING %i:%a %s\n" c R.print eq (origin_string o);
   H.add trace_table eq (o, c)
 ;;
 
@@ -106,8 +111,8 @@ let gadd g o =
   if not (H.mem goal_trace_table g) then (
     let c = !count in
     count := c + 1;
-    (*if S.do_proof_debug () then
-      F.printf "ADDING GOAL %i:%a %s\n" c R.print g (origin_string o);*)
+    if S.do_proof_debug () then
+      F.printf "ADDING GOAL %i:%a %s\n" c R.print g (origin_string o);
     H.add goal_trace_table g (o, c))
 ;;
 
@@ -121,9 +126,7 @@ let add_initials eqs = List.iter (fun e -> add e Initial) eqs
 
 let add_overlap eq (rl1, p, rl2, mu) = add eq (CP (rl1, p, mu, rl2))
 
-let add_rewrite eq eq0 steps =
-  add eq (Rewrite (eq0, steps));
-;;
+let add_rewrite eq eq0 steps = add eq (Rewrite (eq0, steps))
 
 let add_initial_goal eqs = List.iter (fun e -> gadd e Initial) eqs
 
@@ -134,13 +137,35 @@ let add_rewrite_goal eq eq0 steps = gadd eq (Rewrite (eq0,steps))
 let trace_goal g =
   try H.find goal_trace_table g
   with Not_found ->
-    Format.printf "trace goal %a\n%!" Rule.print g;
+    (*Format.printf "trace goal %a\n%!" Rule.print g;*)
     failwith "Trace.trace_goal: not found"
 ;;
 
 let trace_eq e =
   try H.find trace_table e
-  with Not_found -> failwith "Trace: equation not found"
+  with Not_found ->
+    (*Format.printf "unknown: %a\n%!" Rule.print e;*)
+    failwith "Trace: equation not found"
+;;
+
+let add_norm eq eqn =
+  let idx = try snd (trace_eq eqn) with _ -> -1 in
+  (* add if normalized version not there, or unnormalized was earlier  *)
+  if eq <> eqn && (idx < 0 || snd (trace_eq eq) < idx) then (
+    if S.do_proof_debug () then
+      F.printf "ADDING NORMALIZED %d %a -> %a\n"
+      (snd (trace_eq eq)) R.print eq R.print eqn;
+    H.add trace_table eqn (trace_eq eq))
+;;
+
+let add_norm_goal eq eqn =
+  let idx = try snd (trace_goal eqn) with _ -> -1 in
+  (* add if normalized version not there, or unnormalized was earlier  *)
+  if eq <> eqn && (idx < 0 || snd (trace_goal eq) < idx) then (
+    if S.do_proof_debug () then
+      F.printf "ADDING NORMALIZED GOAL %a -> %a %d\n"
+        R.print eq R.print eqn (snd (trace_goal eq));
+    H.add goal_trace_table eqn (trace_goal eq))
 ;;
 
 let eq_variants = Rule.equation_variant
@@ -157,18 +182,25 @@ let eq_variant_in eqs eq = List.exists (eq_variants eq) eqs
 
 let ancestors eqs =
   if S.do_proof_debug () then Format.printf "ANCESTORS\n%!";
+  List.iter (fun e -> Format.printf "  %a\n" (Rule.print_with "=") e) eqs;
   let acc_eqs acc = [eq | (eq, _), _ <- acc] in
   let rec ancestors acc = function
     | [] -> acc
     | eq :: eqs ->
       try
-        let eq = Variant.normalize_rule eq in
+        let eq, o, id =
+          try let o, id = trace_eq eq in eq, o, id
+          with _ ->
+            let eq' = Variant.normalize_rule eq in
+            try let o, id = trace_eq eq' in eq', o, id
+            with _ -> failwith "no variant of equation found"
+        in
         if S.do_proof_debug () then
           Format.printf " %i:  %a\n%!" (try snd (trace_eq eq) with _ -> 0) (Rule.print_with "=") eq;
         if List.mem eq (acc_eqs acc) then
           ancestors acc eqs
         else
-          let o, id = trace_eq eq in
+          (*let o, id = trace_eq eq in*)
           let ps = List.map fst (parents o) in
           let acc' = ancestors acc (Listset.diff ps (acc_eqs acc)) in
           let xs = acc_eqs acc' in
@@ -284,7 +316,8 @@ let normalize rl d =
 let rewrite_conv t steps =
   let step_conv (t, acc) (rl, p, sub) =
     try
-      let u, _ = Rewriting.step_at_with t p rl in
+      let rl' = Rule.substitute sub rl in
+      let u, _ = Rewriting.step_at_with t p rl' in
       let rl', d' = normalize rl LeftRight in
       u, (p, rl', d', sub, u) :: acc
     with _ -> failwith "Trace.rewrite_conv: no match"
@@ -297,7 +330,7 @@ let rewrite_conv' t steps =
   try
     let rl', d' = normalize rl LeftRight in
     u, (p, rl', d', sub, u) :: acc
-  with _ -> failwith "Trace.rewrite_conv: no match"
+  with _ -> failwith "Trace.rewrite_conv': no match"
   in
   List.rev (snd (List.fold_left step_conv (t, []) steps))
 ;;
@@ -310,7 +343,7 @@ let the_overlap r1 r2 p =
 
 (* Produce conversion for single equation given its origin *)
 let conversion_for (s, t) o =
-  if S.do_proof_debug () then
+  (*if S.do_proof_debug () then*)
     F.printf "\n CONVERSION FOR %a\n%!" R.print (s, t);
   match o with
   | Initial -> s, []
@@ -876,11 +909,11 @@ let goal_ancestors_with_subst (g, sigma) =
 ;;
 
 let proof_literal_instances (es, gs) = function
-  | Settings.Proof ((s,t),(rs, rt), sigma) ->
+  | Settings.Proof ((s,t),(rs, rt), u, sigma) ->
     (*Format.printf "proved goal %a\n" Rule.print (s,t);*)
     let s' = last (s, rewrite_conv' s rs) in
     let t' = last (t, rewrite_conv' t rt) in
-    assert (Subst.unifiable s' t');
+    assert (u = t');
     assert (Term.substitute sigma s' = Term.substitute sigma t');
     let rl_pos_sub = List.map (fun (rl, p, r, _) -> (rl, p, r)) in
     if (s',t') <> (s,t) then

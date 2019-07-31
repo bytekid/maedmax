@@ -95,7 +95,7 @@ let rewriter_nf_with ?(max_size = 0) l rewriter =
     raise Rewriter.Max_term_size_exceeded;
   let rls = List.map (fun (rl,_,_) -> rl) (rs @ rt) in
   if s' = t' && l.is_equality then (
-    if !(Settings.do_proof) <> None then (
+    if !(Settings.do_proof) = Some CPF then (
       let st' = Variant.normalize_rule (s', t') in
       T.add_rewrite st' ts (rs, rt));
     Some([], rls))

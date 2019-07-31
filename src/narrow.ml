@@ -146,7 +146,8 @@ let decide settings rr ee ord gs h =
       if debug settings then
         Format.printf "UNSAT, found unifiable equation\n%!";
       if unsat_allowed () then
-        Some (S.UNSAT, S.Proof (fst (L.find unifiable gs),([],[]), Sub.empty))
+        let g = fst (L.find unifiable gs) in
+        Some (S.UNSAT, S.Proof (g, ([],[]), fst g, Sub.empty))
       else raise Backtrack
       )
     else if L.for_all (fun (_,ps) -> both_empty ps) gs && sat_allowed () then (
