@@ -238,9 +238,12 @@ let rewrite ?(max_size=0) ?(normalize=false) rewriter (cs : NS.t) =
     match nf n with
       | None ->
         let n' = if normalize then Lit.normalize n else n in
-        if normalize && !(Settings.do_proof) <> None then (
-          let tn = if Lit.is_equality n then Tr.add_norm else Tr.add_norm_goal in
-          tn (Lit.terms n) (Lit.terms n'));
+        if normalize then (
+          if !(Settings.do_proof) = Some CPF then (
+            let tn = if Lit.is_equality n then Tr.add_norm else Tr.add_norm_goal in
+            tn (Lit.terms n) (Lit.terms n'))
+          else if !(Settings.do_proof) = Some TPTP then
+            Lit.LightTrace.add_rename n' n);
         (NS.add n' irrdcbl, news) (* no progress here *)
       | Some (nnews, rs) -> irrdcbl, NS.add_list nnews news
   in
@@ -269,15 +272,15 @@ let reduced_goals ?(normalize=false) rew gs =
   res
 ;;
 
-let goal_cp_table : (Lit.t, bool) Hashtbl.t = Hashtbl.create 128
+let goal_cp_table : bool NS.H.t = NS.H.create 128
 
 let reduced_goal_cps rew gs =
   if not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio) then
     reduced_goals ~normalize:true rew gs
   else (
-    let gs' = NS.filter (fun g -> not (Hashtbl.mem goal_cp_table g) &&
+    let gs' = NS.filter (fun g -> not (NS.H.mem goal_cp_table g) &&
                                 Lit.size g < !heuristic.hard_bound_goals) gs in
-    NS.iter (fun g -> Hashtbl.add goal_cp_table g true) gs';
+    NS.iter (fun g -> NS.H.add goal_cp_table g true) gs';
     let res = reduced_goals ~normalize:true rew gs' in
     res)
 ;;
@@ -853,7 +856,7 @@ let detect_shape es =
     match shape with
     | Piombo -> [h_piombo h, 1000.]
     | Zolfo -> [h_zolfo0 h, 80.; h_zolfo h, 1000.]
-    | Xeno -> [h_xeno1 h, 100.; h_xeno h, 1000.] 
+    | Xeno -> [(*h_xeno1 h, 100.;*) h_xeno h, 1000.] 
     | Anello -> [h_anello h, 1000.] 
     | Elio -> [h_elio0 h, 30.; h_elio h, 1000.]
     | Silicio -> [h_silicio h, 1000.]
@@ -1120,7 +1123,7 @@ let rec phi s =
   | Backtrack -> raise (Restart ([], false))
 ;;
 
-let init_settings (settings_flags, heuristic_flags) axs gs =
+let init_settings (settings_flags, heuristic_flags) axs (gs : Lit.t list) =
   A.restart ();
   A.iterations := 0;
   let axs_eqs = [ Lit.terms a | a <- axs ] in
@@ -1128,15 +1131,16 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
   let cs = Commutativity.symbols axs_eqs in
   let is_large = L.length axs_eqs >= 90 &&
     L.length (L.filter Rule.is_ground axs_eqs) > 45 (* AQL systems *) in
+  let gs_eqs = [Lit.terms g | g <- gs] in
   let s =
     { !settings with
       ac_syms = acs;
       auto = if is_large then false else settings_flags.auto;
       axioms = axs;
       debug = settings_flags.debug;
-      gs = gs;
+      gs = gs_eqs;
       only_c_syms = Listset.diff cs acs;
-      signature = Rules.signature (axs_eqs @ gs);
+      signature = Rules.signature (axs_eqs @ gs_eqs);
       tmp = settings_flags.tmp;
       unfailing = settings_flags.unfailing
     }
@@ -1156,9 +1160,11 @@ let init_settings (settings_flags, heuristic_flags) axs gs =
     detect_shape axs_eqs
   else
     time_limit := 600.;
-  if !(Settings.do_proof) <> None then (
+  if !(Settings.do_proof) = Some CPF then (
     Tr.add_initials axs_eqs;
-    Tr.add_initial_goal gs);
+    Tr.add_initial_goal gs_eqs)
+  else if !(Settings.do_proof) = Some TPTP then
+    Lit.LightTrace.add_initials (gs @ axs);
   if !heuristic.reduce_AC_equations_for_CPs then (
     let acx = [ Lit.make_axiom (normalize (Ac.cassociativity f)) | f <- acs ] in
     acx_rules := [ Lit.flip r | r <- acx ] @ acx);
@@ -1236,7 +1242,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     let es0 = L.sort Pervasives.compare es' in
     let gs0 = L.map Lit.normalize gs in
     Select.init es0 gs0;
-    init_settings flags es0 [ Lit.terms g | g <- gs0 ];
+    init_settings flags es0 gs0;
     if debug 2 then Format.printf "strategy %s\n%!" (Strategy.to_string !heuristic.strategy);
     try
       let cas = [ Ac.cassociativity f | f <- !settings.ac_syms ] in
@@ -1274,7 +1280,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       Select.all_goals := [];
       Select.min_all_nodes := max_int;
       Select.min_all_goals := max_int;
-      Hashtbl.reset goal_cp_table;
+      NS.H.reset goal_cp_table;
       let es' = if gs = [] || not (unsat_allowed ()) then [] else es_new in
       let esx = List.map Lit.terms (es' @ es0) in
       let shape = A.problem_shape esx in

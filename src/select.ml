@@ -71,7 +71,7 @@ let add_to_all_goals gs_sized =
 
 let init es0 gs0 =
   all_nodes := [ e, Lit.size e | e <- es0 ];
-  Hashtbl.clear all_nodes_set;
+  NS.H.clear all_nodes_set;
   ignore (NS.add_list es0 all_nodes_set);
   (* pseudo-selected, but still valuable *)
   if !(S.do_proof) = Some SelectionTrace then

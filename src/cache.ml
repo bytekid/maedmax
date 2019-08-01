@@ -94,7 +94,10 @@ let contains n = A.take_time A.t_cache (contains n)
 
 let rlvar_cmp st rl = Rule.variant st rl
 
-let find_rule rl = H.find ht_rl_vars rl
+let find_rule rl =
+  try H.find ht_rl_vars rl
+  with Not_found -> failwith ("Cache.find_rule: " ^ (Rule.to_string rl))
+;;
 
 let store_rule_var ?(assert_rule=true) ctx lr =
   try find_rule lr with _ -> (

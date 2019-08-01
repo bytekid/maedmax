@@ -3,9 +3,19 @@ module T = Trace
 
 open Settings
 
+module LitHash = struct
+  type t = literal
+  let equal l l' = l.terms = l'.terms && l.is_equality = l'.is_equality
+  let hash l = Hashtbl.hash (l.hash, l.is_equality)
+end
+
+module H = Hashtbl.Make(LitHash)
+
 type t = Settings.literal
 
 let sizes : (int, int*int) Hashtbl.t = Hashtbl.create 100
+
+let last_id = ref 0
 
 let terms l = l.terms
 
@@ -19,24 +29,127 @@ let print_sizes _ =
 
 let print ppf l =
   let eq = if l.is_equality then "=" else "!=" in
-  Format.fprintf ppf "%a %s %a (%d)" Term.print (fst l.terms) eq Term.print (snd l.terms) (size l)
+  Format.fprintf ppf "%d: %a %s %a (%d)" l.id Term.print (fst l.terms) eq Term.print (snd l.terms) (size l)
 ;;
 
 let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
 
-let killed = ref 0
+let compare l l' = compare (l.terms, l.is_equality) (l'.terms, l'.is_equality)
 
-let make ts e = {terms = ts; is_equality = e}
+let is_equal l l' = compare l l' = 0
+
+let make ts e =
+  let i = !last_id in
+  last_id := i + 1;
+  {terms = ts; is_equality = e; hash = Hashtbl.hash ts; id = i }
+;;
+
+let change l ts = {l with terms = ts; hash = Hashtbl.hash ts}
+
+module LightTrace = struct
+  type origin =
+    | Initial
+    | Rewrite of literal * (Rule.t list * Rule.t list)
+    | CP of literal * literal
+    | Rename of literal
+  
+  let history : (literal * origin) H.t = H.create 128
+
+  let origin_string =
+    let soi i = string_of_int i in
+    function
+    | Initial -> "Initial"
+    | Rewrite (l, _) -> "Rewrite(" ^ (soi l.id) ^ ")" 
+    | Rename l -> "Rename(" ^ (soi l.id) ^ ")" 
+    | CP (l1, l2) -> "CP(" ^ (soi l1.id) ^ "," ^ (soi l2.id) ^ ")"
+  ;;
+
+  let add l o = 
+    if not (H.mem history l) then (
+      if Settings.do_proof_debug () then
+        Format.printf "ADDING %a %s\n" print l (origin_string o);
+      H.add history l (l, o))
+  ;;
+
+  let find_origin l =
+    let ln = make (Variant.normalize_rule l.terms) l.is_equality in
+    let orig_l = try Some (H.find history l) with _ -> None in
+    let orig_ln = try Some (H.find history ln) with _ -> None in
+    match orig_l, orig_ln with
+    | Some o, None
+    | None, Some o -> o
+    | Some (l0,o0), Some (l1, o1) ->
+      if l0.id < l1.id then (l0,o0) else (l1, o1)
+    | _-> (
+        Format.printf "NOT FOUND %a (%a)\n" print l print ln;
+        H.iter (fun _ (l0, _) ->
+          Format.printf "  %B %a\n" (LitHash.equal l l0) print l0) history;
+        failwith ((to_string l) ^ ": literal not found in trace"))
+  ;;
+
+  let find_origin_rule rl = find_origin (make rl true)
+
+  let find_equation rl = fst (find_origin (make rl true))
+
+  let find_goal rl = fst (find_origin (make rl false))
+
+  let parents = function
+  | Initial -> []
+  | Rewrite (l, (ls, rs)) -> l :: [find_equation r | r <- ls @ rs]
+  | Rename l -> [l]
+  | CP (l1, l2) -> [l1; l2]
+  ;;
+
+  let trace_origin = function
+  | Initial -> Initial
+  | Rewrite (l, (ls, rs)) -> Rewrite (fst (find_origin l), (ls, rs))
+  | Rename l -> Rename (fst (find_origin l))
+  | CP (l1, l2) -> CP(fst (find_origin l1), fst (find_origin l2))
+  ;;
+
+  let add_initials eqs = List.iter (fun e -> add e Initial) eqs
+
+  let add_overlap eq (l1, l2) = add eq (CP (l1, l2))
+  
+  let add_rewrite eq eq0 steps = add eq (Rewrite (eq0, steps))
+  
+  let add_rename eq eq0 = add eq (Rename eq0)
+
+  let ancestors eqs =
+    let unique = Listx.unique ~c:(fun l l' -> Pervasives.compare l.id l'.id) in
+    let diff xs ys = 
+      List.filter (fun x -> not (List.exists (fun y -> x.id = y.id) ys)) xs
+    in
+    if Settings.do_proof_debug () then (
+      Format.printf "ANCESTORS\n%!";
+      List.iter (fun e -> Format.printf "  %a\n" print e) eqs);
+    let ids ps = List.fold_left (^) "" [string_of_int p.id ^ " " | p <- ps] in
+    let acc_eqs acc = [l | l, _ <- acc] in
+    let lit_cmp (l,_) (l',_) = Pervasives.compare l.id l'.id in
+    (* invariant: second argument does not intersect with first *)
+    let rec ancestors acc = function
+      | [] -> acc
+      | l :: ls ->
+        assert (not (List.mem l (acc_eqs acc)));
+        let l0, o = find_origin l in
+        assert (l0.id <= l.id);
+        let accx = Listx.unique ~c:lit_cmp ((l0, trace_origin o) :: acc) in
+        let acc' = ancestors accx (diff (parents o) (acc_eqs accx)) in
+        ancestors acc' (diff ls (acc_eqs acc'))
+    in
+    ancestors [] eqs
+  ;;
+end
+
+let killed = ref 0
 
 let is_equality l = l.is_equality
 
 let is_inequality l = not l.is_equality
 
-let is_equal l l' = compare l l' = 0
-
 let negate l = { l with is_equality = not l.is_equality }
 
-let flip l = { l with terms = Rule.flip l.terms }
+let flip l = change l (Rule.flip l.terms)
 
 let is_subsumed l l' =
   Rule.is_instance l.terms l'.terms ||
@@ -45,14 +158,14 @@ let is_subsumed l l' =
 
 let is_trivial l = fst l.terms = snd l.terms
 
-let normalize l = { l with terms = Variant.normalize_rule l.terms }
+let normalize l = make (Variant.normalize_rule l.terms) l.is_equality
 
-let rename l = { l with terms = Rule.rename l.terms }
+let rename l = make (Rule.rename l.terms) l.is_equality
 
 let not_increasing l = not (Term.is_subterm (fst l.terms) (snd l.terms))
 
 (* Iff none of the literals is a goal, filter out trivial CPs *)
-let cps h l l' =
+(*let cps h l l' =
   if is_inequality l && is_inequality l' then []
   else
     let r1, r2 = l.terms, l'.terms in
@@ -82,7 +195,7 @@ let pcps rew l l' =
         if s <> t then trace (Variant.normalize_rule (s, t)) o
       in List.iter add os);
     [ make (Variant.normalize_rule (fst o)) is_eq | o <- os ]
-;;
+;;*)
 
 let rewriter_nf_with ?(max_size = 0) l rewriter =
   let ts = l.terms in
@@ -103,7 +216,9 @@ let rewriter_nf_with ?(max_size = 0) l rewriter =
   else (
     let st' = Variant.normalize_rule (s', t') in
     let g = make st' l.is_equality in
-    (if !(Settings.do_proof) <> None then
+    (if !(Settings.do_proof) = Some TPTP then 
+      LightTrace.add_rewrite g l ([r | r, _, _ <- rs], [r | r, _, _ <- rt])
+     else if !(Settings.do_proof) = Some CPF then
       let trc = if is_inequality l then T.add_rewrite_goal else T.add_rewrite in
       trc st' ts (rs, rt));
     Some ([g], rls))
@@ -153,13 +268,13 @@ let make_neg_axiom ts = make ts false
 
 let is_unifiable l = let u,v = l.terms in Subst.unifiable u v
 
-let substitute sigma l = { l with terms = Rule.substitute sigma l.terms }
+let substitute sigma l = make (Rule.substitute sigma l.terms) l.is_equality
 
 let substitute_uniform t l =
   let sub = Term.substitute_uniform t in
-  { l with terms = (sub (fst l.terms), sub (snd l.terms)) }
+  make (sub (fst l.terms), sub (snd l.terms)) l.is_equality
 ;;
 
 let variables l = Rule.variables l.terms
 
-let compare_size l l' = compare (size l) (size l')
+let compare_size l l' = Pervasives.compare (size l) (size l')

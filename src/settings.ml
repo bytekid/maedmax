@@ -73,6 +73,8 @@ type dismatching_constraints = (Term.t list * Term.t list) list list
 type literal = {
   terms: Rule.t;
   is_equality: bool;
+  id: int;
+  hash: int
 }
 
 type clause = literal list

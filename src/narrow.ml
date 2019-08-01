@@ -66,8 +66,12 @@ let narrow_forward_at_with settings rr ((s,t),(ps,pt)) p (l,r) =
     if Rule.size st' > (*!(settings.size_bound_goals)*) 200 then (
       heuristic := { !heuristic with mode = OnlyUNSAT };
       raise Too_large);
-    if !(Settings.do_proof) <> None then
-      Trace.add_overlap st' ((l,r), p, (s,t), sigma);
+    let rule = Literal.make_axiom in
+    let goal = Literal.make_neg_axiom in
+    (if !(Settings.do_proof) = Some TPTP then
+      Literal.LightTrace.add_overlap (goal st') (rule (l,r), goal (s,t))
+    else if !(Settings.do_proof) = Some CPF then
+      Trace.add_overlap st' ((l,r), p, (s,t), sigma));
     let pst = if keep_dir then (ps',pt) else (pt,ps') in
     if debug settings then
       Format.printf "forward narrow (%a,%a) with %a at %s to (%a,%a) %d\n%!"
@@ -75,11 +79,14 @@ let narrow_forward_at_with settings rr ((s,t),(ps,pt)) p (l,r) =
         R.print (l,r) (pstr p)
         T.print (fst st') T.print (snd st')
         (R.size st');
-    let uv,ps_uv, rs_uv = nf2 rr (st',pst) in
+    let uv, ps_uv, rs_uv = nf2 rr (st',pst) in
     if debug settings then
       Format.printf "rewrite to (%a,%a)\n%!" T.print (fst uv) T.print (snd uv);
-    if !(Settings.do_proof) <> None then
-      Trace.add_rewrite st' uv rs_uv;
+    (if !(Settings.do_proof) = Some TPTP then
+      let rs = [r | r, _, _ <- fst rs_uv], [r | r, _, _ <- snd rs_uv] in
+      Literal.LightTrace.add_rewrite (goal st') (goal uv) rs
+    else if !(Settings.do_proof) = Some CPF then
+      Trace.add_rewrite st' uv rs_uv);
     [(uv,ps_uv)]
   with _ -> []
 ;;

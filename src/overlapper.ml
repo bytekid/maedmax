@@ -90,7 +90,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
     let ixd = [ data l | l <- lits; Lit.not_increasing l ] in
     index <- FingerprintIndex.create ixd;
   ;;
-
+(*
   method add_symm (s,t) =
     let l, l' = Lit.make_axiom (s,t), Lit.make_axiom (t,s) in
     let eqs = [s, (l, Term.size t); t, (l', Term.size s)] in
@@ -100,7 +100,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
   method add (s,t) =
     let l = Lit.make_axiom (s,t) in
     index <- FingerprintIndex.add [s, (l, Term.size t)] index
-  ;;
+  ;;*)
 
   (* Returns terms unifiable with t. Lookup in table, otherwise use index. *)
   method unifiables t = 
@@ -136,7 +136,7 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
   method cp_at only_new rli rlo p =
     if Lit.is_inequality rli && Lit.is_inequality rlo then None
     else (
-      let is_equality = Lit.is_equality rli && Lit.is_equality rlo in
+      let is_eq = Lit.is_equality rli && Lit.is_equality rlo in
       let bd =
         if Lit.is_inequality rlo then h.hard_bound_goals else h.hard_bound_equations
       in
@@ -146,13 +146,15 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
         | Some o -> (
           let s,t = O.cp_of_overlap o in
           if Rule.size (s, t) > bd then None
-          else if s = t && is_equality then None
+          else if s = t && is_eq then None
           else (
             let st' = (*V.normalize_rule*) (s,t) in
-            if !(Settings.do_proof) <> None then
-              (if not is_equality then
-                Trc.add_overlap_goal else Trc.add_overlap) st' o;
-            Some (Lit.make st' is_equality, o))))
+            let cp_lit = Lit.make st' is_eq in
+            (if !(Settings.do_proof) = Some TPTP then
+              Lit.LightTrace.add_overlap cp_lit (rli, rlo)
+            else if !(Settings.do_proof) = Some CPF then
+              (if is_eq then Trc.add_overlap else Trc.add_overlap_goal) st' o);
+            Some (cp_lit, o))))
 ;;
 
   (* Computes CPs with given rule at position p in l. *)

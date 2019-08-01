@@ -1,11 +1,19 @@
 open Prelude
+open Settings
 
 module L = List
 module Lit = Literal
-module H = Hashtbl
 module R = Rule
 
-type t = (Literal.t, bool) Hashtbl.t
+module LitHash = struct
+  type t = Literal.t
+  let equal l l' = l.hash = l'.hash && l.terms = l'.terms && l.is_equality = l'.is_equality
+  let hash l = l.hash
+end
+
+module H = Hashtbl.Make(LitHash)
+
+type t = bool H.t
 
 let empty () : t = H.create 128
 
@@ -144,7 +152,7 @@ let subset ns1 ns2 = for_all (mem ns2) ns1
 let equal ns1 ns2 = subset ns1 ns2 && subset ns2 ns1
 
 let variant_free ns =
-  let h = Hashtbl.create (H.length ns * 2) in
+  let h = H.create (H.length ns * 2) in
   let var e e' = Rule.variant (Lit.terms e) (Lit.terms e') in
   H.fold (fun n _ hr -> if not (exists (var n) hr) then add n hr else hr) ns h 
 ;;
