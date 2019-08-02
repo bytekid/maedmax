@@ -65,26 +65,24 @@ module LightTrace = struct
   ;;
 
   let add l o = 
-    if not (H.mem history l) then (
+    (*if not (H.mem history l) then*) (
       if Settings.do_proof_debug () then
         Format.printf "ADDING %a %s\n" print l (origin_string o);
       H.add history l (l, o))
   ;;
 
   let find_origin l =
+    let find l =
+      match List.rev (H.find_all history l) with x :: _ -> Some x | _ -> None
+    in
     let ln = make (Variant.normalize_rule l.terms) l.is_equality in
-    let orig_l = try Some (H.find history l) with _ -> None in
-    let orig_ln = try Some (H.find history ln) with _ -> None in
+    let orig_l, orig_ln = find l, find ln in
     match orig_l, orig_ln with
     | Some o, None
     | None, Some o -> o
     | Some (l0,o0), Some (l1, o1) ->
       if l0.id < l1.id then (l0,o0) else (l1, o1)
-    | _-> (
-        Format.printf "NOT FOUND %a (%a)\n" print l print ln;
-        H.iter (fun _ (l0, _) ->
-          Format.printf "  %B %a\n" (LitHash.equal l l0) print l0) history;
-        failwith ((to_string l) ^ ": literal not found in trace"))
+    | _-> failwith ((to_string l) ^ ": literal not found in trace")
   ;;
 
   let find_origin_rule rl = find_origin (make rl true)
@@ -122,7 +120,7 @@ module LightTrace = struct
     in
     if Settings.do_proof_debug () then (
       Format.printf "ANCESTORS\n%!";
-      List.iter (fun e -> Format.printf "  %a\n" print e) eqs);
+      List.iter (fun e -> Format.printf "  %a\n\n" print e) eqs);
     let ids ps = List.fold_left (^) "" [string_of_int p.id ^ " " | p <- ps] in
     let acc_eqs acc = [l | l, _ <- acc] in
     let lit_cmp (l,_) (l',_) = Pervasives.compare l.id l'.id in
@@ -130,9 +128,11 @@ module LightTrace = struct
     let rec ancestors acc = function
       | [] -> acc
       | l :: ls ->
-        assert (not (List.mem l (acc_eqs acc)));
+        (*assert (not (List.mem l (acc_eqs acc)));*)
         let l0, o = find_origin l in
-        assert (l0.id <= l.id);
+        if Settings.do_proof_debug () then
+          Format.printf "  %a = %a (from %s)\n" print l print l0 (ids (parents o));
+        (*assert (l0.id <= l.id);*)
         let accx = Listx.unique ~c:lit_cmp ((l0, trace_origin o) :: acc) in
         let acc' = ancestors accx (diff (parents o) (acc_eqs accx)) in
         ancestors acc' (diff ls (acc_eqs acc'))

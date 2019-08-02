@@ -274,57 +274,6 @@ let json_settings settings s =
  `Assoc [s; n; sa]
 ;;
 
-let print_json (es, gs) f (a,p) settings =
-  let res_str = match p with
-    | Completion rr -> trs_string rr
-    | GroundCompletion (rr,ee,_)
-    | Disproof (rr,ee,_,_) -> (* TODO: show different normal forms? *)
-      if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
-    | Proof _ -> "..."
-  in
-  let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
-  let strat = !heuristic.strategy in
-  let t = `Assoc [
-    "result",`String (success_code a);
-    "time", f;
-    "trs", `String res_str;
-    "statistics", Analytics.json ();
-    "settings", json_settings settings (Strategy.to_string strat);
-    "characteristics", Analytics.analyze es gs
-  ] in
-  F.printf "%s\n%!" (pretty_to_string t)
-;;
-
-let print_json_term yes f =
- let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
- let t = `Assoc [
-  "result",`String (if yes then "YES" else "MAYBE");
-  "time", f;
-  "config",`String (call())] in
- F.printf "%s\n%!" (pretty_to_string t)
-;;
-
-let print_res answer res =
-  if !settings.infeasible then
-    printf "%s\n%!" (success_code_inf answer)
-  else (
-    printf "%s SZS status " "%";
-    let answer_str = success_code answer in
-    match res with
-    | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
-    | GroundCompletion (rr,ee,order)
-    | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
-      (printf "%s\n\n%a@." answer_str print_trs rr;
-      if ee <> [] then printf "%a@." print_es ee;
-      order#print ();
-      Format.printf "\n")
-    | Proof _ -> printf "%s\n%!" answer_str
-  )
-;;
-
-let print_analysis es gs =
- F.printf "%s\n%!" (pretty_to_string (Analytics.analyze es gs))
-;;         
 
 let clean es0 =
   let reduce rr =
@@ -396,12 +345,75 @@ let selection_trace (es, gs) = function
   | _ -> failwith "Main.selection_trace: not yet supported"
 ;;
 
+let proof_string filename input res = function
+  | CPF -> cpf_proof_string input res
+  | TPTP -> Tptp.proof_string filename input res
+  | _ -> "some proof"
+;;
+
 let show_proof filename input res = function
   | CPF -> Format.printf "%s\n%!" (cpf_proof_string input res)
   | TPTP -> Format.printf "%s\n%!" (Tptp.proof_string filename input res)
   | SelectionTrace -> selection_trace input res
   | _ -> Format.printf "some proof\n%!"
 ;;
+
+let print_json (es, gs) f (a,p) settings =
+  let prf =
+    match !(Settings.do_proof) with
+    | Some fmt -> proof_string (L.hd !filenames) (es, gs) p fmt
+    | _ -> ""
+  in
+  let res_str = match p with
+    | Completion rr -> trs_string rr
+    | GroundCompletion (rr,ee,_)
+    | Disproof (rr,ee,_,_) -> (* TODO: show different normal forms? *)
+      if ee <> [] then trs_eqs_string (rr, ee) else trs_string rr
+    | Proof _ -> "..."
+  in
+  let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
+  let strat = !heuristic.strategy in
+  let t = `Assoc [
+    "result",`String (success_code a);
+    "time", f;
+    "trs", `String res_str;
+    "statistics", Analytics.json ();
+    "settings", json_settings settings (Strategy.to_string strat);
+    "characteristics", Analytics.analyze es gs
+  ] in
+  F.printf "%s\n%!" (pretty_to_string t)
+;;
+
+let print_json_term yes f =
+ let f = `Float ((ceil (f *. 1000.)) /. 1000.) in
+ let t = `Assoc [
+  "result",`String (if yes then "YES" else "MAYBE");
+  "time", f;
+  "config",`String (call())] in
+ F.printf "%s\n%!" (pretty_to_string t)
+;;
+
+let print_res answer res =
+  if !settings.infeasible then
+    printf "%s\n%!" (success_code_inf answer)
+  else (
+    printf "%s SZS status " "%";
+    let answer_str = success_code answer in
+    match res with
+    | Completion trs -> printf "Satisfiable\n\n%a@." print_trs trs;
+    | GroundCompletion (rr,ee,order)
+    | Disproof (rr,ee,order,_) -> (* TODO: show different normal forms? *)
+      (printf "%s\n\n%a@." answer_str print_trs rr;
+      if ee <> [] then printf "%a@." print_es ee;
+      order#print ();
+      Format.printf "\n")
+    | Proof _ -> printf "%s\n%!" answer_str
+  )
+;;
+
+let print_analysis es gs =
+ F.printf "%s\n%!" (pretty_to_string (Analytics.analyze es gs))
+;;         
 
 let interactive_mode proof =
   let acs = !settings.ac_syms in
@@ -467,6 +479,16 @@ let print_waldmeister es =
   F.printf "CONCLUSION   %!\n"
 ;;
 
+let check_split gs =
+  if !(Settings.do_proof) = None || List.length gs <= 1 then gs
+  else (
+    assert (List.for_all (fun g -> not (Literal.is_equality g)) gs);
+    let split (ls,rs) g = let l,r = Literal.terms g in (l::ls, r::rs) in
+    let ls, rs = List.fold_left split ([],[]) gs in
+    [Literal.make_neg_axiom (Term.F(100,ls), Term.F(100,rs))]
+  )
+;;
+
 let run file ((es, gs) as input) =
   let timer = Timer.start () in
   let ans, proof =
@@ -475,7 +497,7 @@ let run file ((es, gs) as input) =
     else if !settings.modulo_ac then
       Ckb_AC.complete (!settings, !heuristic) (fst input)
     else
-      Ckb.ckb (!settings, !heuristic) input
+      Ckb.ckb (!settings, !heuristic) (es, check_split gs)
   in
   Timer.stop timer;
   let secs = Timer.length ~res:Timer.Seconds timer in

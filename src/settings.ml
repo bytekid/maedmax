@@ -299,7 +299,14 @@ let h_zolfo h = { h with
 }
 
 let h_zolfo0 h = { h_zolfo h with
-  cp_cutoff = 2000
+  cp_cutoff = 2000;
+}
+
+let h_zolfo1 h = { h_zolfo h with
+  cp_cutoff = 2000;
+  reduce_trss = false;
+  soft_bound_equations = 23;
+  soft_bound_goals = 11;
 }
 
 let h_xeno h = { h with

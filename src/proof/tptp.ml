@@ -15,7 +15,15 @@ module IntMap = Map.Make(OrdInt)
 open Settings
 
 (*** FUNCTIONS ***************************************************************)
-let name idx l = "eq_" ^ (string_of_int (IntMap.find l.id idx))
+let name idx l =
+  let name id = "eq_" ^ (string_of_int (IntMap.find id idx)) in
+  try name l.id
+  with Not_found ->
+    (* strange effects with nodes occuring twice *)
+    let ln = Lit.make (Variant.normalize_rule l.terms) l.is_equality in
+    let l', _ = T.find_origin ln in
+    name l'.id
+;;
 
 let rewrite_inference idx parent (lsteps,rsteps) ppf =
   let rlname rl = name idx (fst (T.find_origin_rule rl)) in
@@ -36,6 +44,16 @@ let cp_inference idx rl1 rl2 ppf =
 
 let axiom filename ppf = F.fprintf ppf "file('%s')" filename
 
+let store_max steps =
+  let cmp (me, mg) (l, _) = 
+    let s = Lit.size l in
+    if Lit.is_equality l then (max s me, mg) else (me, max s mg)
+  in
+  let me, mg = List.fold_left cmp (0,0) steps in
+  Analytics.max_equation_size := me;
+  Analytics.max_goal_size := mg
+;;
+
 let sort_history aged_ancestors =
   let age_compare (a, _) (b, _) = Pervasives.compare a.id b.id in
   let res = List.sort age_compare aged_ancestors in
@@ -45,6 +63,7 @@ let sort_history aged_ancestors =
       Lit.print e (Lit.LightTrace.origin_string o)) res);
   let add_index m (i, (l, _)) = IntMap.add l.id i m in
   let index = List.fold_left add_index IntMap.empty (Listx.index res) in
+  store_max res;
   res, index
 ;;
 
@@ -123,12 +142,12 @@ let print_goal_proof ppf filename eqs gs st (rs, rt) u sigma =
   F.fprintf ppf "cnf(bot, %s, ($false), inference(cn, [status(thm)], [%s]))."
     "negated_conjecture" (name idx contradiction);
   F.fprintf ppf "@.%s SZS output end CNFRefutation@." "%";
-  check steps
+  (*check steps*)
 ;;
 
 let fprint_proof ppf filename (es,gs) = function
   | Settings.Proof (goal, (rs, rt), u, sigma)
-    when List.for_all Literal.is_equality es && List.length gs = 1 ->
+    (*when List.for_all Literal.is_equality es && List.length gs = 1*) ->
     let eqs = List.map Literal.terms es in
     let gs = [Variant.normalize_rule (Literal.terms g) | g <- gs] in
     let rl_p_sub = List.map (fun (rl, p, r, _) -> rl) in
@@ -137,13 +156,6 @@ let fprint_proof ppf filename (es,gs) = function
     print_trivial_model ppf [Lit.terms e | e <- es] rr filename
   | Settings.GroundCompletion (rr,ee,o) -> (* no goal exists *)
     print_trivial_model ppf [Lit.terms e | e <- es]  (rr @ ee) filename
-(*  | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
-      let g = Literal.terms (List.hd gs) in
-      let es = List.map Literal.terms es start 
-      s
-      let p = T.xml_goal_disproof es g (rr,ee,o) rst in
-      result_string p*)
-  | Settings.Proof _ -> failwith "Tptp.show_proof: proof type not supported"
   | Settings.Disproof (rr, ee, o, steps) ->
     print_saturation ppf (rr @ ee) filename
 ;;

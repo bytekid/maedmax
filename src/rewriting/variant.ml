@@ -15,9 +15,6 @@ let eq_set_equal es1 es2 = eq_subset es1 es2 && eq_subset es2 es1
 let rec var_name fs i = i * 13
 
 let rename_rule (l, r) = Rule.rename_canonical ~from:0 (l, r)
-  (*let s = [ x, V i | i, x <- Listx.ix (Rule.variables (l, r)) ] in
-  (substitute s l, substitute s r)
-;;*)
 
 let rename_rules rs = [ rename_rule rule | rule <- rs ]
 

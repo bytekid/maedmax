@@ -30,6 +30,8 @@ val eq_counts : int list ref
 val cp_counts : int list ref
 val goal_counts : int list ref
 val shape : Settings.shape ref
+val max_equation_size : int ref
+val max_goal_size : int ref
 
 val start_time : float ref
 val hard_restart_time : float ref

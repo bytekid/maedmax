@@ -68,6 +68,8 @@ let costs = ref []
 let shape = ref NoShape
 let smt_checks = ref 0
 let selections = ref 0
+let max_equation_size = ref 0
+let max_goal_size = ref 0
 
 let acount = ref 0
 let pcount = ref 0
@@ -287,6 +289,8 @@ let json () =
   let ea = "equalities", `Int !goals in
   let gs = "goals", `Int !equalities in
   let mem = "memory", `Int (memory ()) in
+  let me = "max_equation", `Int !max_equation_size in
+  let mg = "max_goal", `Int !max_goal_size in
   let smtc = "SMT checks", `Int !smt_checks in
   let t_ccpred = "time/ccpred", trunc !t_ccpred in
   let t_ccomp = "time/ccomp", trunc !t_ccomp in
@@ -306,7 +310,7 @@ let json () =
   let hres = "hard restarts", `Int !hard_restarts in
   let shp = "shape", `String (Settings.shape_to_string !shape) in
   let assoc =
-    [it; ea; gs; res; hres; mem; smtc; shp; t_ccpred; t_ccomp; t_cred;
+    [it; ea; gs; res; hres; mem; smtc; shp; me; mg; t_ccpred; t_ccomp; t_cred;
     t_select; t_gjoin; t_maxk; t_rewrite; t_ovl; t_orient; t_proj; t_process;
     t_sat; t_sub; t_cache]
   in

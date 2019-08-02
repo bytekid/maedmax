@@ -286,11 +286,15 @@ let reduced_goal_cps rew gs =
 ;;
 
 let interreduce rr =
- let rew = new Rewriter.rewriter !heuristic rr [] Order.default in
- let right_reduce (l,r) =
-    let r', rs = rew#nf r in
+  let rew = new Rewriter.rewriter !heuristic rr [] Order.default in
+  rew#init ();
+  let right_reduce (l,r) =
+    let r', rs = try rew#nf r with Rewriter.Max_term_size_exceeded -> r, [] in
     if r <> r' && l <> r' then (
-      if !(Settings.do_proof) <> None then
+      if !(Settings.do_proof) = Some TPTP then
+        Lit.LightTrace.add_rewrite (Lit.make_axiom (l,r'))
+          (Lit.make_axiom (l, r)) ([], [r | r, _, _ <- rs])
+      else if !(Settings.do_proof) = Some CPF then
         Tr.add_rewrite (normalize (l,r')) (l, r) ([],rs));
     (l,r')
   in
@@ -474,7 +478,7 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
           let ee_sym = ee @ [s, t| t, s <- ee ] in
           if not gs_ground && L.for_all (fun e -> not (orientable e)) ee (*&&
             !(Settings.do_proof) = None*) then  (*no narrowing proof output yet *)
-            Narrow.decide_goals !settings rr ee_sym order !heuristic
+            Narrow.decide_goals !settings (rr, rewriter) ee_sym order !heuristic
           else if not (rr @ ee = [] || gs_ground) then None
           else (
             match !settings.gs with
@@ -855,7 +859,7 @@ let detect_shape es =
   let hs =
     match shape with
     | Piombo -> [h_piombo h, 1000.]
-    | Zolfo -> [h_zolfo0 h, 80.; h_zolfo h, 1000.]
+    | Zolfo -> [h_zolfo0 h, 80.; h_zolfo h, 120.; h_zolfo1 h, 1000.]
     | Xeno -> [(*h_xeno1 h, 100.;*) h_xeno h, 1000.] 
     | Anello -> [h_anello h, 1000.] 
     | Elio -> [h_elio0 h, 30.; h_elio h, 1000.]
