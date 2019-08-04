@@ -278,24 +278,19 @@ let shape_to_string = function
 
 let do_proof_debug () = !do_debug && !do_proof <> None
 
-let h_piombo h = { h with
+let h_piombo h = { h with (* 2536, 12 *)
   hard_bound_equations = 4000;
   hard_bound_goals = 200;
   n = const 10;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size]
 }
 
-let h_zolfo h = { h with
+let h_zolfo h = { h with (* 108, 172 *)
   n = const 10;
   restart_carry = (2, 0);
   k = k_limiting;
   hard_bound_equations = 200;
   cp_cutoff = 20000;
-  (*size_age_ratio = 80;*)
-  (*hard_bound_equations = 45;
-  hard_bound_goals = 45;
-  soft_bound_equations = 30;
-  soft_bound_goals = 30;*)
 }
 
 let h_zolfo0 h = { h_zolfo h with
@@ -309,7 +304,7 @@ let h_zolfo1 h = { h_zolfo h with
   soft_bound_goals = 11;
 }
 
-let h_xeno h = { h with
+let h_xeno h = { h with (* 39, 28 *)
   n = (fun i -> 10);
   n_goals = 1;
   reduce_AC_equations_for_CPs = true;
@@ -332,21 +327,21 @@ let h_xeno1 h = { h_xeno h with
   soft_bound_goals = 12;
 }
 
-let h_anello h = { h with
+let h_anello h = { h with (* 18, 86 *)
   n = const 10;
   n_goals = 1;
   reduce_AC_equations_for_CPs = true;
   hard_bound_equations = 60;
   hard_bound_goals = 110;
   size_age_ratio = 60;
-  soft_bound_equations = 35;
+  soft_bound_equations = 20;
   soft_bound_goals = 90; (* 90 is necessary *)
   restart_carry = (2, 0);
   select_recursion_limit = 2000;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
 }
 
-let h_elio h = { h with
+let h_elio h = { h with (* 30, 38 *)
   n = const 10;
   hard_bound_equations = 45;
   hard_bound_goals = 45;
@@ -360,7 +355,7 @@ let h_elio0 h = { h_elio h with
   cp_cutoff = 1000 (* GRP708-1 *)
 }
 
-let h_silicio h = { h with
+let h_silicio h = { h with (* 36, 42 *)
   n = const 10;
   n_goals = 1;
   size_age_ratio = 80;
@@ -373,20 +368,20 @@ let h_silicio h = { h with
   k = (fun i -> if i > 30 then 1 else 2);
 }
 
-let h_ossigeno h = { h with
+let h_ossigeno h = { h with (* 20, 31 *)
   n = const 12;
   size_age_ratio = 80;
   hard_bound_equations = 25;
   hard_bound_goals = 45;
   soft_bound_equations = 18;
-  soft_bound_goals = 30;
+  soft_bound_goals = 31;
   restart_carry = (2, 0);
   fix_parameters = true;
   cp_cutoff = 4000;
   k = k_limiting
 }
 
-let h_carbonio0 h = { h with
+let h_carbonio0 h = { h with (* 44, 92 *)
   full_CPs_with_axioms = true;
   hard_bound_equations = 360;
   hard_bound_goals = 270;
@@ -394,7 +389,7 @@ let h_carbonio0 h = { h with
   n_goals = 3;
   size_age_ratio = 60;
   soft_bound_equations = 40; (* 36 for COL006-7 *)
-  soft_bound_goals = 100;
+  soft_bound_goals = 93;
 }
 
 let h_carbonio1 h = { h_carbonio0 h with
@@ -405,7 +400,7 @@ let h_carbonio2 h = { h_carbonio0 h with
 cp_cutoff = 1000;
 }
 
-let h_magnesio h = { h with
+let h_magnesio h = { h with (* 37, 43 *)
   n = const 6;
   hard_bound_equations = 40;
   hard_bound_goals = 45;
@@ -413,7 +408,7 @@ let h_magnesio h = { h with
   soft_bound_goals = 32
 }
 
-let h_no_shape0 h = { h with
+let h_no_shape0 h = { h with (* 54, 38 *)
   n = const 6;
   hard_bound_equations = 60;
   hard_bound_goals = 90;
@@ -428,9 +423,9 @@ let h_no_shape1 h = { h_no_shape0 h with
   no_select_nf = 3
 }
 
-let h_idrogeno h = { h with
+let h_idrogeno h = { h with (* 59, 37 *)
   hard_bound_equations = 60;
-  hard_bound_goals = 60;
+  hard_bound_goals = 38;
   n = const 6;
   soft_bound_equations = 45; (* 53 needed for GRP505, 506*)
   soft_bound_goals = 40;
@@ -438,7 +433,7 @@ let h_idrogeno h = { h with
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
 }
 
-let h_boro h = { h with
+let h_boro h = { h with (* 19, 12 *)
   hard_bound_equations = 20;
   hard_bound_goals = 20;
   n = const 14;

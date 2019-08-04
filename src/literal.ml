@@ -64,12 +64,7 @@ module LightTrace = struct
     | CP (l1, l2) -> "CP(" ^ (soi l1.id) ^ "," ^ (soi l2.id) ^ ")"
   ;;
 
-  let add l o = 
-    (*if not (H.mem history l) then*) (
-      if Settings.do_proof_debug () then
-        Format.printf "ADDING %a %s\n" print l (origin_string o);
-      H.add history l (l, o))
-  ;;
+  let add l o = H.add history l (l, o)
 
   let find_origin l =
     let find l =
