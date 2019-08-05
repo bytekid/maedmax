@@ -308,7 +308,7 @@ let h_xeno h = { h with (* 39, 28 *)
   n = (fun i -> 10);
   n_goals = 1;
   reduce_AC_equations_for_CPs = true;
-  hard_bound_equations = 70;
+  hard_bound_equations = 60;
   hard_bound_goals = 70;
   size_age_ratio = 60;
   soft_bound_equations = 40;
@@ -320,11 +320,8 @@ let h_xeno h = { h with (* 39, 28 *)
 }
 
 let h_xeno1 h = { h_xeno h with
-  n = (fun i -> 11);
-  hard_bound_equations = 38;
-  hard_bound_goals = 35;
-  soft_bound_equations = 28;
-  soft_bound_goals = 12;
+  hard_bound_equations = 50;
+  size_age_ratio = 70;
 }
 
 let h_anello h = { h with (* 18, 86 *)
@@ -360,12 +357,12 @@ let h_silicio h = { h with (* 36, 42 *)
   n_goals = 1;
   size_age_ratio = 80;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
-  hard_bound_equations = 45;
+  hard_bound_equations = 37;
   hard_bound_goals = 45;
   soft_bound_equations = 25;
   soft_bound_goals = 30;
   cp_cutoff = 30000;
-  k = (fun i -> if i > 30 then 1 else 2);
+  k = (fun i -> if i > 15 then 1 else 2);
 }
 
 let h_ossigeno h = { h with (* 20, 31 *)

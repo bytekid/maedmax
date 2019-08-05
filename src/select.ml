@@ -131,10 +131,8 @@ let get_oldest_max_from accept nodelist onodeset max maxmax (aa,rew) =
         | None -> get_oldest acc max min_size (k+1)
         | Some ((s',rss),(t',rst)) ->
           (* check for subsumption by other literals seems not beneficial *)
-          if s' = t' || NS.mem aa n then (
-            (*if size_n = 12 then Format.printf "skip %a %B\n%!" Lit.print n (s' = t');*)
+          if s' = t' || NS.mem aa n then
             get_oldest acc max (min min_size size_n) (k+1)
-          )
           else (
           let ac_equiv n =
             let t = Unix.gettimeofday () in
@@ -502,7 +500,7 @@ let rec select_classified_mixed d aarew k cc thresh =
   let aa = List.filter classify aa in
   let max = try Lit.size (List.hd aa) + 4 with _ -> 20 in
   let aa =
-    let kk = if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2 in
+    let kk = if !(A.shape) = Boro || !(A.shape) = NoShape || !(A.shape) = Xeno then 3 else 2 in
     if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
   in
   let add_goal_sim = A.little_progress 10 && size_sorted <> [] in

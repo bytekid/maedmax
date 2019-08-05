@@ -359,7 +359,7 @@ let show_proof filename input res = function
 ;;
 
 let print_json (es, gs) f (a,p) settings =
-  let prf =
+  let _ =
     match !(Settings.do_proof) with
     | Some fmt -> proof_string (L.hd !filenames) (es, gs) p fmt
     | _ -> ""

@@ -5,6 +5,7 @@ open Settings
 
 (*** MODULES *****************************************************************)
 module L = List
+module Lit = Literal
 
 (*** TYPES *******************************************************************)
 type equation_state = Active of int | Passive of int | Unseen
@@ -82,7 +83,7 @@ let start_time = ref 0.0
 let hard_restart_time = ref 0.0
 let last_time = ref 0.0
 
-let track_equations_state : (Literal.t * equation_state) list ref = ref []
+let track_equations_state : (Lit.t * equation_state) list ref = ref []
 
 let states : state list ref = ref []
 
@@ -238,19 +239,19 @@ let problem_shape es =
 
 let theory_equations es =
   let theory_relevant l =
-    let eq = Literal.terms l in
+    let eq = Lit.terms l in
     Theory.Commutativity.is_axiom eq || Theory.Ac.is_axiom eq ||
     Theory.Monoid.is_axiom eq || Theory.Group.is_axiom eq ||
     Theory.Lattice.is_axiom eq || Theory.NonAssocRing.is_distributivity eq
   in
   let ths = List.filter theory_relevant es in
-  let esl = [Literal.terms e | e <- es] in
+  let esl = [Lit.terms e | e <- es] in
   if not (is_duplicating esl) then ths
-  else Literal.make_axiom (find_duplicating esl) :: ths
+  else Lit.make_axiom (find_duplicating esl) :: ths
 
 let analyze es gs =
-  let es, ies = List.partition Literal.is_equality es in
-  let all = List.map Literal.terms (es @ ies) in
+  let es, ies = List.partition Lit.is_equality es in
+  let all = List.map Lit.terms (es @ ies) in
   let fs = Rules.signature all in
   (* some counting *)
   let eqc = "equality count", `Int (L.length es) in
@@ -264,7 +265,7 @@ let analyze es gs =
   let symcount = "symbol count", `Int (L.length fs) in
   let gc = "goal count", `Int (L.length gs) in
   let app = "is applicative", `Bool (is_applicative all) in
-  let es = List.map Literal.terms es in
+  let es = List.map Lit.terms es in
   let dup = "is duplicating", `Bool (is_duplicating es) in
   (* some theory characteristics *)
   let cs = "commutative syms", `Int (Theory.Commutativity.count es) in
@@ -318,13 +319,7 @@ let json () =
 
 (* compare current state with respect to other proof *)
 let init_proof_track ls =
-  (*if !(Settings.track_equations) <> [] then (
-    let es = [ Literal.size l  | l <- ls; not (Literal.is_goal l)] in
-    let gs = [ Literal.size l  | l <- ls; Literal.is_goal l] in
-    ()
-    Format.printf "max eqsize: %d, max goal size: %d\n%!"
-      (List.fold_left max 0 es) (List.fold_left max 0 gs)););*)
-  track_equations_state := [Literal.normalize l, Unseen | l <- ls]
+  track_equations_state := [Lit.normalize l, Unseen | l <- ls]
 ;;
 
 (* aa are active, pp passive equations *)
@@ -335,6 +330,8 @@ let reset_proof_track _ =
   track_equations_state := []
 
 let update_proof_track aa pp =
+  let aa = List.map Lit.normalize aa in
+  let pp = List.map Lit.normalize pp in
   let i = !iterations in
   let (>) s1 s2 =
     match s1,s2 with
@@ -343,8 +340,8 @@ let update_proof_track aa pp =
     | _ -> false
   in
   let current l =
-    if List.mem l aa then Active i
-    else if List.mem l pp then Passive i
+    if List.exists (Lit.is_equal l) aa then Active i
+    else if List.exists (Lit.is_equal l) pp then Passive i
     else Unseen
   in
   let update (l,s) = let s' = current l in l, if s' > s then s' else s in
@@ -365,13 +362,13 @@ let goal_similarity settings n =
   let sim = Term.similarity settings.ac_syms settings.only_c_syms in
   let rsim (s,t) (s',t') = sim s s' +. sim t t' in
   let msim r = List.fold_left (fun m q -> m +. (rsim r q)) 0. settings.gs in
-  msim (Literal.terms n)
+  msim (Lit.terms n)
 ;;
 
 let show_proof_track settings all_nodes =
   let rec pos l i = function
     | [] -> "none"
-    | (n,_) :: _ when n = l -> string_of_int i
+    | (n,_) :: _ when Lit.is_equal n l -> string_of_int i
     | _ :: ns -> pos l (i + 1) ns
   in
   let pos l = pos l 0 !all_nodes in
@@ -380,13 +377,13 @@ let show_proof_track settings all_nodes =
       | Unseen -> "unseen"
       | Active i -> "active"
       | Passive i ->
-        let size = string_of_int (Literal.size l) in
+        let size = string_of_int (Lit.size l) in
         "passive (" ^ (pos l) ^ ") (" ^ size ^ ")"
     in
     printf "Proof track:\n";
     let show (l,s) =
-      (*let sz, age = Literal.size l, Nodes.age l in*)
-      printf "  %s (%s)\n%!" (Literal.to_string l) (ststr l s)
+      (*let sz, age = Lit.size l, Nodes.age l in*)
+      printf "  %s (%s)\n%!" (Lit.to_string l) (ststr l s)
     in
     List.iter show !track_equations_state;
     printf "%i active, " !acount;
