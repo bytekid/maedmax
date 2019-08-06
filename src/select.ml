@@ -292,7 +292,7 @@ let select' ?(only_size = true) is_restart aarew k cc thresh =
   let max = try (Lit.size (List.hd aa)) + 4 with _ -> 20 in
   let aa =
     let kk = !heuristic.progress_injection (*if !(A.shape) = Boro || !(A.shape) = NoShape then 3 else 2*) in
-    if A.little_progress 2 then (get_old_nodes max aarew kk) @ aa else aa
+    if A.little_progress (if !(A.shape) = Elio then 1 else 2) then (get_old_nodes max aarew kk) @ aa else aa
   in
   let add_goal_sim = A.little_progress 10 && size_sorted <> [] in
   let aa = if add_goal_sim then select_goal_similar size_sorted :: aa else aa in
