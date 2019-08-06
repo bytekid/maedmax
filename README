@@ -5,9 +5,9 @@
 Welcome to maedmax! Maedmax implements ordered completion, extending the
 powerful completion tool Maxcomp [0].
 
-Besides OCaml, camlp4, ocamlfind, and Ocamlbuild [1], it requires Yices [2], the
-OCamlYices [3] bindings for OCaml, and the json library Yojson [4] as well as
-xml-light [5] for output.
+Besides OCaml, camlp4, ocamlfind, and Ocamlbuild [1], it requires Yices1 [2],
+the OCamlYices [3] bindings for OCaml, and the json library Yojson [4] as well
+as xml-light [5] for output.
 
 Using OCamlbuild, the Maedmax executable can be created by executing
  $ make
@@ -23,6 +23,9 @@ The usage of Maedmax is as follows:
 where the input file can be in TPTP [6] or trs format [7].
 In case you are happy with the default options, you can simply e.g. call
  $ ./maedmax examples/RNG042-2.tptp
+
+A TPTP proof is produced when using the flag -P tstp:
+ $ ./maedmax -P tstp examples/GRP696-1.p
 
 -------------------------------------------------------------------------------
    OPTIONS
