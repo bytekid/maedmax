@@ -145,6 +145,8 @@ let options =
      " complete system if no goal is given");
    ("--pcp", Arg.Int (fun n -> heuristic := {!heuristic with pcp = n}),
      " only consider prime critical pairs if set to 1 (but then no caching)");
+   ("--cp-cutoff", Arg.Int (fun n -> heuristic := {!heuristic with cp_cutoff = n}),
+       " limit number of considered CPs in every iteration");
    ("--no-auto", Arg.Unit (fun _ ->
      settings := {!settings with auto = false}),
      " switch off auto mode");

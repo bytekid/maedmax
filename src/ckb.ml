@@ -275,7 +275,7 @@ let reduced_goals ?(normalize=false) rew gs =
 let goal_cp_table : bool NS.H.t = NS.H.create 128
 
 let reduced_goal_cps rew gs =
-  if not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio) then
+  if !heuristic.reduced_goal_cps(*not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio)*) then
     reduced_goals ~normalize:true rew gs
   else (
     let gs' = NS.filter (fun g -> not (NS.H.mem goal_cp_table g) &&
@@ -836,9 +836,9 @@ else
 let check_hard_restart s =
   if Unix.gettimeofday () -. !A.hard_restart_time > !time_limit then (
     match !heuristics with
-    | (h, t) :: hs ->
-      if debug 1 then
-        Format.printf "hard restart %.2f\n%!" !time_limit;
+    | (h, t, name) :: hs ->
+      (*if debug 1 then*)
+        Format.printf "hard restart %.2f: next %s\n%!" ( Unix.gettimeofday () -. !A.hard_restart_time) name;
       set_heuristic h;
       time_limit := t;
       heuristics := hs;
@@ -858,26 +858,30 @@ let detect_shape es =
   let h = !heuristic in
   let hs =
     match shape with
-    | Piombo -> [h_piombo h, 1000.]
-    | Zolfo -> [h_zolfo0 h, 80.; h_zolfo h, 120.; h_zolfo1 h, 1000.]
-    | Xeno -> [h_xeno h, 190.; h_xeno1 h, 1000. ] 
-    | Anello -> [h_anello h, 1000.] 
-    | Elio -> [h_elio0 h, 30.; h_elio h, 1000.]
-    | Silicio -> [h_silicio h, 1000.]
-    | Ossigeno -> [h_ossigeno h, 1000.]
-    | Carbonio -> [h_carbonio1 h, 4.; h_carbonio0 h, 1000.]
-    | Magnesio -> [h_magnesio h, 1000.]
-    | NoShape -> [h_no_shape0 h, 150.; h_no_shape1 h, 1000.]
-    | Idrogeno -> [h_idrogeno h, 1000.]
-    | Boro -> [h_boro h, 1000.]
+    | Piombo -> [h_piombo h, 1000.,"piombo"]
+    | Zolfo -> [h_zolfo0 h,80.,"z0"; h_zolfo h,90.,"z"; h_boro h,1000.,"boro"]
+    | Xeno -> [h_xeno h, 120.,"xeno"; h_piombo h, 60.,"piombo"; (* REL024-1: 20s fullCPwithAx*)
+               h_carbonio0 h, 1000.,"carbonio0" ]
+    | Anello -> [h_anello h, 1000.,"anello"]
+    | Elio -> [h_elio0 h, 30.,"elio0"; h_elio h, 100.,"elio";
+               h_piombo h, 1000.,"piombo"]
+    | Silicio -> [h_silicio h, 1000.,"silicio"]
+    | Ossigeno -> [ h_boro h, 30.,"boro"; h_piombo h, 40.,"piombo";
+                    h_ossigeno h, 1000.,"ossigeno"]
+    | Carbonio -> [h_carbonio1 h, 4.,"carb1"; h_carbonio0 h, 1000.,"carb0"]
+    | Magnesio -> [h_magnesio h, 1000.,"magnesio"]
+    | NoShape -> [h_no_shape0 h, 90.,"shapeless"; h_carbonio0 h, 30.,"carb0";
+                  h_no_shape1 h, 1000.,"shapeless1"]
+    | Idrogeno -> [h_idrogeno h, 1000.,"idrogeno"]
+    | Boro -> [h_boro h, 1000.,"boro"]
   in
-  let fix_bounds (h, l) = ({ h with
+  let fix_bounds (h, l, n) = ({ h with
     soft_bound_equations = emax h.soft_bound_equations;
     soft_bound_goals = gmax h.soft_bound_goals;
-    }, l)
+    }, l, n)
   in
   match List.map fix_bounds hs with
-  | (h0, t) :: hs' -> (
+  | (h0, t, _) :: hs' -> (
     set_heuristic h0;
     time_limit := t;
     heuristics := hs')
@@ -1049,8 +1053,6 @@ let rec phi s =
   let redcount, cp_count = ref 0, ref 0 in
   set_iteration_stats s;
   Select.reset ();
-  (*if !A.iterations mod 7 = 0 && List.hd !A.cp_counts > 1000 then
-    Select.consolidate_all_nodes ();*)
   let aa, gs = s.equations, s.goals in
   (**)
   if debug 2 then (Format.printf "iteration %d %!" !A.iterations;
@@ -1161,9 +1163,7 @@ let init_settings (settings_flags, heuristic_flags) axs (gs : Lit.t list) =
   set_settings s;
   set_heuristic h;
   if !A.hard_restarts = 0 && settings_flags.auto && not is_large then
-    detect_shape axs_eqs
-  else
-    time_limit := 600.;
+    detect_shape axs_eqs;
   if !(Settings.do_proof) = Some CPF then (
     Tr.add_initials axs_eqs;
     Tr.add_initial_goal gs_eqs)
@@ -1257,8 +1257,8 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       let ss = Listx.unique (t_strategies ()) in
       let all_lits = !settings.norm @ gs0 @ es0 in
       L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- all_lits ]) ss;
-      if !heuristic.fix_parameters && !A.restarts > 2 then
-        L.iter (fun s -> St.fix_parameters s 0 ctx [Lit.terms n | n <- es0]) ss;
+      (*if !heuristic.fix_parameters && !A.restarts > 2 then
+        L.iter (fun s -> St.fix_parameters s 0 ctx [Lit.terms n | n <- es0]) ss;*)
       let state = make_state ctx (!settings.norm @ es0) (NS.of_list gs0) in
       if !settings.keep_orientation then
         preorient state es;
@@ -1272,7 +1272,11 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
     with Restart (es_new, is_hard) -> (
       if debug 1 then
         Format.printf "New lemmas on restart:\n%a\n%!" NS.print_list es_new;
-      if is_hard then Tr.clear () else pop_strategy ();
+      if is_hard then (
+        Tr.clear ();
+        Lit.LightTrace.clear ();
+        Lit.last_id := 0
+      ) else pop_strategy ();
       St.clear ();
       Cache.clear ();
       A.restarts := !A.restarts + 1;
@@ -1291,6 +1295,9 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       if !settings.auto && shape <> !A.shape && shape <> NoShape then
         detect_shape esx;
       heuristic := {!heuristic with mode = SATorUNSAT};
+      let es,gs = if is_hard &&
+        not ( !A.shape = Xeno && !heuristic.hard_bound_equations > 3000) &&
+        !A.shape <> Zolfo then input else es, gs in
       ckb (es' @ es, gs))
   in
   ckb input

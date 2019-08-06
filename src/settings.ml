@@ -167,6 +167,8 @@ type heuristic = {
   select_recursion_limit: int;
   no_select_nf: int;
   cp_cutoff: int;
+  progress_injection: int;
+  reduced_goal_cps: bool;
   mode : mode
 }
 
@@ -245,6 +247,8 @@ let default_heuristic = {
   select_recursion_limit = 5000;
   no_select_nf = 0;
   cp_cutoff = 20000;
+  progress_injection = 2;
+  reduced_goal_cps = true;
   mode = SATorUNSAT
 }
 
@@ -308,6 +312,7 @@ let h_xeno h = { h with (* 39, 28 *)
   n = (fun i -> 10);
   n_goals = 1;
   reduce_AC_equations_for_CPs = true;
+  full_CPs_with_axioms = true;
   hard_bound_equations = 60;
   hard_bound_goals = 70;
   size_age_ratio = 60;
@@ -363,6 +368,7 @@ let h_silicio h = { h with (* 36, 42 *)
   soft_bound_goals = 30;
   cp_cutoff = 30000;
   k = (fun i -> if i > 15 then 1 else 2);
+  reduced_goal_cps = false
 }
 
 let h_ossigeno h = { h with (* 20, 31 *)
@@ -375,7 +381,8 @@ let h_ossigeno h = { h with (* 20, 31 *)
   restart_carry = (2, 0);
   fix_parameters = true;
   cp_cutoff = 4000;
-  k = k_limiting
+  k = k_limiting;
+  reduced_goal_cps = false
 }
 
 let h_carbonio0 h = { h with (* 44, 92 *)
@@ -387,6 +394,7 @@ let h_carbonio0 h = { h with (* 44, 92 *)
   size_age_ratio = 60;
   soft_bound_equations = 40; (* 36 for COL006-7 *)
   soft_bound_goals = 93;
+  reduced_goal_cps = false
 }
 
 let h_carbonio1 h = { h_carbonio0 h with
@@ -412,6 +420,7 @@ let h_no_shape0 h = { h with (* 54, 38 *)
   soft_bound_equations = 40;
   soft_bound_goals = 70;
   restart_carry = (2, 2);
+  progress_injection = 3
 }
 
 let h_no_shape1 h = { h_no_shape0 h with
@@ -428,6 +437,7 @@ let h_idrogeno h = { h with (* 59, 37 *)
   soft_bound_goals = 40;
   k = k_limiting;
   strategy = [ts_lpo, [], [MaxRed], IterationLimit 10000, Size];
+  reduced_goal_cps = false
 }
 
 let h_boro h = { h with (* 19, 12 *)
@@ -437,5 +447,6 @@ let h_boro h = { h with (* 19, 12 *)
   size_age_ratio = 70;
   soft_bound_equations = 16;
   k = (fun i -> if i > 20 then 1 else h.k i);
-  strategy = [ts_kbo, [], [MaxRed], IterationLimit 10000, Size]
+  strategy = [ts_kbo, [], [MaxRed], IterationLimit 10000, Size];
+  progress_injection = 3
 }

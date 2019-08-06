@@ -109,7 +109,6 @@ module LightTrace = struct
   let add_rename eq eq0 = add eq (Rename eq0)
 
   let ancestors eqs =
-    let unique = Listx.unique ~c:(fun l l' -> Pervasives.compare l.id l'.id) in
     let diff xs ys = 
       List.filter (fun x -> not (List.exists (fun y -> x.id = y.id) ys)) xs
     in
@@ -134,6 +133,8 @@ module LightTrace = struct
     in
     ancestors [] eqs
   ;;
+
+  let clear _ = H.reset history
 end
 
 let killed = ref 0
