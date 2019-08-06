@@ -382,7 +382,8 @@ let h_ossigeno h = { h with (* 20, 31 *)
   fix_parameters = true;
   cp_cutoff = 4000;
   k = k_limiting;
-  reduced_goal_cps = false
+  reduced_goal_cps = false;
+  progress_injection = 3
 }
 
 let h_carbonio0 h = { h with (* 44, 92 *)

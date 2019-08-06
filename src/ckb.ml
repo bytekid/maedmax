@@ -837,7 +837,7 @@ let check_hard_restart s =
   if Unix.gettimeofday () -. !A.hard_restart_time > !time_limit then (
     match !heuristics with
     | (h, t, name) :: hs ->
-      (*if debug 1 then*)
+      if debug 1 then
         Format.printf "hard restart %.2f: next %s\n%!" ( Unix.gettimeofday () -. !A.hard_restart_time) name;
       set_heuristic h;
       time_limit := t;
