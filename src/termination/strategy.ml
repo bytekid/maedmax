@@ -195,7 +195,8 @@ let get_choice_var j =
 
 (* Asserts initial constraints for stage j and all s -> t in rs, applying a
   case distinction on the strategy s *)
-let init s j ctx rs =
+let init settings strat j ctx =
+  let rs = (settings.gs @ [ r.terms | r <- settings.norm @ settings.axioms]) in
   let fs = Rules.signature rs in
   (* ceta requires the signature to contain a constant *)
   let constant_exists = List.exists (fun (_,a) -> a = 0) fs in
@@ -207,8 +208,8 @@ let init s j ctx rs =
       fs
   in
   let init_ord ?(af=false) fs i = function
-    | LPO -> (if af then Lpo.init_af else Lpo.init) (ctx,i) fs
-    | KBO -> Kbo.init (ctx,i) fs
+    | LPO -> (if af then Lpo.init_af else Lpo.init) settings ctx i
+    | KBO -> Kbo.init settings ctx i
     | Cfs -> Cfs.init (ctx,i) fs
     | Cfsn -> Cfsn.init (ctx,i) fs
     | MPol -> MPol.init (ctx,i) fs
@@ -218,7 +219,7 @@ let init s j ctx rs =
   let fs' = Dp.sharp_signature fs in
   let dp_init = Dp.init ctx rs in
   let c =
-    match s with
+    match strat with
     | Orders (Seq os) ->
       L.big_and ctx [init_ord fs i o | i,o <- index ~i:(j+1) os]
     | Orders (Choice (o1, o2)) ->
@@ -235,20 +236,6 @@ let init s j ctx rs =
     let init_os = [ init_ord ~af:true fs' i o | i,o <- List.concat ios] in
     L.big_and ctx (Dg.init_with_sccs ctx fs' (j+1) k :: dp_init :: init_os)
     | _ -> failwith "Strategy.init: not implemented"
-  in L.require c
-;;
-
-let fix_parameters s j ctx rs =
-  let fix_ord i = function
-    | LPO -> Lpo.fix_parameters (ctx,i) rs
-    | KBO -> Kbo.fix_parameters (ctx,i) rs
-    | _ -> L.mk_true ctx
-  in
-  let c =
-    match s with
-    | Orders (Seq os) ->
-      L.big_and ctx [fix_ord i o | i,o <- index ~i:(j+1) os]
-    | _ -> L.mk_true ctx
   in L.require c
 ;;
 

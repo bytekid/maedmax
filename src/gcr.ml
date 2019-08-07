@@ -15,12 +15,12 @@ let extended_cps trs order =
   List.fold_left check_overlap_to_cp [] ols
 ;;
 
-let check settings heuristic s ls =
+let check settings heuristic strat ls =
   let trs = List.map Literal.terms ls in
   let ctx = Logic.mk_context () in
-  Strategy.init s 0 ctx trs;
+  Strategy.init settings strat 0 ctx;
   C.store_rule_vars ctx (trs @ [ t,s | s,t <- trs ]); 
-  Strategy.assert_constraints s 0 ctx trs;
+  Strategy.assert_constraints strat 0 ctx trs;
   let trs_vs = [ r, C.find_rule r | r <- trs] in
   Logic.require (Strategy.bootstrap_constraints 0 ctx trs_vs);
   List.iter (fun (_, v) -> Logic.assert_weighted v 1) trs_vs;
@@ -29,7 +29,7 @@ let check settings heuristic s ls =
     let m = Logic.get_model ctx in
     (*let rls, es = List.partition (fun (_, v) -> Logic.eval m v) trs_vs in
     let rls, es = List.map fst rls, List.map fst es in*)
-    let order = Strategy.decode 0 m s in
+    let order = Strategy.decode 0 m strat in
     order#print ();
     let cps = extended_cps trs order in
     let rew = new Rewriter.rewriter heuristic trs [] order in
@@ -38,6 +38,6 @@ let check settings heuristic s ls =
     let cps' = List.filter non_joinable cps in
     Format.printf "%i critical critical pairs: %a\n%!" (List.length cps')
       Rules.print cps';
-    Ground.all_joinable settings ctx s (trs, [](* es *), order) cps' <> None
+    Ground.all_joinable settings ctx strat (trs, [](* es *), order) cps' <> None
  ) else (Format.printf "not sat\n%!"; false)
 ;;

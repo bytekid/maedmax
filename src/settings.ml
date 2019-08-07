@@ -140,6 +140,7 @@ type t = {
   switch_to_okb : bool;
   modulo_ac : bool;
   modulo_constraints : bool;
+  precedence : Signature.sym list list option;
   norm : literal list
 }
 
@@ -219,6 +220,7 @@ let default = {
   switch_to_okb = false;
   modulo_ac = false;
   modulo_constraints = false;
+  precedence = None;
   norm = []
 }
 

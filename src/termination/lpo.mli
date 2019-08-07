@@ -10,14 +10,9 @@ val gt_af : (Settings.Logic.context * int) -> Term.t -> Term.t ->
 val ge_af : (Settings.Logic.context * int) -> Term.t -> Term.t ->
   Settings.Logic.t
 
-val init : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
-  Settings.Logic.t
+val init : Settings.t -> Settings.Logic.context -> int -> Settings.Logic.t
 
-val init_af : (Settings.Logic.context * int) -> (Signature.sym * int) list ->
-  Settings.Logic.t
-
-val fix_parameters : (Settings.Logic.context * int) -> Rules.t ->
-  Settings.Logic.t
+val init_af : Settings.t -> Settings.Logic.context -> int -> Settings.Logic.t
 
 val decode_print: int -> Settings.Logic.model -> unit
 

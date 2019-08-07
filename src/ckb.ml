@@ -221,6 +221,12 @@ let trace_cassociativity acs =
   List.iter add acs
 ;;
 
+let fix_group_params settings =
+  let gs = Theory.Group.symbols [Lit.terms l | l <- settings.axioms] in
+  let prec = List.fold_left (fun p (f,i,_) -> [i; f] :: p) [] gs in
+  {settings with precedence = if gs = [] then None else Some prec}
+;;
+
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
    are newly generated eqs and cs' \subseteq cs is set of irreducible eqs *)
@@ -1151,6 +1157,7 @@ let init_settings (settings_flags, heuristic_flags) axs (gs : Lit.t list) =
       unfailing = settings_flags.unfailing
     }
   in
+  let s = if !heuristic.fix_parameters then fix_group_params s else s in
   let h =
     if is_large then (
       let saql = St.strategy_aql in
@@ -1255,10 +1262,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       let es0 = [ Lit.make_axiom (normalize r) | r <- cas ] @ es0 in
       let ctx = Logic.mk_context () in
       let ss = Listx.unique (t_strategies ()) in
-      let all_lits = !settings.norm @ gs0 @ es0 in
-      L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- all_lits ]) ss;
-      (*if !heuristic.fix_parameters && !A.restarts > 2 then
-        L.iter (fun s -> St.fix_parameters s 0 ctx [Lit.terms n | n <- es0]) ss;*)
+      L.iter (fun s -> St.init !settings s 0 ctx) ss;
       let state = make_state ctx (!settings.norm @ es0) (NS.of_list gs0) in
       if !settings.keep_orientation then
         preorient state es;

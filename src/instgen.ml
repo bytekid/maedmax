@@ -225,7 +225,8 @@ let start (s, h) cls =
   heuristic := h;
   let ctx = Logic.mk_context () in
   let ss = Listx.unique (L.map (fun (ts,_,_,_,_) -> ts) h.strategy) in
-  L.iter (fun s -> Strategy.init s 0 ctx [ Lit.terms l | c <- cls; l <- c ]) ss;
+  let s' = {s with axioms = [ l | c <- cls; l <- c ]} in
+  L.iter (fun strat -> Strategy.init s' strat 0 ctx) ss;
   Format.printf "Start Instgen:\n %a\n%!" print_clause_list cls;
   let cls = L.map Clause.normalize cls in
   Format.printf "Normalized:\n %a\n%!" print_clause_list cls;

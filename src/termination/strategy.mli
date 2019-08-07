@@ -30,20 +30,28 @@ val strategy_ac : t
 val strategy_constrained : t
 
 val get_termination : t -> Settings.t_term
+
 val term_to_string : Settings.t_term -> string
+
 val to_string : t -> string
 
 val has_dps : Settings.t_term -> bool
-val init : Settings.t_term -> int -> Settings.Logic.context -> Rules.t -> unit
-val fix_parameters : Settings.t_term -> int -> Settings.Logic.context ->
-  Rules.t -> unit
+
+val init : Settings.t -> Settings.t_term -> int -> Settings.Logic.context ->
+  unit
+  
 val assert_constraints : Settings.t_term -> int -> Settings.Logic.context ->
   Rules.t -> unit
+
 val bootstrap_constraints :
   int -> Settings.Logic.context -> (Rule.t * Settings.Logic.t) list ->
   Settings.Logic.t
+
 val decode_print : int -> Settings.Logic.model -> Settings.t_term -> unit
+
 val decode : int -> Settings.Logic.model -> Settings.t_term -> Order.t
+
 val clear : unit -> unit
+
 val cond_gt : Settings.t_term -> int -> Settings.Logic.context ->
   (Term.t * Term.t) list -> Term.t -> Term.t -> Settings.Logic.t

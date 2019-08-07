@@ -8,6 +8,7 @@ module Logic = Settings.Logic
 (*** OPENS *******************************************************************)
 open Term
 open Logic
+open Settings
 
 (*** TYPES *******************************************************************)
 type flags = {
@@ -190,7 +191,8 @@ let make_fun_vars ctx k fs =
  in L.iter add fs
 ;;
 
-let init (ctx,k) fs =
+let init s ctx k =
+  let fs = Rules.signature (s.gs @ [ r.terms | r <- s.norm @ s.axioms]) in
   funs := fs;
   Hashtbl.clear precedence;
   let fs' = L.map fst fs in
@@ -198,7 +200,7 @@ let init (ctx,k) fs =
   let bnd_0 = Int.mk_zero ctx in
   let bnd_n = Int.mk_num ctx (L.length fs') in
   let bounds f = let p = prec k f in (p <>=> bnd_0) <&> (bnd_n <>=> p) in
-  (* total: causes stack overflow with too large signatures *)
+  (* FIXME causes stack overflow with too large signatures *)
   let total_prec =
     if List.length fs > 400 then mk_true ctx
     else
@@ -206,29 +208,29 @@ let init (ctx,k) fs =
       let p = prec k in
       big_and ctx [ !! (p f <=> (p g)) | f, g <- ps ]
   in
-  big_and1 (total_prec :: [ bounds f | f <- fs' ])
+  let constr = big_and1 (total_prec :: [ bounds f | f <- fs' ]) in
+  let rec gt = function
+    | f :: g :: fs -> (prec k f <>> prec k g) <&> gt (g :: fs)
+    | _ -> mk_true ctx
+  in
+  match s.precedence with
+  | Some precs -> List.fold_left (fun c prec -> gt prec <&> c) constr precs
+  | _ -> constr
 ;;
 
-let init_af (ctx,k) fs =
- let c = init (ctx,k) fs in
- let af (f,a) =
-  let p = af_p (ctx,k) f in
-  let is = Listx.interval 0 (a-1) in 
-  let only i = big_and1 (p i :: [ !! (p j) | j <- is; j <> i ]) in
-  big_or1 (af_l (ctx,k) f :: [ only i | i <- is ])
- in big_and1 (c :: [af f | f <- fs ])
+let init_af s ctx k =
+  let c = init s ctx k in
+  let fs = Rules.signature (s.gs @ [ r.terms | r <- s.norm @ s.axioms]) in
+  let af (f,a) =
+    let p = af_p (ctx,k) f in
+    let is = Listx.interval 0 (a-1) in 
+    let only i = big_and1 (p i :: [ !! (p j) | j <- is; j <> i ]) in
+    big_or1 (af_l (ctx,k) f :: [ only i | i <- is ])
+  in
+  big_and1 (c :: [af f | f <- fs ])
 ;;
 
-let init ctx = (if !(flags.af) then init_af else init) ctx
-
-let fix_parameters (ctx,k) es =
-  (* group constraints *)
-  let set_group c (f, i, _) = c <&> (prec k i <>> prec k f) in
-  let c = List.fold_left set_group (mk_true ctx) (Theory.Group.symbols es) in
-  (*let set_ring c (m, a, i, _) = c <&> (prec k m <>> prec k i) in
-  List.fold_left set_ring c (Theory.NonAssocRing.symbols es)*)
-  c
-;;
+let init settings ctx = (if !(flags.af) then init_af else init) settings ctx
 
 let decode_prec_aux k m =
  let add (k',f) x p =
