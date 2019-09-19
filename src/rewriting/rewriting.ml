@@ -13,15 +13,13 @@ let rec rewrite_aux rules = function
   | F (f, ts) ->
       let tpls = [ rewrite_aux rules ti | ti <- ts ] in
       let ls = [ ti | _, ti <- tpls ] in
-      let used_rules = Listx.unique (List.flatten (List.map fst tpls)) in 
+      let used_rules = Listx.unique (List.flatten (List.map fst tpls)) in
       if used_rules <> [] then used_rules, F (f, ls)
       else
        let opt, u = rewrite_at_root (F (f, ls)) rules in
        match opt with
         | None -> used_rules, u
-        | Some lr -> 
-	  if List.mem lr used_rules 
-	  then used_rules, u else (lr :: used_rules), u
+        | Some lr -> [lr], u
 ;;
 
 let step_at_with t p (l,r) =
@@ -32,7 +30,7 @@ let step_at_with t p (l,r) =
 
 let rec nf rules t =
  let used, u = rewrite_aux rules t in
- match used with 
+ match used with
  | [] -> t
  | _ -> nf rules u
 
