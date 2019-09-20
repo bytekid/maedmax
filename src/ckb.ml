@@ -285,9 +285,9 @@ let reduced_goal_cps rew gs =
   if !heuristic.reduced_goal_cps(*not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio)*) then
     reduced_goals ~normalize:true rew gs
   else (
-    let gs' = NS.filter (fun g -> not (NS.H.mem goal_cp_table g) &&
+    let gs' = NS.filter (fun g -> not (NS.mem goal_cp_table g) &&
                                 Lit.size g < !heuristic.hard_bound_goals) gs in
-    NS.iter (fun g -> NS.H.add goal_cp_table g true) gs';
+    NS.iter (fun g -> ignore (NS.add g goal_cp_table)) gs';
     let res = reduced_goals ~normalize:true rew gs' in
     res)
 ;;
@@ -455,12 +455,13 @@ let filter_eqs ee acs =
 ;;
 
 let succeeds state (rr,ee) rewriter cc ieqs gs =
-  let rr = [ Lit.terms r | r <- rr] in
-  let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
+  let rr = [Lit.terms r | r <- rr] in
+  let ee = [Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
+  (*rewriter#add_more ee;
+  let ee = L.map fst ee in*)
   if debug 2 then 
     Format.printf "success check R:\n%a\nE:\n%a\nG:\n%a\n%!"
       Rules.print rr Rules.print ee NS.print gs;
-  rewriter#add_more ee;
   match solved_goal rewriter gs with
     | Some (st, rseq, u, sigma) ->
       if unsat_allowed () then Some (UNSAT, Proof (st, rseq, u,sigma)) else None
@@ -474,7 +475,7 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
         Some (UNSAT, Proof (e, ([],[]), fst e, Sub.empty))
       else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
-      else match saturated state (rr,ee) rewriter cc with
+      else match saturated state (rr, ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
         | Some order -> (
           let ee = filter_eqs ee !settings.ac_syms in
@@ -800,10 +801,10 @@ let max_k = A.take_time A.t_maxk max_k
 
 (* some logging functions *)
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@."
-   !A.iterations j c
-   Rules.print (Variant.rename_rules rr)
-   Rules.print (Variant.rename_rules rr')
+  F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@."
+    !A.iterations j c
+    Rules.print (Variant.rename_rules rr)
+    Rules.print (Variant.rename_rules rr')
 ;;
 
 let limit_reached t =

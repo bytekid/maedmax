@@ -51,3 +51,5 @@ let is_overlap rule1 p rule2 =
   and l2, r2 = rename rule2 in
   unifiable l1 (subterm_at p l2) && 
   (p <> [] || not (Rule.variant (l1, r1) (l2, r2)))
+
+let subst (_, _, _, sub) = sub 

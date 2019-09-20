@@ -1,5 +1,6 @@
 module O = Overlap
 module T = Trace
+module F = Format
 
 open Settings
 
@@ -22,17 +23,17 @@ let terms l = l.terms
 let size l = Rule.size (l.terms)
 
 let print_sizes _ = 
-  let show (k,(v,vg)) = Format.printf "size %d: (%d,%d)\n%!" k v vg in
+  let show (k,(v,vg)) = F.printf "size %d: (%d,%d)\n%!" k v vg in
   let sz = Hashtbl.fold (fun k v l -> (k,v)::l) sizes [] in
   List.iter show (List.sort (fun (a,_) (b,_) -> compare a b) sz)
 ;;
 
 let print ppf l =
   let eq = if l.is_equality then "=" else "!=" in
-  Format.fprintf ppf "%d: %a %s %a (%d)" l.id Term.print (fst l.terms) eq Term.print (snd l.terms) (size l)
+  F.fprintf ppf "%d: %a %s %a (%d)" l.id Term.print (fst l.terms) eq Term.print (snd l.terms) (size l)
 ;;
 
-let to_string l = Format.flush_str_formatter (print Format.str_formatter l)
+let to_string l = F.flush_str_formatter (print F.str_formatter l)
 
 let compare l l' = compare (l.terms, l.is_equality) (l'.terms, l'.is_equality)
 

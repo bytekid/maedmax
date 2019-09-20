@@ -274,7 +274,7 @@ position in the lhs of outer *)
 let overlaps_of inner p outer =
   let compute (inner, p, outer) =
     let m = List.fold_left max 0 (Rule.variables inner) in
-    let outer = Rule.rename_canonical ~from:(m+1) outer in
+    let outer, _ = Rule.rename_canonical ~from:(m+1) outer in
     let s = T.subterm_at p (fst outer) in
     (*Format.printf "test overlap <%a, %s, %a>? %d\n%!"
       Rule.print inner (pos_string p) Rule.print outer

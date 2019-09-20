@@ -13,3 +13,5 @@ val cp_of_overlap : t -> Rule.t
 val cps : Rules.t -> Rules.t
 
 val nontrivial_cps : Rule.t -> Rule.t -> Rule.t list
+
+val subst : t -> Term.subst

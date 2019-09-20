@@ -15,6 +15,8 @@ module H = Hashtbl.Make(LitHash)
 
 type t = bool H.t
 
+type tlist = Literal.t list
+
 let empty () : t = H.create 128
 
 let is_empty ns = H.length ns = 0
@@ -144,6 +146,7 @@ let find p ns = H.fold (fun n _ x -> if p n then Some n else x) ns None
 let avg_size ns =
   if is_empty ns then 0
   else (H.fold (fun n _ s -> Lit.size n + s) ns 0) / size ns
+;;
 
 let for_all p ns = H.fold (fun n _ b -> b && p n) ns true
 

@@ -68,7 +68,7 @@ let rename_canonical ?(from=100) (l, r) =
   let vs = Listx.ix (T.variables u) in
   let s = List.fold_left (fun s (i,x) -> Sub.add x (var i) s) Sub.empty vs in
   (*let s = [ x, var i | i, x <- Listx.ix (T.variables u) ] in*)
-  (T.substitute s l, T.substitute s r)
+  (T.substitute s l, T.substitute s r), s
 ;;
 
 let left_linear (l, r) = T.linear l 

@@ -585,8 +585,6 @@ let () =
     Settings.input_file := remove_extension (Filename.basename f);
     (match !track_file with | Some f -> track_proof f | _ -> ());
     (match !classify_file with | Some f -> set_classification f | _ -> ());
-    if !(Settings.interactive) && gs <> [] then
-      failwith "Input for interactive mode is not supposed to contain goals";
     if !settings.debug > 0 then
       printf "input problem: %s\n%!" f;
     if not !only_termination && not !analyze && not !only_gcr then
@@ -626,13 +624,7 @@ let () =
           printf "%s %.2f %s@." "time:" secs "seconds")
         )
     )
-  | NonUnit (cls, gs) -> (
-    Format.printf "oh no, it's not unit!\n%!";
-    settings := {!settings with instgen = true};
-    Settings.do_proof := Some TraceForInstgen;
-    match Instgen.start (!settings, !heuristic) (cls @ gs) with
-    | SAT -> Format.printf "Satisfiable\n%!"
-    | UNSAT -> Format.printf "Unsatisfiable\n%!")
+  | NonUnit (cls, gs) -> failwith "nonunit not supported on this branch"
   | Constrained ces ->
     settings := {!settings with modulo_constraints = true};
     heuristic := { !heuristic with strategy = S.strategy_constrained};
