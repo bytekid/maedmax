@@ -224,7 +224,8 @@ let trace_cassociativity acs =
 let fix_group_params settings =
   let gs = Theory.Group.symbols [Lit.terms l | l <- settings.axioms] in
   let prec = List.fold_left (fun p (f,i,_) -> [i; f] :: p) [] gs in
-  {settings with precedence = if gs = [] then None else Some prec}
+  let params = {precedence = prec; weights = []} in
+  {settings with order_params = if gs = [] then None else Some params}
 ;;
 
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
@@ -457,7 +458,7 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
   let rr = [ Lit.terms r | r <- rr] in
   let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
   if debug 2 then 
-    Format.printf "success check R:\n%a\nE:\n%a\nG:\n%a\n"
+    Format.printf "success check R:\n%a\nE:\n%a\nG:\n%a\n%!"
       Rules.print rr Rules.print ee NS.print gs;
   rewriter#add_more ee;
   match solved_goal rewriter gs with

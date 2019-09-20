@@ -11,7 +11,7 @@ open Settings
 open Yojson.Basic
 
 (*** GLOBALS *****************************************************************)
-let short_usage = "maedmax v0.9\nUsage: maedmax <options> <file>\n"
+let short_usage = "maedmax v1.4\nUsage: maedmax <options> <file>\n"
 let filenames = ref []
 let track_file = ref None
 let classify_file = ref None
@@ -27,6 +27,8 @@ let only_gcr = ref false
 let timeout = ref None
 
 let strategy = ref []
+
+let params = ref ""
 
 let do_ordered _ =
   let h = !heuristic in
@@ -85,10 +87,44 @@ let set_restart_frequency s =
   heuristic := {!heuristic with strategy = build is S.strategy_ordered}
 ;;
 
+let check_order_params es =
+  let syms = List.map fst (Rules.signature es) in
+  let ps = match !settings.order_params with Some p -> p | _ -> empty_params in
+  let psyms = Listx.unique (List.fold_left (@) [] ps.precedence) in
+  let wsyms = [f | f, _ <- ps.weights] in
+  let no_sym ss =
+    try Some (List.find (fun s -> not (List.mem s syms)) ss) with _ -> None
+  in
+  let check ss scope =
+    match no_sym ss with
+    | Some f ->
+      let n = Signature.get_fun_name f in
+      failwith ("Symbol " ^ n ^ " in " ^ scope ^ " does not occur in problem (" ^ !params ^ ").")
+    | None -> ()
+  in
+  check psyms "precedence";
+  check wsyms "weights"
+;;
+
 let set_precedence s =
   let partial p = [Signature.fun_called f | f <- split_on_char '>' p] in
-  let partials = [partial p | p <- split_on_char ',' s] in
-  settings := {!settings with precedence = Some partials}
+  let precs = [partial p | p <- split_on_char ',' s] in
+  let ps = match !settings.order_params with Some p -> p | _ -> empty_params in
+  settings := {!settings with order_params = Some {ps with precedence = precs}};
+  params := !params ^ " " ^ s
+;;
+
+let set_weights s =
+  params := !params ^ " " ^ s;
+  let wt fs =
+    let e = Arg.Bad ("Weight specification " ^ s ^ "could not be parsed") in
+    match split_on_char ':' fs with
+    | [f; w] -> (try Signature.fun_called f, int_of_string w with _ -> raise e)
+    | _ -> raise e
+  in
+  let ps = match !settings.order_params with Some p -> p | _ -> empty_params in
+  let ps' = {ps with weights = [wt f | f <- split_on_char ',' s]} in 
+  settings := {!settings with order_params = Some ps'}
 ;;
 
 let options =
@@ -132,12 +168,14 @@ let options =
         else if s = "lpo" then S.strategy_lpo
         else if s = "olpo" then S.strategy_ordered_lpo
         else if s = "okbo" then S.strategy_ordered_kbo
+        else if s = "owpo" then S.strategy_ordered_wpo
         else if s = "olpoorkbo" then S.strategy_ordered_lpokbo
         else if s = "kbo" then S.strategy_kbo
         else if s = "maxcomplpo" then S.strategy_maxcomp_lpo
         else if s = "maxcompkbo" then S.strategy_maxcomp_kbo
         else if s = "okbauto" then S.strategy_ordered
         else if s = "linpoly" then S.strategy_aql
+        else if s = "wpo" then S.strategy_wpo
         else if s = "temp" then S.strategy_temp
         else failwith "unsupported option for -M"
       in
@@ -176,6 +214,8 @@ let options =
       " order generation mode");
     ("--prec", Arg.String set_precedence,
         "<f_1,...,f_n> fix precedence to f_1 > .. > f_n");
+    ("--weights", Arg.String set_weights,
+        "<f_1:a_1,...,f_n:a_n> fix weights to w(f_i)=a_i");
     ("--mode", Arg.String (fun s ->
       if s = "sat" then heuristic := { !heuristic with mode = OnlySAT }
       else if s = "unsat" then heuristic := { !heuristic with mode = OnlyUNSAT }
@@ -197,7 +237,7 @@ let options =
     ("--restart-frequency", Arg.String set_restart_frequency,
       "<r1,..,rn> number of iterations in between forced restarts");
     ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
-      "<s> fixed problem shape");
+      "<shp> fixed problem shape");
     ("--selection-mode", Arg.String (fun s ->
       let sm = 
         if s = "mixed" then MixedSelect
@@ -501,6 +541,7 @@ let check_split gs =
 
 let run file ((es, gs) as input) =
   let timer = Timer.start () in
+  check_order_params [Lit.terms e | e <- es @ gs];
   let ans, proof =
     if gs = [] && !settings.unfailing && not !settings.complete_if_no_goal then
       (SAT, GroundCompletion ([], [], Order.default))

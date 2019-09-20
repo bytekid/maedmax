@@ -108,8 +108,10 @@ let init s ctx k =
     | f :: g :: fs -> (prec k f <>> prec k g) <&> gt (g :: fs)
     | _ -> mk_true ctx
   in
-  match s.precedence with
-  | Some precs -> List.fold_left (fun c prec -> gt prec <&> c) constr precs
+  match s.order_params with
+  | Some ps ->
+    let c = List.fold_left (fun c prec -> gt prec <&> c) constr ps.precedence in
+    List.fold_left (fun c (f, a) -> w k f <=> Int.mk_num ctx a <&> c) c ps.weights
   | _ -> constr
 ;;
 
@@ -131,16 +133,20 @@ let cond_gt k ctx conds s t =
   in big_or1 (gt s t :: [ gt u t | (s',u) <- conds; s' = s ])
 ;;
 
-let eval_table k m h =
+let eval_table_with eval k m h =
   let add (k',f) x p =
     if k <> k' then p
     else (
       try
-        let v = Int.eval m x in
+        let v = eval m x in
         Hashtbl.add p f v; p
       with _ -> p)
   in Hashtbl.fold add h (Hashtbl.create 16)
 ;;
+
+let eval_bool_table k m h = eval_table_with Logic.eval k m h
+
+let eval_table k = eval_table_with Int.eval k
 
 let decode_term_gt k m =
   let tw = eval_table k m weights in

@@ -18,7 +18,7 @@ let ts_lpo = Settings.ts_lpo
 let ts_cfsn = Orders (Seq [Cfsn])
 let ts_kbo = Settings.ts_kbo
 let ts_lpokbo = Orders (Choice (LPO, KBO))
-let ts_mpol = Orders (Seq [MPol])
+let ts_wpo = Orders (Seq [WPO])
 let ts_ac = Orders (Seq [ACRPO])
 
 (* overall strategies *)
@@ -30,7 +30,7 @@ let strategy_maxcomp_kbo = [ts_kbo, [],[Oriented], max, Size]
 let strategy_red = [ts_dpn, [Red],[], max, Size]
 let strategy_lpo = [ts_lpo, [Red; Comp],[CPsRed], max, Size]
 let strategy_kbo = [ts_kbo, [Red; Comp],[CPsRed], max, Size]
-let strategy_mpol = [ts_mpol, [Red; Comp],[CPsRed], max, Size]
+let strategy_wpo = [ts_wpo, [Red; Comp],[CPsRed], max, Size]
 let strategy_comp = [ts_dpn, [Red; Comp], [], max, Size]
 let strategy_cpred = [ts_dpn, [Red], [CPsRed], max, Size]
 let strategy_dp = [ts_dpn, [Red; Comp], [CPsRed], max, Size]
@@ -50,6 +50,7 @@ let strategy_ordered_sat = [ (ts_lpo, [], [MaxRed], IterationLimit 11, Size);
                         (ts_lpo, [], [MaxRed], IterationLimit 200, Size); ]
 let strategy_ordered_lpo = [ts_lpo, [], [MaxRed], max, Size]
 let strategy_ordered_kbo = [ts_kbo, [], [MaxRed], max, Size]
+let strategy_ordered_wpo = [ts_wpo, [], [MaxRed], max, Size]
 let strategy_ordered_lpokbo = [ts_lpokbo, [], [MaxRed], max, Size]
 let strategy_aql = [(*ts_lpo, [RedSize],[Oriented; CPsRed], max, Size;*)
                     ts_cfsn, [RedSize],[Oriented; CPsRed], max, Size;
@@ -76,8 +77,14 @@ let strategy_auto2 = [
 (*** FUNCTIONS ****************************************************************)
 let term_to_string = 
   let ostr = function
-    LPO -> "LPO" | KBO -> "KBO" | Matrix -> "matrix" | ACRPO -> "AC-RPO" |
-    Cfs -> "cfs" | Cfsn -> "cfsn" | MPol -> "mpol"
+    | LPO -> "LPO"
+    | KBO -> "KBO"
+    | WPO -> "WPO"
+    | Matrix -> "matrix"
+    | ACRPO -> "AC-RPO"
+    | Cfs -> "cfs"
+    | Cfsn -> "cfsn"
+    | MPol -> "mpol"
   in
   let osstr = function
     Choice (o1,o2) ->
@@ -170,6 +177,7 @@ Hashtbl.clear t_dg;
 Hashtbl.clear t_dg2;
 Hashtbl.clear t_dg_w;
 Lpo.clear ();
+Wpo.clear ();
 Cfsn.clear ()
 ;;
 
@@ -210,6 +218,7 @@ let init settings strat j ctx =
   let init_ord ?(af=false) fs i = function
     | LPO -> (if af then Lpo.init_af else Lpo.init) settings ctx i
     | KBO -> Kbo.init settings ctx i
+    | WPO -> Wpo.init settings ctx i
     | Cfs -> Cfs.init (ctx,i) fs
     | Cfsn -> Cfsn.init (ctx,i) fs
     | MPol -> MPol.init (ctx,i) fs
@@ -249,6 +258,7 @@ let orders_constraints ctx j rs os =
 let gt i (l,r) = function
   | LPO -> Lpo.gt (ctx, i) l r
   | KBO -> Kbo.gt (ctx, i) l r
+  | WPO -> Wpo.gt (ctx, i) l r
   | Cfs -> Cfs.gt (ctx, i) l r
   | Cfsn -> Cfsn.gt (ctx, i) l r
   | MPol -> MPol.gt (ctx, i) l r
@@ -258,6 +268,7 @@ in
 let ge i (l,r) = function
   | LPO -> Lpo.ge (ctx,i) l r
   | KBO -> Kbo.ge (ctx, i) l r
+  | WPO -> Wpo.ge (ctx,i) l r
   | Cfs -> Cfs.ge (ctx, i) l r
   | Cfsn -> Cfsn.ge (ctx, i) l r
   | MPol -> MPol.ge (ctx, i) l r
@@ -280,6 +291,7 @@ let order_choice_constraints ctx j rs (o1, o2) =
   let gt i (l,r) = function
     | LPO -> Lpo.gt (ctx, i) l r
     | KBO -> Kbo.gt (ctx, i) l r
+    | WPO -> Wpo.gt (ctx, i) l r
     | Cfs -> Cfs.gt (ctx, i) l r
     | Cfsn -> Cfsn.gt (ctx, i) l r
     | MPol -> MPol.gt (ctx, i) l r
@@ -303,6 +315,7 @@ let order_choice_constraints ctx j rs (o1, o2) =
   let gt i (l,r) = function
     | LPO -> Lpo.gt_af (ctx,i) l r
     | KBO -> Kbo.gt (ctx,i) l r
+    | WPO -> Wpo.gt (ctx,i) l r
     | Cfs -> Cfs.gt (ctx, i) l r
     | Cfsn -> Cfsn.gt (ctx, i) l r
     | MPol -> MPol.gt (ctx, i) l r
@@ -311,6 +324,7 @@ let order_choice_constraints ctx j rs (o1, o2) =
   let ge i (l,r) = function
     | LPO -> Lpo.ge_af (ctx,i) l r
     | KBO -> Kbo.ge (ctx,i) l r
+    | WPO -> Wpo.ge (ctx,i) l r
     | Cfs -> Cfs.ge (ctx, i) l r
     | Cfsn -> Cfsn.ge (ctx, i) l r
     | MPol -> MPol.ge (ctx, i) l r
@@ -379,6 +393,7 @@ let dp_dg_constraints ?dg:(d=false) ?k:(k=1) ctx j rs os =
   let gt i (l,r) = function
     | LPO -> Lpo.gt_af (ctx,i) l r
     | KBO -> Kbo.gt (ctx,i) l r
+    | WPO -> Wpo.gt (ctx,i) l r
     | Cfs -> Cfs.gt (ctx, i) l r
     | Cfsn -> Cfsn.gt (ctx, i) l r
     | MPol -> MPol.gt (ctx, i) l r
@@ -387,6 +402,7 @@ let dp_dg_constraints ?dg:(d=false) ?k:(k=1) ctx j rs os =
   let ge i (l,r) = function
     | LPO -> Lpo.ge_af (ctx,i) l r
     | KBO -> Kbo.ge (ctx,i) l r
+    | WPO -> Wpo.ge (ctx,i) l r
     | Cfs -> Cfs.ge (ctx, i) l r
     | Cfsn -> Cfsn.ge (ctx, i) l r
     | MPol -> MPol.ge (ctx, i) l r
@@ -494,6 +510,7 @@ let dec_ord ?(af=false) (i,o) =
   match o with
   | LPO -> (if af then Lpo.decode_print_af else Lpo.decode_print) i m
   | KBO -> Kbo.decode_print i m
+  | WPO -> Wpo.decode_print i m
   | Cfs -> Cfs.decode_print i m
   | Cfsn -> Cfsn.decode_print i m
   | MPol -> MPol.decode_print i m
@@ -534,6 +551,7 @@ let decode j m s =
 let dec_ord ?(af=false) i = function
   | LPO -> Lpo.decode i m
   | KBO -> Kbo.decode i m
+  | WPO -> Wpo.decode i m
   | Cfs -> Cfs.decode i m
   | Cfsn -> Cfsn.decode i m
   | ACRPO -> Acrpo.decode i m
@@ -550,6 +568,7 @@ let cond_gt o j c cs s t =
   let ocgt = function
       LPO -> Lpo.cond_gt
     | KBO -> Kbo.cond_gt
+    | WPO -> Wpo.cond_gt
     | _ -> failwith "Strategy.cond_gt: not implemented"
   in
   match o with

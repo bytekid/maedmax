@@ -9,7 +9,7 @@ val strategy_maxcomp_lpo : t
 val strategy_maxcomp_kbo : t
 val strategy_lpo : t
 val strategy_kbo : t
-val strategy_mpol : t
+val strategy_wpo : t
 val strategy_auto : t
 val strategy_auto2 : t
 val strategy_cpred : t
@@ -22,6 +22,7 @@ val strategy_temp : t
 val strategy_ordered : t
 val strategy_ordered_lpo : t
 val strategy_ordered_kbo : t
+val strategy_ordered_wpo : t
 val strategy_ordered_lpokbo : t
 val strategy_ordered_sat : t
 val strategy_aql : t

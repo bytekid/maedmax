@@ -213,8 +213,8 @@ let init s ctx k =
     | f :: g :: fs -> (prec k f <>> prec k g) <&> gt (g :: fs)
     | _ -> mk_true ctx
   in
-  match s.precedence with
-  | Some precs -> List.fold_left (fun c prec -> gt prec <&> c) constr precs
+  match s.order_params with
+  | Some ps -> List.fold_left (fun c prec -> gt prec <&> c) constr ps.precedence
   | _ -> constr
 ;;
 
@@ -321,7 +321,7 @@ let print_params = function
       List.iter (fun ((f,_),_) -> Format.printf "<%s" (name f)) fp;
       Format.printf "\"\n%!"
       )
-  ;;
+;;
 
 let encode i preclist ctx =
  let add ((f,_), p) = (prec i f <=> (Int.mk_num ctx p)) in
