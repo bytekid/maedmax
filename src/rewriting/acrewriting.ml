@@ -150,13 +150,6 @@ let xpos = function
     let fterm xs zs = T.F(f, [fterm f (x :: xs); fterm f zs]) in
     let ps = [[0], fterm xs zs | xs, zs <- bipartition t2s] in
     (root_pos, t) :: (Lx.unique ps)
-    (* 
-	  flatten t2 >>= (return @.@ T.args) >>= fun t2s ->
-    let fterm xs zs = T.make_fun f [fterm f (x :: xs); fterm f zs] in
-		let for_partition (xs,zs) = return (P.of_list [0], fterm xs zs) in
-	  M.map for_partition (bipartition t2s) >>=
-    (return @.@ L.unique_hash @.@ (L.cons (P.root,t)))
-    *)
 | _ -> failwith "Acrewriting.xpos: invalid argument"
 ;;
 
@@ -167,12 +160,6 @@ let rewrite_at t (l, r) p =
   let s = T.subterm_at p t in
   let rdcs = [T.replace t (T.substitute sigma r) p | sigma <- match_term s l] in
   [ ac_normalize u | u <- rdcs ]
-(*
-let c = C.of_term p t in
-let s = T.subterm p t in
-let l, r = R.to_terms rule in
-let rewrite_with sigma = return (C.apply (Sub.apply_term sigma r) c) in
-match_term s l >>= M.map (rewrite_with >=> ac_normalize) *)
 ;;
 
 let direct_reducts t trs =
@@ -180,16 +167,7 @@ let direct_reducts t trs =
     let rdcts rl = L.concat [ rewrite_at t rl p | p,t <- ac_funs_pos t] in
     Lx.unique (L.concat [rdcts rl | rl <- trs])
   in
-  (*cache reducts_cache*) compute t
- (* 
-  M.get >>= fun c ->
-  let compute t =
-	 ac_funs_pos t >>= fun ps ->
-	 let with_rl rl = M.flat_map (fun (p, t) -> rewrite_at t rl p) ps in
-	 M.flat_map with_rl (Trs.to_list trs) >>=
-	 (return @.@ L.unique_hash)
-  in cache c.reducts_cache compute t
- *)
+  compute t
 ;;
 
 let direct_reducts_list trs width (ts, acc) =
@@ -198,11 +176,6 @@ let direct_reducts_list trs width (ts, acc) =
   let acc' = acc @ ts in
   let ts' = Listset.diff rs acc' in
   (ts', acc')
-  (*M.flat_map (flip direct_reducts trs) ts >>= fun rs ->
-  let rs = if width < 0 then rs else L.take width (L.unique_hash rs) in
-  let acc' = acc @ ts in
-  let ts' = L.diff rs acc' in
- return (ts', acc')*)
  ;;
 
 let rec reducts' n width acc ts trs =
@@ -211,14 +184,6 @@ let rec reducts' n width acc ts trs =
     let ts', acc' = direct_reducts_list trs width (ts, acc) in
     if ts' = [] then acc'
     else reducts' (n - 1) width (L.rev_append acc' ts') ts' trs
-(* match n with
-  | 0 -> return acc
-  | n -> (
-   direct_reducts_list trs width (ts, acc) >>= fun (ts', acc') ->
-   if ts' = [] then return acc'
-   else reducts' (n-1) width (acc'@ts') ts' trs
-  )
-*)
 ;;
 
 let reducts ?(n = ~-1) ?(width = ~-1) t trs = reducts' n width [] [t] trs
@@ -232,16 +197,6 @@ let rec are_joinable' n width (us, uacc) (ts, tacc) trs =
     let b = joined (ts' @ tacc') (us' @ uacc') in
     if b || (ts' = [] && us' = []) then b
     else are_joinable' (n - 1) width (ts', tacc') (us', uacc') trs
-  (* 
-  let joined ts = M.exists (fun u -> M.exists (acequivalent u) ts) in
-  let step = direct_reducts_list trs width in
-  match n with
-   | 0 -> joined (ts@tacc) (us@uacc)
-   | n ->
-  M.project step ((ts, tacc), (us, uacc)) >>= fun ((ts',tacc'), (us',uacc'))  ->
-  joined (ts'@tacc') (us'@uacc') >>= fun b ->
-  if b || (ts' = [] && us' = []) then return b
-  else are_joinable' (n-1) width (ts',tacc') (us',uacc') trs*)
 ;;
 
 let are_joinable ?(n = ~-1) ?(width = ~-1) trs u t =
@@ -298,17 +253,6 @@ let has_linear_var_as_flat_arg (l, r) =
     in
     L.exists (fun x -> is_lin_var x ls && is_lin_var x rs) ls
   | _ -> false
-  (*
-  M.project flatten (R.to_terms rl) >>= fun (l,r) ->
-  let f = Option.the (T.root l) in
-  let ls,rs = T.args l, T.args r in
-  let is_lin_var ti ts =
-    let tis, ts' = L.partition ((=) ti) ts in
-    let as_sub = L.exists (fun tj -> L.mem ti (T.subterms tj)) ts' in
-    T.is_var ti && L.length tis = 1 && not as_sub
-  in
-  let is_lin_var_rhs ti = r=ti || T.root r = Some f && is_lin_var ti rs in
-  return (L.exists (fun x -> is_lin_var x ls && is_lin_var_rhs x) ls)*)
 ;;
 
 let extend (l, r) = 
@@ -326,20 +270,6 @@ let overlaps trs =
   let roxs = [r, ps | (_,r),ps <- ros @ rxs] in
   let os = [ overlaps_of ri p (u, r) | ri <- trs; r, ps <- roxs; p,u <- ps] in
   Lx.unique (L.concat os)
-(*
-M.map (fun r -> fpos r >>= fun p -> return (r,p)) ro >>= fun rop ->
-(* for extended rules positions involving fresh variable suffice *)
-M.flat_map (liftM (function Some r -> [r] |_ -> [])@.@extend) ro >>= fun rx ->
-M.map (fun r -> xpos (R.lhs r) >>= fun ps -> return (r, ps)) rx >>= fun rxp ->
-(* combinations of outer and inner rule: extensions only required for outer *)
-let rpairs = L.product (rxp @ rop) (Trs.to_list trs) in
-let of_rls ((o, ps),i) =
-  (* l' is AC equivalent to original lhs of outer *)
-  let mk_overlap (p,l') = check_overlap i p (mk_rule l' (R.rhs o)) in
-  M.flat_map mk_overlap ps
-in
-M.flat_map of_rls rpairs >>=
-(return @.@ L.unique_hash)*)
 ;;
 
 let overlaps2' trsi trso =
@@ -412,7 +342,6 @@ let test () =
   let ga = T.F(g, [a_]) in
   let gu = T.F(g, [u]) in
   let gx = T.F(g, [x]) in
-  let gzero = T.F(g, [zero]) in
   let faaa = T.F(f, [a_;faa]) in
   let gfaa = T.F(g, [faa]) in
   let faaaa = T.F(f, [faa;faa]) in
