@@ -432,8 +432,8 @@ let test () =
     let cps = List.filter (fun (u, v) -> not (are_joinable trs u v)) cps in
     let s = List.fold_left app "" cps in
     Format.printf "AC CPs for {%s} are %s\n%!" trss s;
-    let eq = List.for_all (fun cp -> List.exists (pair_aceq cp) cps) res in
-    assert (List.length res == (List.length cps) && eq)
+    let eq ee' ee = List.for_all (fun e -> List.exists (pair_aceq e) ee) ee' in
+    assert (eq cps res && eq res cps)
   in
   let rl1 = mk_rule ga a_ in
   let rl2 = (mk_rule fxx x) in
@@ -444,7 +444,9 @@ let test () =
   let rl7 = mk_rule (T.F(f, [x;a_])) b_ in
   let rl8 = mk_rule (T.F(f, [x;a_])) (T.F(m, [x;a_])) in
   let fce, fbd = T.F(f, [c_;e_]), T.F(f, [b_;d_]) in
-  check_cps ([rl3; rl4]) [fce,fbd; fbd, fce];
+  check_cps [rl3; rl4] [fce,fbd; fbd, fce];
+  check_cps [g1; g2] [gx, T.F(f, [gx; T.F(g, [zero])])];
+  check_cps [g1] [];
   let check_wcr trs res = (
     let trss = Rules.to_string trs in
     let b = is_wcr trs in
