@@ -516,7 +516,6 @@ let test () =
   let rl8 = mk_rule (T.F(f, [x;a_])) (T.F(m, [x;a_])) in
   let fce, fbd = T.F(f, [c_;e_]), T.F(f, [b_;d_]) in
   check_cps ([rl3; rl4]) [fce,fbd; fbd, fce];
-  check_cps ([g0; g1]) [zero, gzero];
   let check_wcr trs res = (
     let trss = Rules.to_string trs in
     let b = is_wcr trs in
