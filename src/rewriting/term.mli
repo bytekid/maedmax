@@ -8,7 +8,6 @@ module Sub : sig
   val is_empty : 'a t -> bool
   val mem : key -> 'a t -> bool
   val add : key -> 'a -> 'a t -> 'a t
-  val update : key -> ('a option -> 'a option) -> 'a t -> 'a t
   val find : key -> 'a t -> 'a
   val filter : (key -> 'a -> bool) -> 'a t -> 'a t
   val iter : (key -> 'a -> unit) -> 'a t -> unit
@@ -18,7 +17,7 @@ module Sub : sig
 end
 (** Term operations *)
 
-type t = 
+type t =
   | V of Signature.var
   | F of Signature.sym * t list
 
