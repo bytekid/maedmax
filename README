@@ -13,6 +13,11 @@ Using OCamlbuild, the Maedmax executable can be created by executing
  $ make
 in this directory.
 
+Alternatively, using Vagrant (https://www.vagrantup.com), a virtual machine
+provisioned with a Maedmax executable can be created by executing
+ $ vagrant up
+in this directory.
+
 -------------------------------------------------------------------------------
    USAGE
 -------------------------------------------------------------------------------
@@ -53,14 +58,14 @@ Here is what these (and all other) options mean:
    - Option -K controls the number of TRSs selected in every iteration.
    - Option -N controls how many passive equations are added to the set of
      active facts, per selected TRS.
-   - The instantiation depth of ground joinability checks is controlled by -I 
-     (cf. the number of repetitions in the strategy given on p.9 of the paper). 
+   - The instantiation depth of ground joinability checks is controlled by -I
+     (cf. the number of repetitions in the strategy given on p.9 of the paper).
  - The remaining options are mainly there for analyzing input problems and
    debugging.
    - Option --term performs a termination check of the input system, considering
      the rules to be oriented as given.
    - Option --analyze prints problem properties, including recognized theories.
-   - Debugging output is triggered by the option -D. 
+   - Debugging output is triggered by the option -D.
 
 
 -------------------------------------------------------------------------------
