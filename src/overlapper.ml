@@ -123,7 +123,8 @@ class overlapper (h : heuristic) (lits : Literal.t list) (trs : Rules.t)
   method overlap_between_at only_new rule1 rule2 p =
     if only_new && Cache.overlap_was_considered rule1 rule2 then None
     else (
-    let l1,r1 = rule1 and l2, r2 = Rule.rename_canonical rule2 in
+    let l1, r1 = rule1 in
+    let (l2, r2), _ = Rule.rename_canonical rule2 in
     match mgu (Term.subterm_at p l2) l1 with
       | Some sigma -> (
         let t = Term.substitute sigma l1 in

@@ -221,6 +221,13 @@ let trace_cassociativity acs =
   List.iter add acs
 ;;
 
+let fix_group_params settings =
+  let gs = Theory.Group.symbols [Lit.terms l | l <- settings.axioms] in
+  let prec = List.fold_left (fun p (f,i,_) -> [i; f] :: p) [] gs in
+  let params = {precedence = prec; weights = []} in
+  {settings with order_params = if gs = [] then None else Some params}
+;;
+
 (* * REWRITING * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *)
 (* normalization of cs with TRS with index n. Returns pair (cs',ff) where ff
    are newly generated eqs and cs' \subseteq cs is set of irreducible eqs *)
@@ -278,9 +285,9 @@ let reduced_goal_cps rew gs =
   if !heuristic.reduced_goal_cps(*not (!A.shape = Idrogeno || !A.shape = Carbonio || !A.shape = Ossigeno || !A.shape = Silicio)*) then
     reduced_goals ~normalize:true rew gs
   else (
-    let gs' = NS.filter (fun g -> not (NS.H.mem goal_cp_table g) &&
+    let gs' = NS.filter (fun g -> not (NS.mem goal_cp_table g) &&
                                 Lit.size g < !heuristic.hard_bound_goals) gs in
-    NS.iter (fun g -> NS.H.add goal_cp_table g true) gs';
+    NS.iter (fun g -> ignore (NS.add g goal_cp_table)) gs';
     let res = reduced_goals ~normalize:true rew gs' in
     res)
 ;;
@@ -448,12 +455,13 @@ let filter_eqs ee acs =
 ;;
 
 let succeeds state (rr,ee) rewriter cc ieqs gs =
-  let rr = [ Lit.terms r | r <- rr] in
-  let ee = [ Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
+  let rr = [Lit.terms r | r <- rr] in
+  let ee = [Lit.terms e | e <- NS.to_list ee; Lit.is_equality e] in
+  (*rewriter#add_more ee;
+  let ee = L.map fst ee in*)
   if debug 2 then 
-    Format.printf "success check R:\n%a\nE:\n%a\nG:\n%a\n"
+    Format.printf "success check R:\n%a\nE:\n%a\nG:\n%a\n%!"
       Rules.print rr Rules.print ee NS.print gs;
-  rewriter#add_more ee;
   match solved_goal rewriter gs with
     | Some (st, rseq, u, sigma) ->
       if unsat_allowed () then Some (UNSAT, Proof (st, rseq, u,sigma)) else None
@@ -467,7 +475,7 @@ let succeeds state (rr,ee) rewriter cc ieqs gs =
         Some (UNSAT, Proof (e, ([],[]), fst e, Sub.empty))
       else if List.length ee > 40 then
         None (* saturation too expensive, or goals have been discarded *)
-      else match saturated state (rr,ee) rewriter cc with
+      else match saturated state (rr, ee) rewriter cc with
         | None when rr @ ee = [] && sat_allowed () -> Some (SAT, Completion [])
         | Some order -> (
           let ee = filter_eqs ee !settings.ac_syms in
@@ -793,10 +801,10 @@ let max_k = A.take_time A.t_maxk max_k
 
 (* some logging functions *)
 let log_max_trs j rr rr' c =
- F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@."
-   !A.iterations j c
-   Rules.print (Variant.rename_rules rr)
-   Rules.print (Variant.rename_rules rr')
+  F.printf "TRS %i - %i (cost %i):\n %a\nreduced:%!\n %a\n@."
+    !A.iterations j c
+    Rules.print (Variant.rename_rules rr)
+    Rules.print (Variant.rename_rules rr')
 ;;
 
 let limit_reached t =
@@ -1151,6 +1159,7 @@ let init_settings (settings_flags, heuristic_flags) axs (gs : Lit.t list) =
       unfailing = settings_flags.unfailing
     }
   in
+  let s = if !heuristic.fix_parameters then fix_group_params s else s in
   let h =
     if is_large then (
       let saql = St.strategy_aql in
@@ -1255,10 +1264,7 @@ let ckb ((settings_flags, heuristic_flags) as flags) input =
       let es0 = [ Lit.make_axiom (normalize r) | r <- cas ] @ es0 in
       let ctx = Logic.mk_context () in
       let ss = Listx.unique (t_strategies ()) in
-      let all_lits = !settings.norm @ gs0 @ es0 in
-      L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- all_lits ]) ss;
-      (*if !heuristic.fix_parameters && !A.restarts > 2 then
-        L.iter (fun s -> St.fix_parameters s 0 ctx [Lit.terms n | n <- es0]) ss;*)
+      L.iter (fun s -> St.init !settings s 0 ctx) ss;
       let state = make_state ctx (!settings.norm @ es0) (NS.of_list gs0) in
       if !settings.keep_orientation then
         preorient state es;

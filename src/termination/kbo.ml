@@ -8,6 +8,7 @@ module Logic = Settings.Logic
 (*** OPENS *******************************************************************)
 open Term
 open Logic
+open Settings
 
 (*** GLOBALS *****************************************************************)
 (* signature *)
@@ -92,7 +93,8 @@ let rec gt (ctx,k) s t =
 
 let ge (ctx,k) s t = if s = t then mk_true ctx else gt (ctx,k) s t
 
-let init_kbo (ctx,k) fs =
+let init s ctx k =
+  let fs = Rules.signature (s.gs @ [ r.terms | r <- s.norm @ s.axioms]) in
   Hashtbl.clear precedence;
   Hashtbl.clear weights;
   let add (f,_) =
@@ -101,15 +103,16 @@ let init_kbo (ctx,k) fs =
     Hashtbl.add weights (k,f) (Int.mk_var ctx s)
   in List.iter add fs;
   funs := fs;
-  adm_smt (ctx,k)
-;;
-
-let init c = init_kbo c
-
-let fix_parameters (ctx,k) es =
-  (* group constraints *)
-  let set_group c (f, i, _) = c <&> (prec k i <>> prec k f) in
-  List.fold_left set_group (mk_true ctx) (Theory.Group.symbols es)
+  let constr = adm_smt (ctx,k) in
+  let rec gt = function
+    | f :: g :: fs -> (prec k f <>> prec k g) <&> gt (g :: fs)
+    | _ -> mk_true ctx
+  in
+  match s.order_params with
+  | Some ps ->
+    let c = List.fold_left (fun c prec -> gt prec <&> c) constr ps.precedence in
+    List.fold_left (fun c (f, a) -> w k f <=> Int.mk_num ctx a <&> c) c ps.weights
+  | _ -> constr
 ;;
 
 let cond_gt k ctx conds s t =
@@ -130,16 +133,20 @@ let cond_gt k ctx conds s t =
   in big_or1 (gt s t :: [ gt u t | (s',u) <- conds; s' = s ])
 ;;
 
-let eval_table k m h =
+let eval_table_with eval k m h =
   let add (k',f) x p =
     if k <> k' then p
     else (
       try
-        let v = Int.eval m x in
+        let v = eval m x in
         Hashtbl.add p f v; p
       with _ -> p)
   in Hashtbl.fold add h (Hashtbl.create 16)
 ;;
+
+let eval_bool_table k m h = eval_table_with Logic.eval k m h
+
+let eval_table k = eval_table_with Int.eval k
 
 let decode_term_gt k m =
   let tw = eval_table k m weights in

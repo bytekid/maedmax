@@ -11,7 +11,7 @@ open Settings
 open Yojson.Basic
 
 (*** GLOBALS *****************************************************************)
-let short_usage = "maedmax v0.9\nUsage: maedmax <options> <file>\n"
+let short_usage = "maedmax v1.4\nUsage: maedmax <options> <file>\n"
 let filenames = ref []
 let track_file = ref None
 let classify_file = ref None
@@ -27,6 +27,8 @@ let only_gcr = ref false
 let timeout = ref None
 
 let strategy = ref []
+
+let params = ref ""
 
 let do_ordered _ =
   let h = !heuristic in
@@ -85,97 +87,143 @@ let set_restart_frequency s =
   heuristic := {!heuristic with strategy = build is S.strategy_ordered}
 ;;
 
+let check_order_params es =
+  let syms = List.map fst (Rules.signature es) in
+  let ps = match !settings.order_params with Some p -> p | _ -> empty_params in
+  let psyms = Listx.unique (List.fold_left (@) [] ps.precedence) in
+  let wsyms = [f | f, _ <- ps.weights] in
+  let no_sym ss =
+    try Some (List.find (fun s -> not (List.mem s syms)) ss) with _ -> None
+  in
+  let check ss scope =
+    match no_sym ss with
+    | Some f ->
+      let n = Signature.get_fun_name f in
+      failwith ("Symbol " ^ n ^ " in " ^ scope ^ " does not occur in problem (" ^ !params ^ ").")
+    | None -> ()
+  in
+  check psyms "precedence";
+  check wsyms "weights"
+;;
+
+let set_precedence s =
+  let partial p = [Signature.fun_called f | f <- split_on_char '>' p] in
+  let precs = [partial p | p <- split_on_char ',' s] in
+  let ps = match !settings.order_params with Some p -> p | _ -> empty_params in
+  settings := {!settings with order_params = Some {ps with precedence = precs}};
+  params := !params ^ " " ^ s
+;;
+
+let set_weights s =
+  params := !params ^ " " ^ s;
+  let wt fs =
+    let e = Arg.Bad ("Weight specification " ^ s ^ "could not be parsed") in
+    match split_on_char ':' fs with
+    | [f; w] -> (try Signature.fun_called f, int_of_string w with _ -> raise e)
+    | _ -> raise e
+  in
+  let ps = match !settings.order_params with Some p -> p | _ -> empty_params in
+  let ps' = {ps with weights = [wt f | f <- split_on_char ',' s]} in 
+  settings := {!settings with order_params = Some ps'}
+;;
+
 let options =
-  Arg.align 
-  [("-ac", Arg.Unit (fun _ ->
+  Arg.align [
+    ("-ac", Arg.Unit (fun _ ->
       settings := { !settings with modulo_ac = true};
       heuristic := { !heuristic with strategy = S.strategy_ac }),
-    " use AC-completion");
-   ("--analyze", Arg.Unit (fun _ -> analyze := true),
-     " print problem characteristics");
-   ("--casc", Arg.Unit (fun _ ->
-     settings := { !settings with complete_if_no_goal = false}),
-     " CASC strategy");
-   ("--benchmark", Arg.Set Settings.benchmark,
-     " produce benchmarks");
-   ("--concon", Arg.Unit do_concon,
-     " satisfiability-preferring strategy");
-   ("-D", Arg.Int (fun d -> settings := { !settings with debug = d };
-       Settings.do_debug := d > 0),
-     " print debugging output");
-   ("--fix-params", Arg.Unit (fun _ ->
-        heuristic := { !heuristic with fix_parameters = true }),
-         " fix order parameters");
-   ("--gcr", Arg.Unit (fun _ -> only_gcr := true),
-       " check ground confluence");
-   ("--interactive", Arg.Set Settings.interactive,
-     " enter interactive mode once a complete system was found");
-   ("--infeasible", Arg.Unit ( fun _ ->
-       heuristic := { !heuristic with strategy = S.strategy_ordered_kbo };
-       settings := {!settings with auto = false; infeasible = true}),
-       " answers according to CoCo infeasibility semantics");
-   ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
-     " output result and stats in JSON format");
-   ("-K", Arg.Int (fun k -> heuristic := { !heuristic with k = (fun _ -> k) }),
-     "<k> compute k maximal terminating TRSs");
-   ("--kb", Arg.Unit do_unordered,
-     " Knuth-Bendix completion (unordered)");
-   ("-M", Arg.String (fun s ->
+      " use AC-completion");
+    ("--analyze", Arg.Unit (fun _ -> analyze := true),
+      " print problem characteristics");
+    ("--casc", Arg.Unit (fun _ ->
+      settings := { !settings with complete_if_no_goal = false}),
+      " CASC strategy");
+    ("--benchmark", Arg.Set Settings.benchmark,
+      " produce benchmarks");
+    ("--concon", Arg.Unit do_concon,
+      " satisfiability-preferring strategy");
+    ("-D", Arg.Int (fun d -> settings := { !settings with debug = d };
+      Settings.do_debug := d > 0),
+      " print debugging output");
+    ("--fix-params", Arg.Unit (fun _ ->
+      heuristic := { !heuristic with fix_parameters = true }),
+      " fix order parameters");
+    ("--gcr", Arg.Unit (fun _ -> only_gcr := true),
+      " check ground confluence");
+    ("--interactive", Arg.Set Settings.interactive,
+      " enter interactive mode once a complete system was found");
+    ("--infeasible", Arg.Unit ( fun _ ->
+      heuristic := { !heuristic with strategy = S.strategy_ordered_kbo };
+      settings := {!settings with auto = false; infeasible = true}),
+      " answers according to CoCo infeasibility semantics");
+    ("--json", Arg.Unit (fun _ -> settings := { !settings with json = true }),
+      " output result and stats in JSON format");
+    ("-K", Arg.Int (fun k -> heuristic := { !heuristic with k = (fun _ -> k) }),
+      "<k> compute k maximal terminating TRSs");
+    ("--kb", Arg.Unit do_unordered,
+      " Knuth-Bendix completion (unordered)");
+    ("-M", Arg.String (fun s ->
       let strategy = 
         if s = "kbauto" then S.strategy_auto
         else if s = "lpo" then S.strategy_lpo
         else if s = "olpo" then S.strategy_ordered_lpo
         else if s = "okbo" then S.strategy_ordered_kbo
+        else if s = "owpo" then S.strategy_ordered_wpo
         else if s = "olpoorkbo" then S.strategy_ordered_lpokbo
         else if s = "kbo" then S.strategy_kbo
         else if s = "maxcomplpo" then S.strategy_maxcomp_lpo
         else if s = "maxcompkbo" then S.strategy_maxcomp_kbo
         else if s = "okbauto" then S.strategy_ordered
         else if s = "linpoly" then S.strategy_aql
+        else if s = "wpo" then S.strategy_wpo
         else if s = "temp" then S.strategy_temp
         else failwith "unsupported option for -M"
       in
       heuristic := { !heuristic with strategy = strategy }),
-     "<mode> strategy (olpo, okbo, olpokbo)");
-   ("--checksub", Arg.Int (fun n ->
-     heuristic := {!heuristic with check_subsumption = n}),
-     " perform subsumption checks (1,2)");
-   ("--complete-if-no-goal", Arg.Unit (fun _ ->
-     settings := {!settings with complete_if_no_goal = true}),
-     " complete system if no goal is given");
-   ("--pcp", Arg.Int (fun n -> heuristic := {!heuristic with pcp = n}),
-     " only consider prime critical pairs if set to 1 (but then no caching)");
-   ("--cp-cutoff", Arg.Int (fun n -> heuristic := {!heuristic with cp_cutoff = n}),
-       " limit number of considered CPs in every iteration");
-   ("--no-auto", Arg.Unit (fun _ ->
-     settings := {!settings with auto = false}),
-     " switch off auto mode");
-   ("--keep-oriented", Arg.Unit (fun _ ->
-     settings := {!settings with keep_orientation = true}),
-     " preserve orientation of input axioms");
-   ("--growth-eqs", Arg.Int (fun n -> heuristic := {!heuristic with n = const n}),
-     "<n> select <n> active equations from CPs of TRS");
-     ("--growth-gls",
-       Arg.Int (fun n -> heuristic := {!heuristic with n_goals = n}),
-       "<n> select <n> active equations from CPs of TRS");
+      "<mode> strategy (olpo, okbo, olpokbo)");
+    ("--checksub", Arg.Int (fun n ->
+      heuristic := {!heuristic with check_subsumption = n}),
+      " perform subsumption checks (1,2)");
+    ("--complete-if-no-goal", Arg.Unit (fun _ ->
+      settings := {!settings with complete_if_no_goal = true}),
+      " complete system if no goal is given");
+    ("--pcp", Arg.Int (fun n -> heuristic := {!heuristic with pcp = n}),
+      " only consider prime critical pairs if set to 1 (but then no caching)");
+    ("--cp-cutoff", Arg.Int (fun n -> heuristic := {!heuristic with cp_cutoff = n}),
+      " limit number of considered CPs in every iteration");
+    ("--no-auto", Arg.Unit (fun _ ->
+      settings := {!settings with auto = false}),
+      " switch off auto mode");
+    ("--keep-oriented", Arg.Unit (fun _ ->
+      settings := {!settings with keep_orientation = true}),
+      " preserve orientation of input axioms");
+    ("--growth-eqs", Arg.Int (fun n -> heuristic := {!heuristic with n = const n}),
+      "<n> select <n> active equations from CPs of TRS");
+    ("--growth-gls",
+      Arg.Int (fun n -> heuristic := {!heuristic with n_goals = n}),
+      "<n> select <n> active equations from CPs of TRS");
     ("--max-oriented", Arg.Int (fun n ->
       heuristic := { !heuristic with max_oriented = n }),
-     "<n> every <n> iterations, orient as many equations as possible");
-   ("--full-CPs-with-axioms", Arg.Unit (fun _ ->
-     heuristic := {!heuristic with full_CPs_with_axioms = true}),
-     " compute CPs with axioms in both directions");
+      "<n> every <n> iterations, orient as many equations as possible");
+    ("--full-CPs-with-axioms", Arg.Unit (fun _ ->
+      heuristic := {!heuristic with full_CPs_with_axioms = true}),
+      " compute CPs with axioms in both directions");
     ("--generate-order", Arg.Unit (fun _ ->
       Settings.generate_order := true;
       heuristic := { !heuristic with strategy = S.strategy_order_generation }),
       " order generation mode");
-  ("--mode", Arg.String (fun s ->
+    ("--prec", Arg.String set_precedence,
+        "<f_1,...,f_n> fix precedence to f_1 > .. > f_n");
+    ("--weights", Arg.String set_weights,
+        "<f_1:a_1,...,f_n:a_n> fix weights to w(f_i)=a_i");
+    ("--mode", Arg.String (fun s ->
       if s = "sat" then heuristic := { !heuristic with mode = OnlySAT }
       else if s = "unsat" then heuristic := { !heuristic with mode = OnlyUNSAT }
       else failwith "unsupported mode type"),
-    "<m> exclusive proof mode (sat, unsat)");
-   ("--norm", Arg.String (fun t -> set_normalized t),
+      "<m> exclusive proof mode (sat, unsat)");
+    ("--norm", Arg.String (fun t -> set_normalized t),
       "<theory> normalized completion with respect to <theory>");
-   ("-P", Arg.String (fun s ->
+    ("-P", Arg.String (fun s ->
       if s = "cpf" then (
         Settings.do_proof := Some CPF;
         heuristic := { !heuristic with hard_bound_equations = 1000};
@@ -183,59 +231,59 @@ let options =
       else if s = "tstp" then Settings.do_proof := Some TPTP
       else failwith "unsupported proof type"),
      "<format> output proof (cpf, tstp)");
-   ("--reduceAC-CPs", Arg.Unit (fun _ ->
-     heuristic := { !heuristic with reduce_AC_equations_for_CPs = true}),
-     " do not use ACx equations for CPs");
-   ("--restart-frequency", Arg.String (fun s -> set_restart_frequency s),
-        "<r1,..,rn> number of iterations in between forced restarts");
-   ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
-      "<s> fixed problem shape");
-   ("--selection-mode", Arg.String (fun s ->
-     let sm = 
-       if s = "mixed" then MixedSelect
-       else if s = "random" then RandomSelect
-       else if s = "age" then AgeSelect
-       else if s = "size" then SizeSelect
-       else if s = "cmixed" then ClassifiedMixed
-       else failwith "unsupported option for selection mode"
-     in
-     settings := { !settings with selection = sm }),
-     "<mode> random, age, classified, or mixed (default)");
-   ("--selection-classify", Arg.String (fun s -> classify_file := Some s),
+    ("--reduceAC-CPs", Arg.Unit (fun _ ->
+      heuristic := { !heuristic with reduce_AC_equations_for_CPs = true}),
+      " do not use ACx equations for CPs");
+    ("--restart-frequency", Arg.String set_restart_frequency,
+      "<r1,..,rn> number of iterations in between forced restarts");
+    ("--shape", Arg.String (fun s -> Settings.fixed_shape := s),
+      "<shp> fixed problem shape");
+    ("--selection-mode", Arg.String (fun s ->
+      let sm = 
+        if s = "mixed" then MixedSelect
+        else if s = "random" then RandomSelect
+        else if s = "age" then AgeSelect
+        else if s = "size" then SizeSelect
+        else if s = "cmixed" then ClassifiedMixed
+        else failwith "unsupported option for selection mode"
+      in
+      settings := { !settings with selection = sm }),
+      "<mode> random, age, classified, or mixed (default)");
+    ("--selection-classify", Arg.String (fun s -> classify_file := Some s),
       "<json> json file with decision tree(s) for classification");
-   ("--sizeage", Arg.Int (fun n ->
-     heuristic := { !heuristic with size_age_ratio = n}), 
-     "<r> percentage of size (vs age) decisions");
-   ("--soft-bound-eqs", Arg.Int (fun n ->
-     heuristic := { !heuristic with soft_bound_equations = n}),
-     "<b> size bound for active equations");
-   ("--soft-bound-gls", Arg.Int (fun n ->
-     heuristic := { !heuristic with soft_bound_goals = n}),
-     "<b> size bound for active goals");
-   ("--hard-bound-eqs", Arg.Int (fun n ->
-     heuristic := { !heuristic with hard_bound_equations = n}),
-     "<b> hard size bound for equations");
-   ("--hard-bound-gls", Arg.Int (fun n ->
-     heuristic := { !heuristic with hard_bound_goals = n}),
+    ("--sizeage", Arg.Int (fun n ->
+      heuristic := { !heuristic with size_age_ratio = n}), 
+      "<r> percentage of size (vs age) decisions");
+    ("--soft-bound-eqs", Arg.Int (fun n ->
+      heuristic := { !heuristic with soft_bound_equations = n}),
+      "<b> size bound for active equations");
+    ("--soft-bound-gls", Arg.Int (fun n ->
+      heuristic := { !heuristic with soft_bound_goals = n}),
+      "<b> size bound for active goals");
+    ("--hard-bound-eqs", Arg.Int (fun n ->
+      heuristic := { !heuristic with hard_bound_equations = n}),
+      "<b> hard size bound for equations");
+    ("--hard-bound-gls", Arg.Int (fun n ->
+      heuristic := { !heuristic with hard_bound_goals = n}),
       "<b> hard size bound for goals");
-   ("--switch-okb", Arg.Unit (fun _ ->
-     settings := { !settings with switch_to_okb = true}),
-     "switch to standard oKB");
-   ("--term", Arg.Set only_termination,
-     " perform termination check");
-   ("-T", Arg.Float (fun f -> timeout := Some f),
-     "<t> timeout");
-   ("--track", Arg.String (fun s -> track_file := Some s),
-     "<track_file> keep track of equations in proof file");
-   ("--trace-selection", Arg.Unit (fun _ ->
-     Settings.do_proof := Some SelectionTrace),
-     " output selection track");
-   ("--tmp", Arg.Float (fun s -> Settings.tmp := s),
-    "<n> various purposes");
-   ("--xsig",  Arg.Unit (fun _ ->
-     settings := { !settings with extended_signature = true}),
-     "consider signature plus infinitely many constants (ordered completion)")
- ]
+    ("--switch-okb", Arg.Unit (fun _ ->
+      settings := { !settings with switch_to_okb = true}),
+      "switch to standard oKB");
+    ("--term", Arg.Set only_termination,
+      " perform termination check");
+    ("-T", Arg.Float (fun f -> timeout := Some f),
+      "<t> timeout");
+    ("--track", Arg.String (fun s -> track_file := Some s),
+      "<track_file> keep track of equations in proof file");
+    ("--trace-selection", Arg.Unit (fun _ ->
+      Settings.do_proof := Some SelectionTrace),
+      " output selection track");
+    ("--tmp", Arg.Float (fun s -> Settings.tmp := s),
+      "<n> various purposes");
+    ("--xsig",  Arg.Unit (fun _ ->
+      settings := { !settings with extended_signature = true}),
+      "consider signature plus infinitely many constants (ordered completion)")
+  ]
 
 (*** FUNCTIONS ***************************************************************)
 let map3 f (a,b,c) = (f a, f b, f c)
@@ -493,6 +541,7 @@ let check_split gs =
 
 let run file ((es, gs) as input) =
   let timer = Timer.start () in
+  check_order_params [Lit.terms e | e <- es @ gs];
   let ans, proof =
     if gs = [] && !settings.unfailing && not !settings.complete_if_no_goal then
       (SAT, GroundCompletion ([], [], Order.default))
@@ -536,8 +585,6 @@ let () =
     Settings.input_file := remove_extension (Filename.basename f);
     (match !track_file with | Some f -> track_proof f | _ -> ());
     (match !classify_file with | Some f -> set_classification f | _ -> ());
-    if !(Settings.interactive) && gs <> [] then
-      failwith "Input for interactive mode is not supposed to contain goals";
     if !settings.debug > 0 then
       printf "input problem: %s\n%!" f;
     if not !only_termination && not !analyze && not !only_gcr then
@@ -577,13 +624,7 @@ let () =
           printf "%s %.2f %s@." "time:" secs "seconds")
         )
     )
-  | NonUnit (cls, gs) -> (
-    Format.printf "oh no, it's not unit!\n%!";
-    settings := {!settings with instgen = true};
-    Settings.do_proof := Some TraceForInstgen;
-    match Instgen.start (!settings, !heuristic) (cls @ gs) with
-    | SAT -> Format.printf "Satisfiable\n%!"
-    | UNSAT -> Format.printf "Unsatisfiable\n%!")
+  | NonUnit (cls, gs) -> failwith "nonunit not supported on this branch"
   | Constrained ces ->
     settings := {!settings with modulo_constraints = true};
     heuristic := { !heuristic with strategy = S.strategy_constrained};

@@ -15,6 +15,7 @@ type term_cmp = Term.t -> Term.t -> bool
 
 type step = Rule.t * Term.pos * Subst.t
 
+(*** EXCEPTIONS ***************************************************************)
 exception Not_orientable
 exception Max_term_size_exceeded
 
@@ -60,24 +61,24 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
     let cas = [ Ac.cassociativity f | f <- acs] in
     let es' = es @ [r,l | l,r <- es ] in
     let es' = [ l,r | l,r <- es'; not (Term.is_subterm l r) ] in
-    let eqs = [ l, ((l,r), false)| l,r <- cs @ cas @ es' ] in
+    let eqs = [ l, ((l,r), false) | l,r <- cs @ cas @ es' ] in
     let rules = [ l,((l,r), true) | l,r <- trs ] in
     index <- FingerprintIndex.create (eqs @ rules)
 
   method add_more es =
     (* es is already symmetric *)
-    let eqs = [ l, ((l,r), false)| l,r <- es; not (Term.is_subterm l r) ] in
+    let eqs = [ l, ((l, r), false) | (l,r) <- es; not (Term.is_subterm l r) ] in
     index <- L.fold_left FingerprintIndex.insert index eqs;
     Hashtbl.clear nf_table;
     Hashtbl.clear step_table
     
-  method add_eq (s,t) =
+  method add_eq (s,t) = (* only used for okb *)
     index <- FingerprintIndex.add [s, ((s,t), false); t, ((t,s), false)] index;
     Hashtbl.clear nf_table;
     Hashtbl.clear step_table
   ;;
   
-  method add_rule (s,t) =
+  method add_rule (s,t) = (* only used for okb *)
     index <- FingerprintIndex.add [s, ((s,t), true)] index;
     Hashtbl.clear nf_table;
     Hashtbl.clear step_table
@@ -108,10 +109,10 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
   ;;
 
   method check t =
-   let eqs = Ac.eqs acs in
-   let rs = L.filter (fun (l,_) -> Subst.is_instance_of t l) (trs @ eqs) in
-   let rs' = L.map fst (FingerprintIndex.get_matches t index) in
-   assert (Listset.subset rs rs')
+    let eqs = Ac.eqs acs in
+    let rs = L.filter (fun (l,_) -> Subst.is_instance_of t l) (trs @ eqs) in
+    let rs' = L.map fst (FingerprintIndex.get_matches t index) in
+    assert (Listset.subset rs rs')
   ;;
 
   method rewrite_at_root_with t ((l, r), only_unordered) =
@@ -151,7 +152,7 @@ class rewriter (h : Settings.heuristic) (trs : Rules.t) (acs : Sig.sym list)
     | Term.F (f, ts) ->
       let concat (us,rs) (i,ti) =
         let ui,rsi = self#pstep ti in 
-        let rsi = L.map (fun (rl,p,sub) -> rl,i::p, sub) rsi in
+        let rsi = L.map (fun (rl,p,sub) -> rl, i::p, sub) rsi in
         us @ [ui], rs @ rsi
       in
       let us, urs = L.fold_left concat ([], []) (Listx.index ts) in

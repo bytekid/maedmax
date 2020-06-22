@@ -36,7 +36,7 @@ val renaming_for : t -> Term.subst
 
 val rename : t -> t
 
-val rename_canonical : ?from:int -> t -> t
+val rename_canonical : ?from:int -> t -> t * Term.subst
 
 val flip : t -> t
 

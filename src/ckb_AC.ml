@@ -277,9 +277,10 @@ let complete (settings, heuristic) es =
   let ctx = Logic.mk_context () in
   let ss = L.map (fun (ts,_,_,_,_) -> ts) heuristic.strategy in
   let es_all = settings.norm @ es in
-  L.iter (fun s -> St.init s 0 ctx [ Lit.terms n | n <- es_all ]) ss;
+  let settings = {settings with axioms = es} in
+  L.iter (fun strat -> St.init settings strat 0 ctx) ss;
   let start = Unix.gettimeofday () in
-  let s = make_state ctx es_all {settings with axioms = es} heuristic in
+  let s = make_state ctx es_all settings heuristic in
   if settings.norm <> [] then
     preorient s settings.norm;
   let res = phi s in

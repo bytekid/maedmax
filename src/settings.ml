@@ -12,6 +12,7 @@ type order =
   | Cfsn
   | MPol
   | ACRPO
+  | WPO
 
 (* Constructors connecting different reduction orders *)
 type orders = Choice of (order * order) | Seq of order list
@@ -118,6 +119,13 @@ type classifier =
   ?bound:float -> equation_features -> state_features ->
   (float array * float array) -> bool
 
+type order_params = {
+  precedence : Signature.sym list list;
+  weights : (Signature.sym * int) list;
+}
+
+let empty_params = {precedence = []; weights = []}
+
 type t = {
   auto : bool; (* automatic mode *)
   ac_syms : Signature.sym list; (* only relevant for ordered completion *)
@@ -140,6 +148,7 @@ type t = {
   switch_to_okb : bool;
   modulo_ac : bool;
   modulo_constraints : bool;
+  order_params : order_params option;
   norm : literal list
 }
 
@@ -219,6 +228,7 @@ let default = {
   switch_to_okb = false;
   modulo_ac = false;
   modulo_constraints = false;
+  order_params = None;
   norm = []
 }
 
