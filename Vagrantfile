@@ -13,6 +13,9 @@ Vagrant.configure("2") do |config|
   # Provision the VM with maedmax.
   config.vm.provision "shell", privileged: false, inline: <<-SHELL
     yes | {
+      CMD="export LD_LIBRARY_PATH=\"/home/vagrant/.opam/system/lib/z3/\""
+      echo "$CMD" >> .bashrc
+      eval "$CMD"
       sudo apt-get update
       sudo apt-get install opam
       sudo apt-get install m4
