@@ -27,8 +27,9 @@ Vagrant.configure("2") do |config|
       wget -q -O- http://git.io/sWxMmg | sudo sh -s /vagrant/yices.tar.gz
       sudo opam install ocamlyices
       sudo opam install xml-light
-      cp -r /vagrant maedmax-build
-      cd maedmax-build
+      CMD="cp -r /vagrant maedmax-build; cd maedmax-build"
+      echo "$CMD" >> buildlocal.sh
+      eval "$CMD"
       make
       mv maedmax ..
       cd ..
