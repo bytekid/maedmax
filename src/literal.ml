@@ -272,6 +272,8 @@ let substitute_uniform t l =
   make (sub (fst l.terms), sub (snd l.terms)) l.is_equality
 ;;
 
+let signature l = Rule.signature l.terms
+
 let variables l = Rule.variables l.terms
 
 let compare_size l l' = Pervasives.compare (size l) (size l')

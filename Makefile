@@ -1,4 +1,4 @@
-OCB_FLAGS = -use-ocamlfind -cflag -thread \
+OCB_FLAGS = -use-ocamlfind -cflag -thread -cflag -linkpkg \
   -pkg unix -pkg yojson -pkg ocamlyices -pkg xml-light -pkg str \
 	-I src -I src/util -I src/input -I src/logic -I src/proof -I src/rewriting \
 	-I src/termination # -pkg z3 

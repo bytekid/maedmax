@@ -359,21 +359,21 @@ let cpf_proof_string ?(readable = false) (es, gs) =
   in
   function
     Proof ((s,t),(rs, rt), _, sigma) when L.for_all Lit.is_equality es ->
-      let goal = Literal.terms (L.hd gs) in
-      let es = L.map Literal.terms es in
+      let goal = Lit.terms (L.hd gs) in
+      let es = L.map Lit.terms es in
       let p = Cpf.goal_proof es goal ((s,t), (rs, rt), sigma) in
       result_string p
   | Completion rr -> (* FIXME only check ground completion new *)
-      let es = L.map Literal.terms es in
+      let es = L.map Lit.terms es in
       let p = Cpf.ordered_completion_proof es ([], rr, Order.default) in
       result_string p
   | GroundCompletion (rr,ee,o) -> (* no goal exists *)
-      let es = L.map Literal.terms es in
+      let es = L.map Lit.terms es in
       let p = Cpf.ordered_completion_proof es (ee, rr, o) in
       result_string p
   | Disproof (rr,ee,o,rst) -> (* goal with different normal forms exists *)
-      let g = Literal.terms (L.hd gs) in
-      let es = L.map Literal.terms es in
+      let g = Lit.terms (L.hd gs) in
+      let es = L.map Lit.terms es in
       let p = Cpf.goal_disproof es g (ee, rr, o) rst in
       result_string p
   | _ -> failwith "Main.show_proof: not yet supported for inequality axioms"
@@ -381,14 +381,14 @@ let cpf_proof_string ?(readable = false) (es, gs) =
 
 let selection_trace (es, gs) = function
     Proof ((s, t),(rs, rt), _, sigma) when L.for_all Lit.is_equality es ->
-      let goal = Literal.terms (L.hd gs) in
-      let es = L.map Literal.terms es in
+      let goal = Lit.terms (L.hd gs) in
+      let es = L.map Lit.terms es in
       SelectionTrace.for_goal_proof es goal ((s, t), (rs, rt), sigma)
   | Completion rr ->
-      let es = L.map Literal.terms es in
+      let es = L.map Lit.terms es in
       SelectionTrace.for_ground_completion es (rr, [])
   | GroundCompletion (rr, ee, o) ->
-      let es = L.map Literal.terms es in
+      let es = L.map Lit.terms es in
       SelectionTrace.for_ground_completion es (rr, ee)
   | Disproof (rr, ee, _, rst) ->
       SelectionTrace.for_goal_disproof (rr, ee) rst
@@ -467,29 +467,39 @@ let print_analysis es gs =
 
 let interactive_mode proof =
   let acs = !settings.ac_syms in
-  let rewriter = match proof with
+  let rewriter, complete, syms = match proof with
     | Completion rr ->
       Format.printf "Deciding equational theory.\n%!";
       let rew = new Rewriter.rewriter !heuristic rr acs Order.default in
       rew#init ();
-      rew
+      rew, true, Rules.signature rr
     | GroundCompletion (rr,ee,o) ->
       Format.printf "Deciding ground theory over given signature.\n%!";
       let rew = new Rewriter.rewriter !heuristic rr acs o in
       rew#init ();
       rew#add ee;
-      rew
+      rew, false, Rules.signature (rr @ ee)
     | _ -> failwith "No decision procedure, interactive mode not possible."
   in
   let decision_proc l =
-    let s,t = Literal.terms l in
-    let joined = fst (rewriter#nf s) = fst (rewriter#nf t) in
-    (joined && Literal.is_equality l) || not (joined || Literal.is_equality l)
+    let new_syms = [f | f, _ <- Listset.diff (Lit.signature l) syms] in
+    rewriter#set_order (Order.extend_sig rewriter#order new_syms);
+    let s,t = Lit.terms l in
+    let s',t' = fst (rewriter#nf s), fst (rewriter#nf t) in
+    let joined = (s' = t') in
+    if complete || Lit.is_ground l then Some (joined = Lit.is_equality l)
+    else if joined then Some (Lit.is_equality l)
+    else None (* nonground query, only ground complete, not joinable: unknown *)
   in
   Format.printf "OK\n%!";
   let check_eq s =
     let l = Read.equation_or_inequality s in
-    Format.printf "%s\n%!" (if decision_proc l then "YES" else "NO")
+    let answer = match decision_proc l with
+      | Some a -> if a then "YES" else "NO"
+      | None -> "UNKNOWN (maedmax only found a ground complete system, but \
+                 this equation is not ground)"
+    in
+    Format.printf "%s\n%!" answer
   in
   let rec check _ =
     try
@@ -532,10 +542,10 @@ let print_waldmeister es =
 let check_split gs =
   if !(Settings.do_proof) = None || List.length gs <= 1 then gs
   else (
-    assert (List.for_all (fun g -> not (Literal.is_equality g)) gs);
-    let split (ls,rs) g = let l,r = Literal.terms g in (l::ls, r::rs) in
+    assert (List.for_all (fun g -> not (Lit.is_equality g)) gs);
+    let split (ls,rs) g = let l,r = Lit.terms g in (l::ls, r::rs) in
     let ls, rs = List.fold_left split ([],[]) gs in
-    [Literal.make_neg_axiom (Term.F(100,ls), Term.F(100,rs))]
+    [Lit.make_neg_axiom (Term.F(100,ls), Term.F(100,rs))]
   )
 ;;
 
@@ -604,7 +614,7 @@ let () =
       let secs = Timer.length ~res:Timer.Seconds timer in
       if !settings.json then print_json_term yes secs
       else (
-        printf "@.%a@." print_trs [Literal.terms e | e <- es];
+        printf "@.%a@." print_trs [Lit.terms e | e <- es];
         let a = if yes then "YES" else "MAYBE" in
         printf "%s\n" a;
         printf "%s %.2f %s@." "time:" secs "seconds")
@@ -618,7 +628,7 @@ let () =
         let secs = Timer.length ~res:Timer.Seconds timer in
         if !settings.json then print_json_term yes secs
         else (
-          printf "@.%a@." print_trs [Literal.terms e | e <- es];
+          printf "@.%a@." print_trs [Lit.terms e | e <- es];
           let a = if yes then "YES" else "MAYBE" in
           printf "%s\n" a;
           printf "%s %.2f %s@." "time:" secs "seconds")

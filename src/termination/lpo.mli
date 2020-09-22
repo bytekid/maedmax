@@ -16,8 +16,6 @@ val init_af : Settings.t -> Settings.Logic.context -> int -> Settings.Logic.t
 
 val decode_print: int -> Settings.Logic.model -> unit
 
-val decode_term_gt : int -> Settings.Logic.model -> (Term.t -> Term.t -> bool)
-
 val decode_print_af: int -> Settings.Logic.model -> unit
 
 val decode: int -> Settings.Logic.model -> Order.t

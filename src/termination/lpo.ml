@@ -279,8 +279,10 @@ let decode_print_af k m =
  L.iter dec [ (f,a) | (f,a) <- !funs; L.mem f (Rules.functions (dps @ rls))]
 ;;
 
-let decode_term_gt k m =
- let prec = Hashtbl.find (decode_prec_aux k m) in
+let decode_term_gt' tp add_syms =
+  let sz_sig = Hashtbl.length tp in
+  List.iter (fun (p,f) -> Hashtbl.add tp f p) (Listx.ix ~i:sz_sig add_syms);
+ let prec = Hashtbl.find tp in
  let rec gt s t =
   if Term.is_subterm s t then false
   else if Term.is_subterm t s then true
@@ -298,6 +300,8 @@ let decode_term_gt k m =
        sub_gt || (lex_gt && L.for_all (gt s) ts))
   in gt
 ;;
+
+let decode_term_gt k m = decode_term_gt' (decode_prec_aux k m)
 
 let decode_xml prec =
   let status_prec ((f,a),p) =
@@ -330,7 +334,7 @@ let encode i preclist ctx =
 
 let decode k m =
   let gt = decode_term_gt k m in
-  let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
+  let cmp c d = if gt [] (Term.F(c,[])) (Term.F(d,[])) then d else c in
   let bot =  match [ c | c,a <- !funs; a = 0] with
       [] -> None
     | c :: cs -> Some (List.fold_left cmp c cs)
@@ -338,7 +342,8 @@ let decode k m =
   let prec = eval_prec k m in
   object
     method bot = bot
-    method gt = gt
+    method gt = gt []
+    method gt_extend_sig = gt
     method smt_encode = encode k prec
     method to_string = prec_to_string prec
     method print = fun _ -> print_prec prec
