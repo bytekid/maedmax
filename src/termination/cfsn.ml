@@ -95,6 +95,7 @@ let decode k m =
   object
     method bot = bot
     method gt = gt
+    method gt_extend_sig _ = gt (* new symbols are not counted *)
     method smt_encode = encode k ws
     method to_string = to_string ws
     method print = fun _ -> print ws
