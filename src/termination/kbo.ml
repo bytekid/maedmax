@@ -148,14 +148,15 @@ let eval_bool_table k m h = eval_table_with Logic.eval k m h
 
 let eval_table k = eval_table_with Int.eval k
 
-let decode_term_gt k m =
-  let tw = eval_table k m weights in
+let decode_term_gt' tw tp add_syms =
+  List.iter (fun f -> Hashtbl.add tw f 1) add_syms;
   let w = Hashtbl.find tw in
   let rec weight = function
     | T.V _ -> 1 (* w0 = 1 *)
     | T.F (f, ts) -> List.fold_left (fun s ti -> s + (weight ti)) (w f) ts
   in
-  let tp = eval_table k m precedence in
+  let sz_sig = Hashtbl.length tp in
+  List.iter (fun (p,f) -> Hashtbl.add tp f p) (Listx.ix ~i:sz_sig add_syms);
   let prec = Hashtbl.find tp in
   let rec gt s t =
     if Term.is_subterm s t || not (Rule.is_non_duplicating (s,t)) then false
@@ -173,6 +174,9 @@ let decode_term_gt k m =
       ws > wt || (ws = wt && cmp))
   in gt
 ;;
+
+let decode_term_gt k m = 
+  decode_term_gt' (eval_table k m weights) (eval_table k m precedence)
 
 let eval k m =
   let prec f = try Hashtbl.find (eval_table k m precedence) f with _ -> 0 in
@@ -231,7 +235,7 @@ let encode k fpw ctx =
 
 let decode k m =
   let gt = decode_term_gt k m in
-  let cmp c d = if gt (Term.F(c,[])) (Term.F(d,[])) then d else c in
+  let cmp c d = if gt [] (Term.F(c,[])) (Term.F(d,[])) then d else c in
   let bot =  match [ c | c,a <- !funs; a = 0] with
       [] -> None
     | c :: cs -> Some (List.fold_left cmp c cs)
@@ -239,7 +243,8 @@ let decode k m =
   let fpw = eval k m in
   object
     method bot = bot
-    method gt = gt
+    method gt = gt []
+    method gt_extend_sig = gt
     method smt_encode ctx = encode k fpw ctx
     method to_string = to_string fpw
     method print = fun _ -> print fpw

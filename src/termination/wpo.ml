@@ -305,6 +305,7 @@ let decode k m =
   object
     method bot = bot
     method gt = decoded_gt
+    method gt_extend_sig _ = decoded_gt (* FIXME (only for interactive mode) *)
     method smt_encode = (fun _ -> failwith "WPO encode not implemented")
     method to_string = to_string fpw
     method print = fun _ -> print fpw
