@@ -119,7 +119,7 @@ let store_eq_var ctx lr =
 
 let store_eq_vars ctx rls = List.iter (ignore <.> store_eq_var ctx) rls
 
-let rule_var ctx rl = try find_rule rl with Not_found -> store_rule_var ctx rl
+let rule_var ctx rl = try H.find ht_rl_vars rl with Not_found -> store_rule_var ctx rl
 
 let eq_variant (l,r) st = Rule.variant st (l,r) || Rule.variant st (r,l)
 
