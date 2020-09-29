@@ -553,7 +553,7 @@ let run file ((es, gs) as input) =
   let timer = Timer.start () in
   check_order_params [Lit.terms e | e <- es @ gs];
   let ans, proof =
-    if gs = [] && !settings.unfailing && not !settings.complete_if_no_goal then
+    if gs = [] && !settings.unfailing && not !settings.complete_if_no_goal && not !Settings.interactive then
       (SAT, GroundCompletion ([], [], Order.default))
     else if !settings.modulo_ac then
       Ckb_AC.complete (!settings, !heuristic) (fst input)

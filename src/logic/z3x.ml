@@ -7,6 +7,7 @@ module Arith = Arithmetic
 module I = Arith.Integer
 module Real = Arith.Real
 module BV = BitVector
+module Big_int = Big_int_Z
 
 (*** TYPES *******************************************************************)
 type context = {
