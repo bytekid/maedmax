@@ -60,8 +60,8 @@ let max_constraints s =
 ;;
 
 (* shorthands for settings *)
-let termination_strategy s = 
-  match s.heuristic.strategy with 
+let termination_strategy s =
+  match s.heuristic.strategy with
   | [] -> failwith "no termination strategy found"
   | (s, _, _, _, _) :: _ -> s
 ;;
@@ -112,7 +112,7 @@ let rewrite rr aa =
   L.fold_left rew_nf (NS.empty (), NS.empty ()) (NS.to_list aa)
 ;;
 
-let reduced rr aa = 
+let reduced rr aa =
  let ls_old, ls_new = rewrite rr (NS.of_list aa) in NS.add_all ls_new ls_old
 ;;
 
@@ -193,7 +193,7 @@ let max_k s =
   let ctx, cc = s.context, s.equations in
   let k = s.heuristic.k !(A.iterations) in
   let cc_eq = [ Lit.terms n | n <- NS.to_list cc ] in
-  let cc_symm = [n | n <- NS.to_list (NS.symmetric cc)] in 
+  let cc_symm = [n | n <- NS.to_list (NS.symmetric cc)] in
   let cc_symml = [Lit.terms c | c <- cc_symm] in
   L.iter (fun n -> ignore (C.store_rule_var ctx n)) cc_symml;
   (* lookup is not for free: get these variables only once *)
@@ -273,6 +273,7 @@ let preorient state es =
 ;;
 
 let complete (settings, heuristic) es =
+  A.restart ();
   let es = [Lit.make_axiom (normalize (Lit.terms e)) | e <- es] in
   let ctx = Logic.mk_context () in
   let ss = L.map (fun (ts,_,_,_,_) -> ts) heuristic.strategy in
